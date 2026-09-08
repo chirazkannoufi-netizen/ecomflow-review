@@ -1,0 +1,6951 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/audit-logs": {
+      "get": {
+        "description": "Actions sensibles uniquement : connexions, changements de role et de statut, integrations, exports, paiements, abonnements. Les metadonnees sont expurgees de tout secret a l ecriture.",
+        "operationId": "AuditController_list_v1",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page, 1-indexee.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Taille de page. Plafonnee a 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 25,
+              "type": "number"
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "AUTH_LOGIN_SUCCESS",
+                  "AUTH_LOGIN_FAILED",
+                  "AUTH_LOGOUT",
+                  "AUTH_PASSWORD_RESET_REQUESTED",
+                  "AUTH_PASSWORD_CHANGED",
+                  "USER_INVITED",
+                  "USER_ROLE_CHANGED",
+                  "USER_DEACTIVATED",
+                  "ROLE_PERMISSIONS_CHANGED",
+                  "TENANT_CREATED",
+                  "TENANT_SETTINGS_UPDATED",
+                  "TENANT_SUSPENDED",
+                  "ORDER_CREATED",
+                  "ORDER_UPDATED",
+                  "ORDER_STATUS_CHANGED",
+                  "ORDER_ARCHIVED",
+                  "ORDER_DUPLICATE_RESOLVED",
+                  "INVENTORY_ADJUSTED",
+                  "SHIPMENT_CREATED",
+                  "SHIPMENT_CANCELLED",
+                  "RETURN_CREATED",
+                  "RETURN_RESOLVED",
+                  "INTEGRATION_CONNECTED",
+                  "INTEGRATION_DISCONNECTED",
+                  "INTEGRATION_CONFIG_UPDATED",
+                  "EXPORT_GENERATED",
+                  "PAYMENT_SUBMITTED",
+                  "PAYMENT_APPROVED",
+                  "PAYMENT_REJECTED",
+                  "SUBSCRIPTION_ACTIVATED",
+                  "SUBSCRIPTION_SUSPENDED",
+                  "SUBSCRIPTION_CANCELLED",
+                  "TRIAL_STARTED",
+                  "TRIAL_EXPIRED",
+                  "TRIAL_ABUSE_FLAGGED",
+                  "TRIAL_ABUSE_REVIEWED",
+                  "DATA_RETENTION_APPLIED",
+                  "CUSTOMER_DATA_ERASED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "entityType",
+            "required": false,
+            "in": "query",
+            "description": "Type d entite : Order, Payment, Membership...",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entityId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorUserId",
+            "required": false,
+            "in": "query",
+            "description": "Auteur des actions.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Journal d audit de la boutique",
+        "tags": [
+          "Journal d audit"
+        ]
+      }
+    },
+    "/api/v1/admin/audit-logs": {
+      "get": {
+        "description": "Toutes boutiques confondues, y compris les actions sans tenant (authentification, administration).",
+        "operationId": "AuditController_listGlobal_v1",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page, 1-indexee.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Taille de page. Plafonnee a 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 25,
+              "type": "number"
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "AUTH_LOGIN_SUCCESS",
+                  "AUTH_LOGIN_FAILED",
+                  "AUTH_LOGOUT",
+                  "AUTH_PASSWORD_RESET_REQUESTED",
+                  "AUTH_PASSWORD_CHANGED",
+                  "USER_INVITED",
+                  "USER_ROLE_CHANGED",
+                  "USER_DEACTIVATED",
+                  "ROLE_PERMISSIONS_CHANGED",
+                  "TENANT_CREATED",
+                  "TENANT_SETTINGS_UPDATED",
+                  "TENANT_SUSPENDED",
+                  "ORDER_CREATED",
+                  "ORDER_UPDATED",
+                  "ORDER_STATUS_CHANGED",
+                  "ORDER_ARCHIVED",
+                  "ORDER_DUPLICATE_RESOLVED",
+                  "INVENTORY_ADJUSTED",
+                  "SHIPMENT_CREATED",
+                  "SHIPMENT_CANCELLED",
+                  "RETURN_CREATED",
+                  "RETURN_RESOLVED",
+                  "INTEGRATION_CONNECTED",
+                  "INTEGRATION_DISCONNECTED",
+                  "INTEGRATION_CONFIG_UPDATED",
+                  "EXPORT_GENERATED",
+                  "PAYMENT_SUBMITTED",
+                  "PAYMENT_APPROVED",
+                  "PAYMENT_REJECTED",
+                  "SUBSCRIPTION_ACTIVATED",
+                  "SUBSCRIPTION_SUSPENDED",
+                  "SUBSCRIPTION_CANCELLED",
+                  "TRIAL_STARTED",
+                  "TRIAL_EXPIRED",
+                  "TRIAL_ABUSE_FLAGGED",
+                  "TRIAL_ABUSE_REVIEWED",
+                  "DATA_RETENTION_APPLIED",
+                  "CUSTOMER_DATA_ERASED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "entityType",
+            "required": false,
+            "in": "query",
+            "description": "Type d entite : Order, Payment, Membership...",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entityId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorUserId",
+            "required": false,
+            "in": "query",
+            "description": "Auteur des actions.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Journal d audit global (administration plateforme)",
+        "tags": [
+          "Journal d audit"
+        ]
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "description": "Inclut les incidents techniques (echec de synchronisation, panne transporteur) et les evenements metier importants.",
+        "operationId": "NotificationsController_list_v1",
+        "parameters": [
+          {
+            "name": "unreadOnly",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lister les notifications de la boutique",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/unread-count": {
+      "get": {
+        "operationId": "NotificationsController_unreadCount_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Nombre de notifications non lues (pastille de navigation)",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/mark-read": {
+      "post": {
+        "operationId": "NotificationsController_markRead_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkReadDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Marquer des notifications comme lues",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/mark-all-read": {
+      "post": {
+        "operationId": "NotificationsController_markAllRead_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tout marquer comme lu",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/preferences": {
+      "get": {
+        "description": "Le canal « in-app » ne peut pas etre desactive : sans lui, un incident critique pourrait passer totalement inapercu.",
+        "operationId": "NotificationsController_listPreferences_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Preferences de notification de la boutique",
+        "tags": [
+          "Notifications"
+        ]
+      },
+      "post": {
+        "operationId": "NotificationsController_setPreference_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPreferenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Activer ou desactiver un canal pour un type d evenement",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/v1/orders": {
+      "get": {
+        "description": "Pagination cote serveur. La recherche porte sur la reference, le nom, le telephone (normalise avant recherche), le SKU, le produit, la commune et le numero de suivi.",
+        "operationId": "OrdersController_list_v1",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page, 1-indexee.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Taille de page. Plafonnee a 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 25,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Statuts, separes par des virgules.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NEW",
+                  "TO_CONFIRM",
+                  "CONFIRMED",
+                  "IN_PREPARATION",
+                  "READY_TO_SHIP",
+                  "SHIPPED",
+                  "IN_DELIVERY",
+                  "DELIVERED",
+                  "NO_ANSWER",
+                  "CALL_BACK",
+                  "POSTPONED",
+                  "WRONG_NUMBER",
+                  "CANCELLED",
+                  "REFUSED",
+                  "RETURNED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "GOOGLE_SHEETS",
+                  "MANUAL",
+                  "CSV_IMPORT",
+                  "EXCEL_IMPORT",
+                  "API",
+                  "WEBSITE",
+                  "SOCIAL"
+                ]
+              }
+            }
+          },
+          {
+            "name": "wilayaCode",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 58,
+              "type": "number"
+            }
+          },
+          {
+            "name": "assignedMembershipId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "carrierId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Recherche globale.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeArchived",
+            "required": false,
+            "in": "query",
+            "description": "Inclut les commandes archivees.",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "createdAt",
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "orderedAt",
+                "totalCentimes",
+                "status"
+              ]
+            }
+          },
+          {
+            "name": "sortDir",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lister les commandes",
+        "tags": [
+          "Commandes"
+        ]
+      },
+      "post": {
+        "description": "Le client est retrouve par son telephone normalise, ou cree. La commande entre immediatement dans la file de confirmation, et les doublons potentiels sont signales sans jamais etre supprimes.",
+        "operationId": "OrdersController_create_v1",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "description": "Cle d idempotence. Un rejeu avec la meme cle et le meme corps renvoie la reponse de la premiere execution, sans creer de doublon.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Creer une commande manuellement",
+        "tags": [
+          "Commandes"
+        ]
+      }
+    },
+    "/api/v1/orders/{id}": {
+      "get": {
+        "description": "Inclut la timeline complete : historique de statut, tentatives d appel, colis et evenements transporteur, retours, doublons signales et fiche client avec son score de fiabilite.",
+        "operationId": "OrdersController_getOne_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detail d une commande",
+        "tags": [
+          "Commandes"
+        ]
+      }
+    },
+    "/api/v1/orders/{id}/transitions": {
+      "get": {
+        "description": "Filtrees par les droits de l appelant. Sert a afficher les bons boutons ; chaque transition est de toute facon revalidee cote serveur.",
+        "operationId": "OrdersController_transitions_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Actions de statut disponibles",
+        "tags": [
+          "Commandes"
+        ]
+      }
+    },
+    "/api/v1/orders/{id}/status": {
+      "post": {
+        "description": "Applique une transition du workflow, avec ses effets metier : stock, dates, historique, compteurs client. Une transition non declaree ou dont une garde echoue est refusee avec un motif precis.",
+        "operationId": "OrdersController_changeStatus_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeOrderStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "409": {
+            "description": "Transition interdite ou garde metier non satisfaite."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Changer le statut d une commande",
+        "tags": [
+          "Commandes"
+        ]
+      }
+    },
+    "/api/v1/orders/{id}/assign": {
+      "patch": {
+        "operationId": "OrdersController_assign_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignOrderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Affectation enregistree."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Affecter la commande a un membre",
+        "tags": [
+          "Commandes"
+        ]
+      }
+    },
+    "/api/v1/orders/{id}/archive": {
+      "post": {
+        "description": "Suppression LOGIQUE : la commande disparait des listes et des KPI mais reste consultable. L historique metier n est jamais detruit. Une commande dont le stock est encore reserve doit d abord etre annulee.",
+        "operationId": "OrdersController_archive_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Archiver une commande",
+        "tags": [
+          "Commandes"
+        ]
+      }
+    },
+    "/api/v1/orders/duplicates/{flagId}/resolve": {
+      "post": {
+        "description": "EcomFlow signale, l utilisateur decide : conserver les deux, fusionner, ou constater que le doublon a ete annule. Aucune commande n est jamais supprimee automatiquement.",
+        "operationId": "OrdersController_resolveDuplicate_v1",
+        "parameters": [
+          {
+            "name": "flagId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveDuplicateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Trancher un signalement de doublon",
+        "tags": [
+          "Commandes"
+        ]
+      }
+    },
+    "/api/v1/customers": {
+      "get": {
+        "description": "La recherche par telephone normalise le terme : « 0555 12 34 56 » retrouve bien « +213555123456 ».",
+        "operationId": "CustomersController_list_v1",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page, 1-indexee.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Taille de page. Plafonnee a 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 25,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Nom, telephone ou e-mail.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reliabilityTier",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "RELIABLE",
+                "WATCH",
+                "AT_RISK",
+                "UNKNOWN"
+              ]
+            }
+          },
+          {
+            "name": "tag",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lister les clients",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/api/v1/customers/by-phone/{phone}": {
+      "get": {
+        "description": "Recherche la plus utilisee par les agents : le client appelle, on tape son numero. Retourne `null` si aucun client ne correspond.",
+        "operationId": "CustomersController_findByPhone_v1",
+        "parameters": [
+          {
+            "name": "phone",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retrouver un client par telephone",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}": {
+      "get": {
+        "description": "Historique des commandes, adresses, et score de fiabilite AVEC SES FACTEURS : l agent doit comprendre pourquoi un client est signale, pas seulement voir une pastille rouge (Addendum §32).",
+        "operationId": "CustomersController_getOne_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Fiche client complete",
+        "tags": [
+          "Clients"
+        ]
+      },
+      "patch": {
+        "operationId": "CustomersController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Modifier une fiche client",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/recompute-reliability": {
+      "post": {
+        "description": "Recalcule integralement depuis l historique reel des commandes. Garantit que le score reste fonde sur des donnees verifiables.",
+        "operationId": "CustomersController_recompute_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recalculer le score de fiabilite",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/anonymize": {
+      "post": {
+        "description": "Remplace les donnees personnelles tout en conservant l historique COMMERCIAL (montants, statuts), necessaire aux obligations comptables du commercant. Loi 18-07, Addendum §37.",
+        "operationId": "CustomersController_anonymize_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnonymizeCustomerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Anonymiser un client (droit a l effacement)",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/api/v1/tenants/current": {
+      "get": {
+        "description": "Utilise par le frontend au chargement. Ne demande aucune permission : tout membre authentifie doit pouvoir savoir dans quelle boutique il se trouve.",
+        "operationId": "TenantsController_current_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Boutique active et profil de l utilisateur",
+        "tags": [
+          "Boutique"
+        ]
+      },
+      "patch": {
+        "operationId": "TenantsController_updateTenant_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Modifier l identite de la boutique",
+        "tags": [
+          "Boutique"
+        ]
+      }
+    },
+    "/api/v1/tenants/settings": {
+      "get": {
+        "operationId": "TenantsController_getSettings_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Parametres operationnels de la boutique",
+        "tags": [
+          "Boutique"
+        ]
+      },
+      "patch": {
+        "description": "Tous les seuils du produit sont configurables ici : stock, tentatives d appel, filtre WhatsApp, score de fiabilite, detection de doublons. Aucun n est code en dur.",
+        "operationId": "TenantsController_updateSettings_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Modifier les parametres de la boutique",
+        "tags": [
+          "Boutique"
+        ]
+      }
+    },
+    "/api/v1/auth/otp/request": {
+      "post": {
+        "description": "Premiere etape de l inscription. Le numero verifie devient l identifiant fort qui lie l essai gratuit a une personne reelle (Addendum §38). En developpement (OTP_DRIVER=console), le code est renvoye dans la reponse.",
+        "operationId": "AuthController_requestOtp_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestOtpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtpChallengeResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Un code a deja ete envoye recemment."
+          }
+        },
+        "summary": "Demander un code de verification de numero",
+        "tags": [
+          "Authentification"
+        ]
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "description": "Cree de facon atomique : le compte utilisateur, la boutique, ses roles et permissions, ses parametres, son abonnement d essai et sa progression d onboarding. Necessite un code OTP valide obtenu via /auth/otp/request.",
+        "operationId": "AuthController_register_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Code de verification invalide ou expire."
+          },
+          "409": {
+            "description": "Adresse e-mail deja utilisee."
+          }
+        },
+        "summary": "Creer un compte, une boutique et demarrer l essai de 7 jours",
+        "tags": [
+          "Authentification"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "AuthController_login_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identifiants incorrects ou compte verrouille."
+          }
+        },
+        "summary": "Se connecter",
+        "tags": [
+          "Authentification"
+        ]
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "description": "Le jeton de rafraichissement est a usage unique : chaque appel en emet un nouveau et revoque le precedent. Un rejeu revoque toute la famille de sessions, par securite.",
+        "operationId": "AuthController_refresh_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Jeton invalide, expire ou deja utilise."
+          }
+        },
+        "summary": "Renouveler la session",
+        "tags": [
+          "Authentification"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "description": "Revoque le jeton de rafraichissement fourni.",
+        "operationId": "AuthController_logout_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "Se deconnecter",
+        "tags": [
+          "Authentification"
+        ]
+      }
+    },
+    "/api/v1/auth/forgot-password": {
+      "post": {
+        "description": "Repond toujours 202, que l adresse existe ou non : repondre differemment permettrait d enumerer les comptes.",
+        "operationId": "AuthController_forgotPassword_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "summary": "Demander la reinitialisation du mot de passe",
+        "tags": [
+          "Authentification"
+        ]
+      }
+    },
+    "/api/v1/auth/reset-password": {
+      "post": {
+        "operationId": "AuthController_resetPassword_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "Definir un nouveau mot de passe a partir du lien recu",
+        "tags": [
+          "Authentification"
+        ]
+      }
+    },
+    "/api/v1/auth/change-password": {
+      "post": {
+        "description": "Revoque toutes les sessions actives, y compris la session courante.",
+        "operationId": "AuthController_changePassword_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Changer son mot de passe",
+        "tags": [
+          "Authentification"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "description": "Le frontend s en sert pour adapter la navigation. Ce n est JAMAIS une autorisation : chaque appel est revalide cote serveur.",
+        "operationId": "AuthController_me_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Profil et droits de la session courante",
+        "tags": [
+          "Authentification"
+        ]
+      }
+    },
+    "/api/v1/auth/me/preferences": {
+      "patch": {
+        "description": "La preference est portee par l UTILISATEUR, pas par le navigateur : un agent retrouve sa langue depuis n importe quel poste. Elle prime toujours sur la langue par defaut de la boutique.",
+        "operationId": "AuthController_updatePreferences_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePreferencesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Changer la langue de son interface",
+        "tags": [
+          "Authentification"
+        ]
+      }
+    },
+    "/api/v1/auth/switch-tenant": {
+      "post": {
+        "description": "Emet un nouveau couple de jetons portant la boutique demandee. L appartenance est revalidee : un identifiant de boutique arbitraire est refuse.",
+        "operationId": "AuthController_switchTenant_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwitchTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Changer de boutique active",
+        "tags": [
+          "Authentification"
+        ]
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "operationId": "UsersController_listMembers_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lister les membres de la boutique",
+        "tags": [
+          "Utilisateurs et roles"
+        ]
+      }
+    },
+    "/api/v1/users/invite": {
+      "post": {
+        "description": "Un utilisateur existant est rattache a la boutique sans creer de second compte. Un nouveau compte recoit un mot de passe provisoire, envoye par e-mail et retourne une seule fois a l administrateur.",
+        "operationId": "UsersController_invite_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteMemberDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Inviter un membre",
+        "tags": [
+          "Utilisateurs et roles"
+        ]
+      }
+    },
+    "/api/v1/users/{membershipId}/role": {
+      "patch": {
+        "description": "Le retrait de droits prend effet immediatement. Retirer le DERNIER proprietaire est refuse : la boutique deviendrait inadministrable.",
+        "operationId": "UsersController_changeRole_v1",
+        "parameters": [
+          {
+            "name": "membershipId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Changer le role d un membre",
+        "tags": [
+          "Utilisateurs et roles"
+        ]
+      }
+    },
+    "/api/v1/users/{membershipId}/deactivate": {
+      "post": {
+        "description": "Son historique et ses actions passees sont conserves.",
+        "operationId": "UsersController_deactivate_v1",
+        "parameters": [
+          {
+            "name": "membershipId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Desactiver un membre",
+        "tags": [
+          "Utilisateurs et roles"
+        ]
+      }
+    },
+    "/api/v1/users/{membershipId}/reactivate": {
+      "post": {
+        "operationId": "UsersController_reactivate_v1",
+        "parameters": [
+          {
+            "name": "membershipId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reactiver un membre",
+        "tags": [
+          "Utilisateurs et roles"
+        ]
+      }
+    },
+    "/api/v1/roles": {
+      "get": {
+        "description": "`immutable` signale les roles dont les permissions ne peuvent pas etre modifiees (OWNER), par garde-fou anti auto-verrouillage.",
+        "operationId": "UsersController_listRoles_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Roles de la boutique et leurs permissions",
+        "tags": [
+          "Utilisateurs et roles"
+        ]
+      },
+      "post": {
+        "operationId": "UsersController_createRole_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Creer un role personnalise",
+        "tags": [
+          "Utilisateurs et roles"
+        ]
+      }
+    },
+    "/api/v1/roles/permissions": {
+      "get": {
+        "description": "Groupees et decrites pour l ecran de gestion des roles. Les permissions de plateforme en sont exclues : elles ne sont jamais attribuables a une boutique.",
+        "operationId": "UsersController_listPermissions_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Catalogue des permissions attribuables",
+        "tags": [
+          "Utilisateurs et roles"
+        ]
+      }
+    },
+    "/api/v1/roles/{roleId}/permissions": {
+      "patch": {
+        "description": "Remplace integralement le jeu de permissions. Refuse sur un role immuable ou si une permission de plateforme est demandee.",
+        "operationId": "UsersController_updateRolePermissions_v1",
+        "parameters": [
+          {
+            "name": "roleId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRolePermissionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Modifier les permissions d un role",
+        "tags": [
+          "Utilisateurs et roles"
+        ]
+      }
+    },
+    "/api/v1/roles/{roleId}": {
+      "delete": {
+        "description": "Refuse si le role est systeme ou encore attribue a des membres.",
+        "operationId": "UsersController_deleteRole_v1",
+        "parameters": [
+          {
+            "name": "roleId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Supprimer un role personnalise",
+        "tags": [
+          "Utilisateurs et roles"
+        ]
+      }
+    },
+    "/api/v1/onboarding/state": {
+      "get": {
+        "description": "Chaque etape est VERIFIEE contre la base, pas lue depuis un drapeau : si un jeton Google est revoque, l etape correspondante repasse a « non faite ». La progression ne compte que les etapes obligatoires.",
+        "operationId": "OnboardingController_state_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Etat d avancement de la configuration",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
+    "/api/v1/onboarding/complete": {
+      "post": {
+        "description": "Refuse tant que les etapes obligatoires ne sont pas franchies, en listant precisement ce qui manque. Activer une boutique incapable de recevoir une commande serait un faux depart.",
+        "operationId": "OnboardingController_complete_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Finaliser l onboarding et activer la boutique",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
+    "/api/v1/products": {
+      "get": {
+        "operationId": "CatalogController_listProducts_v1",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page, 1-indexee.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Taille de page. Plafonnee a 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 25,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Recherche sur le nom ou le SKU.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "activeOnly",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lister les produits avec leur stock",
+        "tags": [
+          "Catalogue et stock"
+        ]
+      },
+      "post": {
+        "description": "Cree le produit, ses variantes et leurs lignes de stock. Sans variante fournie, une variante « Standard » est creee automatiquement.",
+        "operationId": "CatalogController_createProduct_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProductDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Creer un produit",
+        "tags": [
+          "Catalogue et stock"
+        ]
+      }
+    },
+    "/api/v1/products/{id}": {
+      "get": {
+        "operationId": "CatalogController_getProduct_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detail d un produit et de ses variantes",
+        "tags": [
+          "Catalogue et stock"
+        ]
+      },
+      "patch": {
+        "operationId": "CatalogController_updateProduct_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProductDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Modifier un produit",
+        "tags": [
+          "Catalogue et stock"
+        ]
+      }
+    },
+    "/api/v1/products/{id}/archive": {
+      "post": {
+        "description": "Suppression logique. Refuse si du stock est encore reserve sur des commandes en cours : l historique et les marges passees en dependent.",
+        "operationId": "CatalogController_archiveProduct_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Archiver un produit",
+        "tags": [
+          "Catalogue et stock"
+        ]
+      }
+    },
+    "/api/v1/products/{id}/variants": {
+      "post": {
+        "operationId": "CatalogController_addVariant_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VariantInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ajouter une declinaison a un produit",
+        "tags": [
+          "Catalogue et stock"
+        ]
+      }
+    },
+    "/api/v1/categories": {
+      "get": {
+        "operationId": "CatalogController_listCategories_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lister les categories",
+        "tags": [
+          "Catalogue et stock"
+        ]
+      }
+    },
+    "/api/v1/inventory/low-stock": {
+      "get": {
+        "description": "Le seuil est celui de la variante, sinon celui de la boutique.",
+        "operationId": "CatalogController_lowStock_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Variantes sous le seuil d alerte",
+        "tags": [
+          "Catalogue et stock"
+        ]
+      }
+    },
+    "/api/v1/inventory/variants/{variantId}/movements": {
+      "get": {
+        "description": "Journal append-only : chaque mouvement conserve l etat de stock resultant, ce qui permet de reconstituer le stock a toute date.",
+        "operationId": "CatalogController_movements_v1",
+        "parameters": [
+          {
+            "name": "variantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Historique des mouvements d une variante",
+        "tags": [
+          "Catalogue et stock"
+        ]
+      }
+    },
+    "/api/v1/inventory/variants/{variantId}/inbound": {
+      "post": {
+        "operationId": "CatalogController_inbound_v1",
+        "parameters": [
+          {
+            "name": "variantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockInboundDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enregistrer une entree en stock",
+        "tags": [
+          "Catalogue et stock"
+        ]
+      }
+    },
+    "/api/v1/inventory/variants/{variantId}/adjust": {
+      "post": {
+        "description": "Inventaire, casse, vol. Le motif est obligatoire. Un ajustement qui rendrait le stock negatif est refuse avec le detail du calcul.",
+        "operationId": "CatalogController_adjust_v1",
+        "parameters": [
+          {
+            "name": "variantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockAdjustmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ajuster le stock physique",
+        "tags": [
+          "Catalogue et stock"
+        ]
+      }
+    },
+    "/api/v1/inventory/reconciliation": {
+      "get": {
+        "description": "Doit toujours retourner une liste vide. Un ecart revele un defaut d ecriture : il est signale, jamais corrige silencieusement.",
+        "operationId": "CatalogController_reconciliation_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ecarts entre le stock projete et la somme des mouvements",
+        "tags": [
+          "Catalogue et stock"
+        ]
+      }
+    },
+    "/api/v1/confirmation/queue": {
+      "get": {
+        "description": "Triee par rappels echus, puis par priorite de fiabilite client (Addendum §32), puis par anciennete. Un client a risque n est jamais exclu de la file : il est simplement traite plus tard.",
+        "operationId": "ConfirmationController_queue_v1",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page, 1-indexee.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Taille de page. Plafonnee a 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 25,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "TO_CONFIRM",
+                  "NO_ANSWER",
+                  "CALL_BACK",
+                  "POSTPONED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "wilayaCode",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 58,
+              "type": "number"
+            }
+          },
+          {
+            "name": "assignedMembershipId",
+            "required": false,
+            "in": "query",
+            "description": "Restreint aux commandes affectees a cet agent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "unassignedOnly",
+            "required": false,
+            "in": "query",
+            "description": "Uniquement les commandes non affectees.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "dueOnly",
+            "required": false,
+            "in": "query",
+            "description": "Exclut les rappels programmes dans le futur.",
+            "schema": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "File de confirmation",
+        "tags": [
+          "Centre de confirmation"
+        ]
+      }
+    },
+    "/api/v1/confirmation/queue/stats": {
+      "get": {
+        "operationId": "ConfirmationController_stats_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Compteurs de la file, pour l en-tete de l ecran",
+        "tags": [
+          "Centre de confirmation"
+        ]
+      }
+    },
+    "/api/v1/confirmation/queue/next": {
+      "post": {
+        "description": "Reserve la prochaine commande a traiter et l affecte a l agent. Deux agents cliquant simultanement ne recoivent jamais la meme commande : le verrou de base garantit l exclusivite.",
+        "operationId": "ConfirmationController_next_v1",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page, 1-indexee.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Taille de page. Plafonnee a 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 25,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "TO_CONFIRM",
+                  "NO_ANSWER",
+                  "CALL_BACK",
+                  "POSTPONED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "wilayaCode",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 58,
+              "type": "number"
+            }
+          },
+          {
+            "name": "assignedMembershipId",
+            "required": false,
+            "in": "query",
+            "description": "Restreint aux commandes affectees a cet agent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "unassignedOnly",
+            "required": false,
+            "in": "query",
+            "description": "Uniquement les commandes non affectees.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "dueOnly",
+            "required": false,
+            "in": "query",
+            "description": "Exclut les rappels programmes dans le futur.",
+            "schema": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Commande reservee, ou `null` si la file est vide."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Prendre la commande suivante",
+        "tags": [
+          "Centre de confirmation"
+        ]
+      }
+    },
+    "/api/v1/confirmation/orders/{id}/action": {
+      "post": {
+        "description": "Enregistre la tentative d appel, applique la transition de statut avec tous ses effets metier (stock, compteurs client, historique) et programme le rappel — le tout dans une seule transaction.",
+        "operationId": "ConfirmationController_applyAction_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmationActionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Appliquer une action de confirmation",
+        "tags": [
+          "Centre de confirmation"
+        ]
+      }
+    },
+    "/api/v1/confirmation/orders/{id}/correct-phone": {
+      "post": {
+        "description": "Repositionne la commande en file d appel avec le numero corrige. C est la sortie prevue du statut NUMERO INCORRECT.",
+        "operationId": "ConfirmationController_correctPhone_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectPhoneDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Corriger un numero incorrect et relancer la confirmation",
+        "tags": [
+          "Centre de confirmation"
+        ]
+      }
+    },
+    "/api/v1/confirmation/orders/{id}/whatsapp": {
+      "get": {
+        "description": "Affiche ce qui a ete tente automatiquement et pourquoi la commande a ete rendue a un agent. C est ce qui distingue un transfert d une perte.",
+        "operationId": "ConfirmationController_whatsappThread_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Historique WhatsApp d une commande",
+        "tags": [
+          "Centre de confirmation"
+        ]
+      }
+    },
+    "/api/v1/confirmation/orders/{id}/whatsapp/retry": {
+      "post": {
+        "description": "Utile apres correction d un numero. Si la passerelle n est pas configuree ou la commande ineligible, la reponse le dit explicitement et la commande reste en file d appel.",
+        "operationId": "ConfirmationController_retryWhatsapp_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Relancer le filtre WhatsApp sur une commande",
+        "tags": [
+          "Centre de confirmation"
+        ]
+      }
+    },
+    "/api/v1/carriers": {
+      "get": {
+        "description": "Liste les connecteurs REELLEMENT implementes, avec les champs d identifiants qu ils attendent. Un transporteur planifie mais non implemente n y figure pas : le produit ne promet que ce qu il tient.",
+        "operationId": "ShipmentsController_listCarriers_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Connecteurs transporteurs disponibles",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/carrier-accounts": {
+      "get": {
+        "operationId": "ShipmentsController_listAccounts_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Comptes transporteur configures pour la boutique",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/carrier-accounts/{id}/health-check": {
+      "post": {
+        "description": "Valide les identifiants sans creer aucun colis.",
+        "operationId": "ShipmentsController_healthCheck_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Verifier qu un compte transporteur repond",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/orders/{orderId}/ship": {
+      "post": {
+        "description": "Cree le colis chez le transporteur et passe la commande a EXPEDIEE. Un appel rejoue retourne le colis existant au lieu d en creer un second : trois barrieres independantes l en empechent (V2 §17).",
+        "operationId": "ShipmentsController_ship_v1",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "description": "Cle d idempotence. Un rejeu avec la meme cle et le meme corps renvoie la reponse de la premiere execution, sans creer de doublon.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShipmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confier une commande au transporteur",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/orders/{orderId}/shipments": {
+      "get": {
+        "operationId": "ShipmentsController_listByOrder_v1",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Colis d une commande",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/shipments": {
+      "get": {
+        "description": "Suivi transverse, independant des commandes. Le dernier evenement connu et la date de derniere synchronisation accompagnent chaque colis : un colis sans nouvelle depuis longtemps est un colis a verifier.",
+        "operationId": "ShipmentsController_listShipments_v1",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page, 1-indexee.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Taille de page. Plafonnee a 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 25,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Statuts internes, separes par des virgules.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "DRAFT",
+                  "CREATION_PENDING",
+                  "CREATED",
+                  "PICKED_UP",
+                  "IN_TRANSIT",
+                  "OUT_FOR_DELIVERY",
+                  "DELIVERED",
+                  "FAILED_ATTEMPT",
+                  "RETURNING",
+                  "RETURNED",
+                  "CANCELLED",
+                  "ERROR"
+                ]
+              }
+            }
+          },
+          {
+            "name": "carrierId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Numero de suivi, reference de commande ou nom du client.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lister les colis de la boutique",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/shipments/{id}": {
+      "get": {
+        "operationId": "ShipmentsController_getShipment_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detail d un colis et de ses evenements",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/shipments/{id}/cancel": {
+      "post": {
+        "description": "Annule chez le transporteur puis localement. Un colis deja livre ou retourne ne peut plus etre annule.",
+        "operationId": "ShipmentsController_cancelShipment_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelShipmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Annuler un colis",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/shipments/{id}/sync-tracking": {
+      "post": {
+        "description": "Interroge le transporteur et applique les nouveaux evenements. Les evenements deja connus sont ignores : rejouer est sans effet.",
+        "operationId": "ShipmentsController_syncTracking_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Forcer une synchronisation du suivi",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/shipments/{id}/tracking": {
+      "get": {
+        "description": "Conserve le statut BRUT du transporteur et le statut normalise EcomFlow : le premier sert au diagnostic, le second au metier.",
+        "operationId": "ShipmentsController_trackingEvents_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Evenements de suivi d un colis",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/returns": {
+      "get": {
+        "operationId": "ShipmentsController_listReturns_v1",
+        "parameters": [
+          {
+            "name": "status",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reason",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lister les retours",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/returns/{id}": {
+      "get": {
+        "operationId": "ShipmentsController_getReturn_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detail d un retour",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/orders/{orderId}/returns": {
+      "post": {
+        "description": "Le retour reste rattache a sa commande d origine. Aucun mouvement de stock n a lieu ici : la marchandise n est pas encore revenue.",
+        "operationId": "ShipmentsController_createReturn_v1",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReturnDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Creer un retour",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/returns/{id}/in-transit": {
+      "post": {
+        "operationId": "ShipmentsController_markInTransit_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Marquer le retour comme reparti chez le transporteur",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/returns/{id}/received": {
+      "post": {
+        "operationId": "ShipmentsController_markReceived_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Marquer le colis retour comme physiquement recu",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/returns/{id}/inspect": {
+      "post": {
+        "description": "C est ICI, et seulement ici, que le stock bouge. Chaque ligne recoit son etat et sa decision. Une inspection rejouee ne double jamais le stock.",
+        "operationId": "ShipmentsController_inspect_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InspectReturnDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Inspecter un retour et decider du sort du stock",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/returns/{id}/close": {
+      "post": {
+        "description": "Refuse tant que toutes les lignes n ont pas ete inspectees.",
+        "operationId": "ShipmentsController_closeReturn_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cloturer un retour",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/returns/{id}/cancel": {
+      "post": {
+        "description": "Impossible si des mouvements de stock ont deja ete appliques : les defaire casserait la piste d audit. Passer alors par un ajustement.",
+        "operationId": "ShipmentsController_cancelReturn_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelShipmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Annuler un retour cree par erreur",
+        "tags": [
+          "Expedition, suivi et retours"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/authorize": {
+      "get": {
+        "description": "Seul l acces en LECTURE aux feuilles est demande par defaut. Demander un acces en ecriture a tout le Drive serait disproportionne et alarmerait le commercant a l ecran de consentement.",
+        "operationId": "IntegrationsController_authorize_v1",
+        "parameters": [
+          {
+            "name": "allowWrite",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obtenir l URL de consentement Google",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/status": {
+      "get": {
+        "description": "Distingue deux choses : l installation dispose-t-elle d identifiants OAuth, et cette boutique a-t-elle autorise l acces. Aucun jeton n est renvoye.",
+        "operationId": "IntegrationsController_googleStatus_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Etat de la connexion Google",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/disconnect": {
+      "post": {
+        "description": "Revoque le jeton cote Google et desactive les synchronisations. Les commandes deja importees sont conservees.",
+        "operationId": "IntegrationsController_disconnect_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Deconnecter le compte Google",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/spreadsheets": {
+      "get": {
+        "operationId": "IntegrationsController_listSpreadsheets_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Classeurs accessibles au compte connecte",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/spreadsheets/{spreadsheetId}/sheets": {
+      "get": {
+        "operationId": "IntegrationsController_listSheets_v1",
+        "parameters": [
+          {
+            "name": "spreadsheetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Onglets d un classeur",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/preview": {
+      "post": {
+        "description": "Montre, ligne par ligne, ce qu EcomFlow comprend de la feuille : le telephone normalise, la wilaya reconnue, le prix converti. C est l ecran qui evite les mauvaises surprises avant le premier import reel.",
+        "operationId": "IntegrationsController_preview_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewSheetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Apercu d un onglet avec mapping propose",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/sheets": {
+      "get": {
+        "operationId": "IntegrationsController_listConfigs_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Feuilles synchronisees et leur etat",
+        "tags": [
+          "Integrations"
+        ]
+      },
+      "post": {
+        "description": "Le mapping est valide avant enregistrement : champs obligatoires presents, aucune colonne affectee a deux champs. Accepter une configuration incomplete produirait des echecs en boucle.",
+        "operationId": "IntegrationsController_createConfig_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSheetConfigDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Configurer la synchronisation d un onglet",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/sheets/{configId}": {
+      "patch": {
+        "operationId": "IntegrationsController_updateConfig_v1",
+        "parameters": [
+          {
+            "name": "configId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSheetConfigDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Modifier une configuration de synchronisation",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/sheets/{configId}/test": {
+      "post": {
+        "description": "Lit la feuille et valide chaque ligne SANS creer aucune commande. Etape « test d import » de l assistant d onboarding (Addendum §34).",
+        "operationId": "IntegrationsController_testImport_v1",
+        "parameters": [
+          {
+            "name": "configId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Test d import (simulation)",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/sheets/{configId}/sync": {
+      "post": {
+        "description": "Import immediat. Sur quota Google depasse, la reponse indique l instant de reprise : aucune commande n est perdue, la synchronisation repartira exactement ou elle s est arretee.",
+        "operationId": "IntegrationsController_syncNow_v1",
+        "parameters": [
+          {
+            "name": "configId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Synchroniser maintenant",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/sheets/{configId}/errors": {
+      "get": {
+        "description": "Chaque ligne rejetee est listee avec son numero, le code d erreur et une explication exploitable (V1 §6).",
+        "operationId": "IntegrationsController_listErrors_v1",
+        "parameters": [
+          {
+            "name": "configId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Journal des lignes en erreur",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/sheets/{configId}/retry-failed": {
+      "post": {
+        "description": "Utilise les valeurs brutes conservees : ne relit pas la feuille et ne consomme donc aucun quota Google. Ideal apres correction du catalogue.",
+        "operationId": "IntegrationsController_retryFailed_v1",
+        "parameters": [
+          {
+            "name": "configId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rejouer les lignes en erreur",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/google/sync-runs": {
+      "get": {
+        "description": "Statut, volumes, duree et motif d echec de chaque execution (V2 §30).",
+        "operationId": "IntegrationsController_listRuns_v1",
+        "parameters": [
+          {
+            "name": "configId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Historique des synchronisations",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/plans": {
+      "get": {
+        "description": "Les prix et limites viennent de la base, jamais du code frontend (V2 §38). Route publique : la page tarifs doit etre consultable avant toute inscription.",
+        "operationId": "BillingController_listPlans_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Plans tarifaires disponibles",
+        "tags": [
+          "Abonnement et paiements"
+        ]
+      }
+    },
+    "/api/v1/subscriptions/current": {
+      "get": {
+        "description": "L etat est RECALCULE cote serveur a partir des dates persistees : meme si le job d expiration n a pas encore tourne, une boutique dont l essai est termine est signalee comme telle.",
+        "operationId": "BillingController_currentSubscription_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Etat d abonnement de la boutique",
+        "tags": [
+          "Abonnement et paiements"
+        ]
+      }
+    },
+    "/api/v1/payments": {
+      "get": {
+        "operationId": "BillingController_listPayments_v1",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Historique des paiements de la boutique",
+        "tags": [
+          "Abonnement et paiements"
+        ]
+      }
+    },
+    "/api/v1/payments/checkout": {
+      "post": {
+        "description": "Retourne un lien de paiement. L abonnement n est PAS active a ce stade : seul le webhook signe de Chargily l activera. Le retour du navigateur sur l URL de succes ne prouve rien.",
+        "operationId": "BillingController_startCheckout_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartCheckoutDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Demarrer un paiement par carte (Chargily Pay)",
+        "tags": [
+          "Abonnement et paiements"
+        ]
+      }
+    },
+    "/api/v1/payments/manual": {
+      "post": {
+        "description": "Virement ou BaridiMob (Addendum §35). Le paiement passe en « en attente de verification » : un Super Admin doit confronter le justificatif au releve bancaire avant activation. Une capture d ecran n active rien.",
+        "operationId": "BillingController_submitManualPayment_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitManualPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soumettre un justificatif de paiement manuel",
+        "tags": [
+          "Abonnement et paiements"
+        ]
+      }
+    },
+    "/api/v1/subscriptions/cancel": {
+      "post": {
+        "description": "La resiliation prend effet a la fin de la periode deja payee : le commercant conserve ce qu il a achete.",
+        "operationId": "BillingController_cancel_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Resilier l abonnement",
+        "tags": [
+          "Abonnement et paiements"
+        ]
+      }
+    },
+    "/api/v1/admin/payments/pending-review": {
+      "get": {
+        "operationId": "BillingController_pendingReview_v1",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paiements en attente, du plus ancien au plus recent."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "File de verification des paiements manuels",
+        "tags": [
+          "Abonnement et paiements"
+        ]
+      }
+    },
+    "/api/v1/admin/payments/approve": {
+      "post": {
+        "description": "Active l abonnement. A n utiliser qu apres verification effective du versement sur le compte bancaire.",
+        "operationId": "BillingController_approvePayment_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approuver un paiement manuel",
+        "tags": [
+          "Abonnement et paiements"
+        ]
+      }
+    },
+    "/api/v1/admin/payments/reject": {
+      "post": {
+        "operationId": "BillingController_rejectPayment_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Refuser un paiement manuel, avec motif",
+        "tags": [
+          "Abonnement et paiements"
+        ]
+      }
+    },
+    "/api/v1/admin/tenants/suspend": {
+      "post": {
+        "operationId": "BillingController_suspendTenant_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuspendTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Suspendre une boutique",
+        "tags": [
+          "Abonnement et paiements"
+        ]
+      }
+    },
+    "/api/v1/admin/trials/pending-review": {
+      "get": {
+        "description": "Chaque entree liste les signaux ayant declenche la revue et leur poids (Addendum §38). La boutique reste utilisable en attendant la decision.",
+        "operationId": "BillingController_pendingTrialReviews_v1",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Essais gratuits signales pour revue manuelle",
+        "tags": [
+          "Abonnement et paiements"
+        ]
+      }
+    },
+    "/api/v1/dashboard/overview": {
+      "get": {
+        "description": "KPI operationnels, indicateurs financiers, serie quotidienne et compteurs d alerte, en une seule requete. Periode par defaut : les 30 derniers jours.",
+        "operationId": "DashboardController_overview_v1",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Debut de periode (ISO 8601). Par defaut : il y a 30 jours.",
+            "schema": {
+              "format": "date-time",
+              "example": "2026-08-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Fin de periode (ISO 8601). Par defaut : maintenant.",
+            "schema": {
+              "format": "date-time",
+              "example": "2026-08-31",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Synthese du tableau de bord",
+        "tags": [
+          "Dashboard et rapports"
+        ]
+      }
+    },
+    "/api/v1/dashboard/kpis": {
+      "get": {
+        "description": "Taux de confirmation, de livraison, de retour et d annulation. Un taux vaut `null` — et non 0 — quand le denominateur est vide : « aucune donnee » et « 0 % » ne veulent pas dire la meme chose.",
+        "operationId": "DashboardController_kpis_v1",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Debut de periode (ISO 8601). Par defaut : il y a 30 jours.",
+            "schema": {
+              "format": "date-time",
+              "example": "2026-08-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Fin de periode (ISO 8601). Par defaut : maintenant.",
+            "schema": {
+              "format": "date-time",
+              "example": "2026-08-31",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "KPI de commandes et taux",
+        "tags": [
+          "Dashboard et rapports"
+        ]
+      }
+    },
+    "/api/v1/dashboard/alerts": {
+      "get": {
+        "operationId": "DashboardController_alerts_v1",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Compteurs d alerte du bandeau",
+        "tags": [
+          "Dashboard et rapports"
+        ]
+      }
+    },
+    "/api/v1/dashboard/daily": {
+      "get": {
+        "description": "Regroupee selon le fuseau de la boutique : une commande passee a 23 h a Alger compte pour ce jour-la, pas pour le suivant en UTC.",
+        "operationId": "DashboardController_daily_v1",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Debut de periode (ISO 8601). Par defaut : il y a 30 jours.",
+            "schema": {
+              "format": "date-time",
+              "example": "2026-08-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Fin de periode (ISO 8601). Par defaut : maintenant.",
+            "schema": {
+              "format": "date-time",
+              "example": "2026-08-31",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Serie quotidienne",
+        "tags": [
+          "Dashboard et rapports"
+        ]
+      }
+    },
+    "/api/v1/reports/profitability": {
+      "get": {
+        "description": "Le chiffre d affaires n est reconnu qu a la LIVRAISON (modele COD). Trois notions distinctes : perte reelle (tresorerie sortie sans contrepartie), manque a gagner (CA non realise) et marge nette. `cogsCompleteness` indique la part des commandes dont le prix d achat est renseigne : en dessous de 1, la marge est partielle.",
+        "operationId": "DashboardController_profitability_v1",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Debut de periode (ISO 8601). Par defaut : il y a 30 jours.",
+            "schema": {
+              "format": "date-time",
+              "example": "2026-08-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Fin de periode (ISO 8601). Par defaut : maintenant.",
+            "schema": {
+              "format": "date-time",
+              "example": "2026-08-31",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Indicateurs financiers et rentabilite",
+        "tags": [
+          "Dashboard et rapports"
+        ]
+      }
+    },
+    "/api/v1/reports/losses": {
+      "get": {
+        "description": "Isole les points de fuite : wilaya, transporteur, produit, agent ou source. Trie par perte decroissante.",
+        "operationId": "DashboardController_losses_v1",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Debut de periode (ISO 8601). Par defaut : il y a 30 jours.",
+            "schema": {
+              "format": "date-time",
+              "example": "2026-08-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Fin de periode (ISO 8601). Par defaut : maintenant.",
+            "schema": {
+              "format": "date-time",
+              "example": "2026-08-31",
+              "type": "string"
+            }
+          },
+          {
+            "name": "dimension",
+            "required": false,
+            "in": "query",
+            "description": "Axe d analyse. Chaque axe repond a une question : ou la livraison echoue, quel transporteur coute le plus en retours, quel produit est le plus refuse.",
+            "schema": {
+              "default": "wilaya",
+              "type": "string",
+              "enum": [
+                "wilaya",
+                "carrier",
+                "product",
+                "agent",
+                "source"
+              ]
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ventilation des pertes par axe",
+        "tags": [
+          "Dashboard et rapports"
+        ]
+      }
+    },
+    "/api/v1/reports/whatsapp-adoption": {
+      "get": {
+        "description": "Mesure l impact reel sur la charge du centre d appel : part des commandes confirmees automatiquement, et raisons des transferts vers un agent (Addendum §31).",
+        "operationId": "DashboardController_whatsappAdoption_v1",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Debut de periode (ISO 8601). Par defaut : il y a 30 jours.",
+            "schema": {
+              "format": "date-time",
+              "example": "2026-08-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Fin de periode (ISO 8601). Par defaut : maintenant.",
+            "schema": {
+              "format": "date-time",
+              "example": "2026-08-31",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Adoption du filtre WhatsApp",
+        "tags": [
+          "Dashboard et rapports"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "HealthController_live",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Sonde de vivacite",
+        "tags": [
+          "Sante"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "HealthController_ready",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Boutique ciblee, si l utilisateur est membre de plusieurs boutiques.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Sonde de disponibilite",
+        "tags": [
+          "Sante"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "EcomFlow API",
+    "description": "API de la plateforme SaaS EcomFlow — gestion et automatisation des operations e-commerce (commandes, confirmation, preparation, expedition, tracking, retours, stock, abonnement).\n\n**Multi-tenant** : chaque requete authentifiee est automatiquement limitee a la boutique de la session. L en-tete `X-Tenant-Id` permet de changer de boutique parmi celles dont l utilisateur est membre ; toute autre valeur est refusee.\n\n**Idempotence** : les endpoints de creation couteuse acceptent l en-tete `Idempotency-Key`.",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [
+    {
+      "url": "http://localhost:3001"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "MarkReadDto": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "description": "Notifications a marquer comme lues.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      },
+      "SetPreferenceDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "stock.low",
+            "description": "Type d evenement."
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "IN_APP",
+              "EMAIL",
+              "WHATSAPP",
+              "WEBHOOK"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "type",
+          "channel",
+          "enabled"
+        ]
+      },
+      "OrderLineDto": {
+        "type": "object",
+        "properties": {
+          "variantId": {
+            "type": "string",
+            "description": "Identifiant de la variante."
+          },
+          "sku": {
+            "type": "string",
+            "description": "SKU de la variante, alternative a variantId."
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1,
+            "example": 1
+          },
+          "unitPriceCentimes": {
+            "type": "number",
+            "description": "Prix unitaire en centimes. A defaut, celui du catalogue est applique.",
+            "example": 450000
+          },
+          "discountCentimes": {
+            "type": "number",
+            "description": "Remise sur la ligne, en centimes.",
+            "example": 0
+          }
+        },
+        "required": [
+          "quantity"
+        ]
+      },
+      "CreateOrderDto": {
+        "type": "object",
+        "properties": {
+          "customerName": {
+            "type": "string",
+            "example": "Sara Benali"
+          },
+          "phone": {
+            "type": "string",
+            "example": "0555123456",
+            "description": "Numero algerien, toute forme acceptee."
+          },
+          "wilaya": {
+            "type": "string",
+            "example": "Alger",
+            "description": "Code (1 a 58) ou nom de la wilaya. Les variantes courantes sont reconnues."
+          },
+          "commune": {
+            "type": "string",
+            "example": "Bab Ezzouar"
+          },
+          "addressText": {
+            "type": "string",
+            "example": "Cite 1200 Logements, Bat B4"
+          },
+          "lines": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderLineDto"
+            }
+          },
+          "deliveryFeeCentimes": {
+            "type": "number",
+            "description": "Frais de livraison en centimes.",
+            "example": 50000
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "assignedMembershipId": {
+            "type": "string",
+            "description": "Membre a qui affecter la commande."
+          }
+        },
+        "required": [
+          "customerName",
+          "phone",
+          "wilaya",
+          "commune",
+          "addressText",
+          "lines"
+        ]
+      },
+      "ChangeOrderStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "NEW",
+              "TO_CONFIRM",
+              "CONFIRMED",
+              "IN_PREPARATION",
+              "READY_TO_SHIP",
+              "SHIPPED",
+              "IN_DELIVERY",
+              "DELIVERED",
+              "NO_ANSWER",
+              "CALL_BACK",
+              "POSTPONED",
+              "WRONG_NUMBER",
+              "CANCELLED",
+              "REFUSED",
+              "RETURNED"
+            ],
+            "description": "Statut cible."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Motif. Obligatoire pour les transitions negatives (annulation, refus)."
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "AssignOrderDto": {
+        "type": "object",
+        "properties": {
+          "membershipId": {
+            "type": "object",
+            "description": "Membre destinataire. `null` retire l affectation.",
+            "nullable": true
+          }
+        }
+      },
+      "ResolveDuplicateDto": {
+        "type": "object",
+        "properties": {
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "KEPT_BOTH",
+              "MERGED",
+              "CANCELLED_DUPLICATE"
+            ],
+            "description": "Decision. `KEPT_BOTH` conserve les deux commandes, `CANCELLED_DUPLICATE` signale que le doublon a ete annule separement."
+          }
+        },
+        "required": [
+          "resolution"
+        ]
+      },
+      "UpdateCustomerDto": {
+        "type": "object",
+        "properties": {
+          "fullName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "secondaryPhone": {
+            "type": "string",
+            "description": "Second numero de contact."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes internes, non visibles du client."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AnonymizeCustomerDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Motif de la demande d effacement, conserve dans le journal d audit."
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "UpdateSettingsDto": {
+        "type": "object",
+        "properties": {
+          "defaultLocale": {
+            "type": "string",
+            "enum": [
+              "fr",
+              "ar"
+            ],
+            "description": "Langue proposee par defaut aux NOUVEAUX membres de la boutique. Elle ne change jamais la langue de quelqu un qui a deja choisi la sienne : une preference personnelle ne se surcharge pas a distance."
+          },
+          "customerMessageLocale": {
+            "type": "string",
+            "enum": [
+              "fr",
+              "ar"
+            ],
+            "nullable": true,
+            "description": "Impose une langue unique pour TOUS les messages adresses aux clients finaux. Laisser vide — le defaut — pour ecrire a chaque client dans sa propre langue, ce qui donne le meilleur taux de confirmation."
+          },
+          "lowStockThreshold": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Seuil d alerte de stock par defaut."
+          },
+          "reserveStockOnConfirm": {
+            "type": "boolean",
+            "description": "Reserver le stock des la confirmation, plutot qu a la preparation."
+          },
+          "allowOversell": {
+            "type": "boolean",
+            "description": "Autoriser la confirmation d une commande sans stock suffisant. Desactive par defaut : l integrite du stock prime."
+          },
+          "maxCallAttempts": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "defaultCallbackDelayHours": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 168,
+            "description": "Delai de rappel par defaut (h)."
+          },
+          "whatsappFilterEnabled": {
+            "type": "boolean"
+          },
+          "whatsappTimeoutHours": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 48,
+            "description": "Delai sans reponse (h)."
+          },
+          "whatsappMaxAmountCentimes": {
+            "type": "number",
+            "description": "Montant au-dela duquel la commande part directement chez un agent humain, en centimes. Null pour ne pas plafonner."
+          },
+          "reliabilityEnabled": {
+            "type": "boolean"
+          },
+          "reliabilityMinHistory": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "reliabilityReliableThreshold": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "reliabilityWatchThreshold": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "reliabilityFailureLimit": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "reliabilityAtRiskActions": {
+            "type": "array",
+            "description": "Actions recommandees pour un client a risque. Vide = aucune restriction : le score reste un simple indicateur pour l agent.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "REQUIRE_WHATSAPP_CONFIRMATION",
+                "REQUIRE_MANAGER_APPROVAL",
+                "REQUIRE_DEPOSIT",
+                "DEPRIORITIZE_IN_QUEUE"
+              ]
+            }
+          },
+          "duplicateWindowHours": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 720
+          },
+          "duplicateAlertScore": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 200
+          },
+          "duplicateLikelyScore": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 200
+          },
+          "defaultCarrierCostCentimes": {
+            "type": "number",
+            "description": "Cout transport par defaut si le transporteur ne le renvoie pas, en centimes."
+          },
+          "returnRateAlertPercent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Seuil d alerte du taux de retour (%)."
+          }
+        }
+      },
+      "UpdateTenantDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Nom commercial de la boutique."
+          },
+          "logoUrl": {
+            "type": "string"
+          }
+        }
+      },
+      "RequestOtpDto": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "example": "0555123456"
+          }
+        },
+        "required": [
+          "phone"
+        ]
+      },
+      "OtpChallengeResponse": {
+        "type": "object",
+        "properties": {
+          "phoneMasked": {
+            "type": "string",
+            "example": "+213•••••3456"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "Expiration du code (ISO 8601)."
+          },
+          "devCode": {
+            "type": "string",
+            "description": "Code en clair. Renseigne UNIQUEMENT avec OTP_DRIVER=console hors production, pour permettre le developpement local et les tests de bout en bout sans fournisseur SMS."
+          }
+        },
+        "required": [
+          "phoneMasked",
+          "expiresAt"
+        ]
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "sara@boutique-dz.com",
+            "description": "Adresse e-mail du proprietaire."
+          },
+          "password": {
+            "type": "string",
+            "example": "MotDePasseSolide2026",
+            "minLength": 12
+          },
+          "fullName": {
+            "type": "string",
+            "example": "Sara Benali"
+          },
+          "storeName": {
+            "type": "string",
+            "example": "Boutique Sara",
+            "description": "Nom de la boutique a creer."
+          },
+          "phone": {
+            "type": "string",
+            "example": "0555123456",
+            "description": "Numero de telephone algerien, OBLIGATOIRE et verifie par code OTP. C est l identifiant fort qui lie l essai gratuit a une personne reelle et empeche la reouverture indefinie d essais (Addendum §38). Demandez d abord un code via POST /auth/otp/request."
+          },
+          "otpCode": {
+            "type": "string",
+            "example": "123456",
+            "description": "Code a 6 chiffres recu par WhatsApp (ou affiche dans les logs en developpement)."
+          },
+          "deviceFingerprint": {
+            "type": "string",
+            "description": "Empreinte d appareil calculee cote navigateur. Utilisee uniquement pour detecter la reouverture repetee d essais gratuits ; stockee hachee."
+          },
+          "acceptTerms": {
+            "type": "boolean",
+            "description": "Acceptation des conditions d utilisation.",
+            "example": true
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "fullName",
+          "storeName",
+          "phone",
+          "otpCode",
+          "acceptTerms"
+        ]
+      },
+      "AuthTokensResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "Jeton d acces, a placer dans l en-tete Authorization."
+          },
+          "refreshToken": {
+            "type": "string",
+            "description": "Jeton de rafraichissement, a usage unique."
+          },
+          "accessTokenExpiresAt": {
+            "type": "string",
+            "description": "Expiration du jeton d acces (ISO 8601)."
+          },
+          "refreshTokenExpiresAt": {
+            "type": "string",
+            "description": "Expiration du jeton de rafraichissement (ISO 8601)."
+          }
+        },
+        "required": [
+          "accessToken",
+          "refreshToken",
+          "accessTokenExpiresAt",
+          "refreshTokenExpiresAt"
+        ]
+      },
+      "AuthUserResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "phoneVerified": {
+            "type": "boolean",
+            "description": "Numero de telephone verifie par code OTP."
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "fullName",
+          "phoneVerified"
+        ]
+      },
+      "AuthTenantResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ONBOARDING",
+              "ACTIVE",
+              "SUSPENDED",
+              "CLOSED"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "status"
+        ]
+      },
+      "RegistrationResponse": {
+        "type": "object",
+        "properties": {
+          "tokens": {
+            "$ref": "#/components/schemas/AuthTokensResponse"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AuthUserResponse"
+          },
+          "tenant": {
+            "nullable": true,
+            "description": "Boutique active. Null pour un Super Admin sans boutique selectionnee.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuthTenantResponse"
+              }
+            ]
+          },
+          "role": {
+            "type": "object",
+            "nullable": true,
+            "description": "Code du role dans la boutique active."
+          },
+          "permissions": {
+            "description": "Permissions effectives. Fournies pour adapter l interface ; elles ne constituent jamais une autorisation cote client.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isPlatformAdmin": {
+            "type": "boolean"
+          },
+          "trialUnderReview": {
+            "type": "boolean",
+            "description": "Vrai si l essai part en revue manuelle du Super Admin. La boutique est utilisable normalement en attendant (Addendum §38)."
+          }
+        },
+        "required": [
+          "tokens",
+          "user",
+          "permissions",
+          "isPlatformAdmin",
+          "trialUnderReview"
+        ]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "sara@boutique-dz.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "MotDePasseSolide2026"
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "Boutique a ouvrir si l utilisateur est membre de plusieurs boutiques."
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "AuthSessionResponse": {
+        "type": "object",
+        "properties": {
+          "tokens": {
+            "$ref": "#/components/schemas/AuthTokensResponse"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AuthUserResponse"
+          },
+          "tenant": {
+            "nullable": true,
+            "description": "Boutique active. Null pour un Super Admin sans boutique selectionnee.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuthTenantResponse"
+              }
+            ]
+          },
+          "role": {
+            "type": "object",
+            "nullable": true,
+            "description": "Code du role dans la boutique active."
+          },
+          "permissions": {
+            "description": "Permissions effectives. Fournies pour adapter l interface ; elles ne constituent jamais une autorisation cote client.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isPlatformAdmin": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tokens",
+          "user",
+          "permissions",
+          "isPlatformAdmin"
+        ]
+      },
+      "RefreshTokenDto": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "description": "Jeton de rafraichissement obtenu a la connexion."
+          }
+        },
+        "required": [
+          "refreshToken"
+        ]
+      },
+      "ForgotPasswordDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "sara@boutique-dz.com"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "ResetPasswordDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Jeton recu par e-mail."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ]
+      },
+      "ChangePasswordDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 12
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ]
+      },
+      "UpdatePreferencesDto": {
+        "type": "object",
+        "properties": {
+          "locale": {
+            "type": "string",
+            "enum": [
+              "fr",
+              "ar"
+            ],
+            "description": "Langue de l interface pour CET utilisateur. Elle prime toujours sur le reglage de la boutique : un agent arabophone dans une boutique francophone doit pouvoir travailler dans sa langue."
+          }
+        },
+        "required": [
+          "locale"
+        ]
+      },
+      "SwitchTenantDto": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "description": "Boutique a activer."
+          }
+        },
+        "required": [
+          "tenantId"
+        ]
+      },
+      "InviteMemberDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "agent@boutique-dz.com"
+          },
+          "fullName": {
+            "type": "string",
+            "example": "Nabil Agent"
+          },
+          "roleId": {
+            "type": "string",
+            "description": "Role a attribuer dans la boutique."
+          }
+        },
+        "required": [
+          "email",
+          "fullName",
+          "roleId"
+        ]
+      },
+      "ChangeRoleDto": {
+        "type": "object",
+        "properties": {
+          "roleId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "roleId"
+        ]
+      },
+      "CreateRoleDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Superviseur confirmation"
+          },
+          "description": {
+            "type": "string"
+          },
+          "permissions": {
+            "description": "Cles de permissions. Les permissions de plateforme sont refusees.",
+            "example": [
+              "orders.read",
+              "confirmation.manage"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "permissions"
+        ]
+      },
+      "UpdateRolePermissionsDto": {
+        "type": "object",
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "permissions"
+        ]
+      },
+      "VariantInputDto": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "example": "ROB-001-M-RGE"
+          },
+          "label": {
+            "type": "string",
+            "example": "Rouge / M"
+          },
+          "attributes": {
+            "type": "object",
+            "example": {
+              "couleur": "Rouge",
+              "taille": "M"
+            },
+            "description": "Attributs libres de la declinaison."
+          },
+          "salePriceCentimes": {
+            "type": "number",
+            "description": "Prix de vente propre a la variante, en centimes."
+          },
+          "purchasePriceCentimes": {
+            "type": "number",
+            "description": "Prix d achat propre a la variante, en centimes."
+          },
+          "lowStockThreshold": {
+            "type": "number",
+            "description": "Seuil d alerte propre a la variante."
+          },
+          "initialStock": {
+            "type": "number",
+            "description": "Stock initial.",
+            "default": 0
+          }
+        },
+        "required": [
+          "sku"
+        ]
+      },
+      "CreateProductDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Robe longue brodee"
+          },
+          "sku": {
+            "type": "string",
+            "example": "ROB-001"
+          },
+          "categoryName": {
+            "type": "string",
+            "example": "Vetements"
+          },
+          "description": {
+            "type": "string"
+          },
+          "salePriceCentimes": {
+            "type": "number",
+            "example": 450000,
+            "description": "Prix de vente en centimes."
+          },
+          "purchasePriceCentimes": {
+            "type": "number",
+            "example": 250000,
+            "description": "Prix d achat en centimes."
+          },
+          "imageUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "variants": {
+            "description": "Declinaisons. Si absent, une variante « Standard » est creee automatiquement : toute commande pointe une variante (D-011).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariantInputDto"
+            }
+          },
+          "initialStock": {
+            "type": "number",
+            "description": "Stock initial de la variante par defaut."
+          }
+        },
+        "required": [
+          "name",
+          "sku",
+          "salePriceCentimes"
+        ]
+      },
+      "UpdateProductDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "salePriceCentimes": {
+            "type": "number"
+          },
+          "purchasePriceCentimes": {
+            "type": "number"
+          },
+          "categoryName": {
+            "type": "string"
+          },
+          "imageUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StockInboundDto": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "number",
+            "minimum": 1,
+            "description": "Quantite recue."
+          },
+          "note": {
+            "type": "string",
+            "description": "Reference de reception (bon de livraison)."
+          }
+        },
+        "required": [
+          "quantity"
+        ]
+      },
+      "StockAdjustmentDto": {
+        "type": "object",
+        "properties": {
+          "delta": {
+            "type": "number",
+            "description": "Variation signee du stock physique. Negatif = casse, vol, perte.",
+            "example": -2
+          },
+          "note": {
+            "type": "string",
+            "description": "Motif de l ajustement, obligatoire pour la tracabilite."
+          }
+        },
+        "required": [
+          "delta",
+          "note"
+        ]
+      },
+      "ConfirmationActionDto": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "CONFIRM",
+              "CALL_BACK",
+              "POSTPONE",
+              "NO_ANSWER",
+              "CANCEL",
+              "WRONG_NUMBER"
+            ],
+            "description": "Action rapide du centre de confirmation (V1 §9)."
+          },
+          "note": {
+            "type": "string",
+            "description": "Note d appel, visible dans l historique."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Motif. Obligatoire pour une annulation."
+          },
+          "callbackAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Date du prochain rappel (ISO 8601). Applicable a CALL_BACK et POSTPONE. A defaut, le delai par defaut de la boutique s applique."
+          },
+          "callDurationSeconds": {
+            "type": "number",
+            "description": "Duree de l appel en secondes."
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "CorrectPhoneDto": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "example": "0555123456"
+          }
+        },
+        "required": [
+          "phone"
+        ]
+      },
+      "CreateShipmentDto": {
+        "type": "object",
+        "properties": {
+          "carrierAccountId": {
+            "type": "string",
+            "description": "Compte transporteur. A defaut, celui par defaut de la boutique."
+          },
+          "deliveryType": {
+            "type": "string",
+            "enum": [
+              "HOME",
+              "PICKUP_POINT"
+            ],
+            "default": "HOME"
+          },
+          "pickupPointId": {
+            "type": "string",
+            "description": "Point relais, requis si deliveryType=PICKUP_POINT."
+          },
+          "weightGrams": {
+            "type": "number",
+            "description": "Poids du colis en grammes."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Consignes pour le livreur."
+          },
+          "allowOpening": {
+            "type": "boolean",
+            "description": "Le client peut-il ouvrir le colis avant paiement ?",
+            "default": true
+          }
+        }
+      },
+      "CancelShipmentDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Motif d annulation, transmis a l historique."
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "ReturnLineDto": {
+        "type": "object",
+        "properties": {
+          "orderItemId": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "orderItemId",
+          "quantity"
+        ]
+      },
+      "CreateReturnDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "CUSTOMER_ABSENT",
+              "CUSTOMER_REFUSED",
+              "WRONG_NUMBER",
+              "UNREACHABLE",
+              "PRODUCT_NOT_CONFORM",
+              "DAMAGED_IN_TRANSIT",
+              "DELIVERY_DELAY",
+              "OTHER"
+            ]
+          },
+          "reasonDetail": {
+            "type": "string"
+          },
+          "returnCostCentimes": {
+            "type": "number",
+            "description": "Cout du retour facture par le transporteur, en centimes."
+          },
+          "items": {
+            "description": "Lignes retournees. A defaut, toute la commande.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnLineDto"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "InspectLineDto": {
+        "type": "object",
+        "properties": {
+          "returnItemId": {
+            "type": "string"
+          },
+          "condition": {
+            "type": "string",
+            "enum": [
+              "SELLABLE",
+              "DAMAGED",
+              "INCOMPLETE",
+              "UNKNOWN"
+            ]
+          },
+          "stockDecision": {
+            "type": "string",
+            "enum": [
+              "RESTOCK",
+              "QUARANTINE",
+              "WRITE_OFF"
+            ],
+            "description": "RESTOCK remet en vente, QUARANTINE place en stock a verifier, WRITE_OFF constate la perte (impactee dans la rentabilite)."
+          }
+        },
+        "required": [
+          "returnItemId",
+          "condition",
+          "stockDecision"
+        ]
+      },
+      "InspectReturnDto": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InspectLineDto"
+            }
+          },
+          "notes": {
+            "type": "string"
+          },
+          "returnCostCentimes": {
+            "type": "number",
+            "description": "Cout reel du retour, en centimes."
+          }
+        },
+        "required": [
+          "lines"
+        ]
+      },
+      "PreviewSheetDto": {
+        "type": "object",
+        "properties": {
+          "spreadsheetId": {
+            "type": "string"
+          },
+          "sheetName": {
+            "type": "string",
+            "example": "Commandes"
+          },
+          "headerRow": {
+            "type": "number",
+            "default": 1,
+            "description": "Ligne contenant les en-tetes."
+          },
+          "mapping": {
+            "type": "object",
+            "description": "Mapping a tester. Si absent, un mapping est propose automatiquement a partir des en-tetes."
+          }
+        },
+        "required": [
+          "spreadsheetId",
+          "sheetName"
+        ]
+      },
+      "CreateSheetConfigDto": {
+        "type": "object",
+        "properties": {
+          "spreadsheetId": {
+            "type": "string"
+          },
+          "sheetName": {
+            "type": "string",
+            "example": "Commandes"
+          },
+          "sheetGid": {
+            "type": "string",
+            "description": "Identifiant numerique de l onglet.",
+            "example": "0"
+          },
+          "columnMapping": {
+            "type": "object",
+            "description": "Correspondance champ EcomFlow -> colonne (lettre ou index 0-base).",
+            "example": {
+              "customerName": "B",
+              "phone": "C",
+              "wilaya": "D",
+              "quantity": "I"
+            }
+          },
+          "headerRow": {
+            "type": "number",
+            "default": 1
+          },
+          "firstDataRow": {
+            "type": "number",
+            "description": "Premiere ligne de donnees. Par defaut, en-tete + 1."
+          },
+          "externalIdColumn": {
+            "type": "string",
+            "description": "Colonne portant un identifiant de ligne stable. FORTEMENT recommandee si votre feuille peut contenir deux lignes rigoureusement identiques."
+          },
+          "syncIntervalMinutes": {
+            "type": "number",
+            "minimum": 5,
+            "maximum": 1440,
+            "default": 10
+          },
+          "acceptedSourceStatuses": {
+            "description": "N importer que les lignes dont le statut source figure dans cette liste.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "spreadsheetId",
+          "sheetName",
+          "sheetGid",
+          "columnMapping"
+        ]
+      },
+      "UpdateSheetConfigDto": {
+        "type": "object",
+        "properties": {
+          "columnMapping": {
+            "type": "object"
+          },
+          "syncIntervalMinutes": {
+            "type": "number",
+            "minimum": 5,
+            "maximum": 1440
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "externalIdColumn": {
+            "type": "string"
+          },
+          "acceptedSourceStatuses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "StartCheckoutDto": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string",
+            "description": "Plan a souscrire."
+          }
+        },
+        "required": [
+          "planId"
+        ]
+      },
+      "SubmitManualPaymentDto": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "MANUAL_TRANSFER",
+              "MANUAL_BARIDIMOB"
+            ],
+            "description": "Moyen utilise : virement bancaire ou BaridiMob."
+          },
+          "proofUrl": {
+            "type": "string",
+            "description": "URL du justificatif televerse (recu de virement, capture BaridiMob)."
+          },
+          "note": {
+            "type": "string",
+            "description": "Precision utile a la verification."
+          }
+        },
+        "required": [
+          "planId",
+          "provider",
+          "proofUrl"
+        ]
+      },
+      "ReviewPaymentDto": {
+        "type": "object",
+        "properties": {
+          "paymentId": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string",
+            "description": "Note de verification."
+          }
+        },
+        "required": [
+          "paymentId"
+        ]
+      },
+      "RejectPaymentDto": {
+        "type": "object",
+        "properties": {
+          "paymentId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Motif du refus. Obligatoire : le commercant doit savoir quoi corriger."
+          }
+        },
+        "required": [
+          "paymentId",
+          "reason"
+        ]
+      },
+      "SuspendTenantDto": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenantId",
+          "reason"
+        ]
+      }
+    }
+  }
+}

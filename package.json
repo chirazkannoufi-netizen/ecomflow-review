@@ -1,0 +1,54 @@
+{
+  "name": "ecomflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EcomFlow — Plateforme SaaS multi-tenant d'operations e-commerce pour le marche algerien",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.11.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @ecomflow/shared && npm run build -w @ecomflow/api && npm run build -w @ecomflow/web",
+    "build:shared": "npm run build -w @ecomflow/shared",
+    "build:api": "npm run build -w @ecomflow/api",
+    "build:web": "npm run build -w @ecomflow/web",
+    "dev:api": "npm run start:dev -w @ecomflow/api",
+    "dev:web": "npm run dev -w @ecomflow/web",
+    "lint": "npm run lint -w @ecomflow/shared && npm run lint -w @ecomflow/api && npm run lint -w @ecomflow/web",
+    "typecheck": "npm run typecheck -w @ecomflow/shared && npm run typecheck -w @ecomflow/api && npm run typecheck -w @ecomflow/web",
+    "test": "npm run test -w @ecomflow/shared && npm run test -w @ecomflow/api",
+    "test:unit": "npm run test:unit -w @ecomflow/api",
+    "test:integration": "npm run test:integration -w @ecomflow/api",
+    "test:e2e": "npm run test:e2e -w @ecomflow/api",
+    "prisma:generate": "npm run prisma:generate -w @ecomflow/api",
+    "prisma:migrate": "npm run prisma:migrate -w @ecomflow/api",
+    "prisma:deploy": "npm run prisma:deploy -w @ecomflow/api",
+    "seed": "npm run seed -w @ecomflow/api",
+    "seed:demo": "npm run seed:demo -w @ecomflow/api",
+    "docker:up": "docker compose -f infra/docker/docker-compose.dev.yml up -d",
+    "docker:down": "docker compose -f infra/docker/docker-compose.dev.yml down",
+    "docker:logs": "docker compose -f infra/docker/docker-compose.dev.yml logs -f"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^9.1.2",
+    "prettier": "3.4.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.68.0"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "msgpackr-extract@3.0.4": true,
+    "nestjs-pino@4.4.0": true,
+    "prisma@6.19.3": true,
+    "@embedded-postgres/windows-x64@17.4.0-beta.15": true,
+    "sharp@0.33.5": true
+  }
+}

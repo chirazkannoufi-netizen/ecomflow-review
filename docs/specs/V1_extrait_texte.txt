@@ -1,0 +1,379 @@
+
+===== PAGE 1 =====
+EcomFlow — Cahier des charges | Version 1.0
+Page 1
+ CAHIER DES CHARGES
+ EcomFlow
+ Plateforme SaaS de gestion et d’automatisation des commandes e-commerce
+DOCUMENT
+VERSION
+DATE
+Cahier des charges fonctionnel &
+technique
+1.0
+29 août 2026
+POSITIONNEMENT
+MODÈLE
+CIBLE
+E-commerce Operations Platform
+SaaS — 7 jours d’essai
+E-commerçants algériens
+Confidentiel — Document de cadrage produit, fonctionnel et technique.
+
+===== PAGE 2 =====
+EcomFlow — Cahier des charges | Version 1.0
+Page 2
+1. Résumé exécutif
+EcomFlow est une plateforme SaaS conçue pour centraliser et automatiser la gestion des commandes des
+e-commerçants algériens. La plateforme couvre le cycle complet : importation des commandes,
+confirmation téléphonique, préparation, expédition, suivi transporteur, livraison, retours, stock et analyse
+des performances.
+Le produit reprend les principes d’une plateforme de gestion e-commerce telle qu’Ecomanager, avec une
+orientation forte vers l’automatisation et la synchronisation des données.
+Principe central : une commande saisie dans Google Sheets peut être récupérée automatiquement par
+EcomFlow, traitée par l’équipe de confirmation puis, une fois confirmée, transmise au transporteur via
+une intégration API. Les statuts de livraison sont ensuite synchronisés dans EcomFlow.
+Modèle commercial : chaque nouvelle boutique bénéficie d’un essai gratuit de 7 jours.
+À l’expiration de cette période, un abonnement actif est requis pour continuer à
+utiliser les fonctionnalités opérationnelles.
+2. Vision produit
+Créer un outil unique permettant à un e-commerçant de gérer ses commandes sans devoir recopier les
+mêmes informations entre plusieurs systèmes.
+• Centraliser les opérations dans une interface unique.
+ 
+• Réduire la saisie manuelle et les erreurs humaines.
+ 
+• Accélérer la confirmation et l’expédition.
+ 
+• Automatiser les échanges avec les transporteurs.
+ 
+• Donner une visibilité en temps réel sur les commandes et performances.
+ 
+• Construire une architecture SaaS évolutive pour plusieurs boutiques.
+ 
+3. Périmètre fonctionnel
+Module
+Fonction principale
+Commandes
+Création, import, modification, statuts, historique, recherche
+Google Sheets
+Synchronisation automatique des nouvelles commandes
+Confirmation
+File d’appels, actions rapides, notes et suivi agent
+Produits & stock
+Catalogue, SKU, variantes, mouvements et alertes
+Livraison
+Création colis, tracking et synchronisation des statuts
+Retours
+Motifs, suivi, état du produit et réintégration stock
+Dashboard
+KPIs, graphiques, taux de conversion/livraison/retour
+Utilisateurs
+Rôles, permissions et journal des actions
+Abonnement
+Essai 7 jours, plans, expiration et activation
+Notifications
+Alertes opérationnelles et erreurs d’intégration
+
+===== PAGE 3 =====
+EcomFlow — Cahier des charges | Version 1.0
+Page 3
+4. Utilisateurs et rôles
+Super Admin : gestion globale de la plateforme SaaS, plans, boutiques et paramètres système.
+Admin Boutique : accès complet à sa boutique, utilisateurs, commandes, produits, intégrations et
+statistiques.
+Manager : gestion opérationnelle et reporting selon les permissions attribuées.
+Agent de confirmation : accès à la file de commandes à confirmer et à son historique.
+Préparateur : accès aux commandes confirmées et aux opérations de préparation.
+5. Gestion des boutiques
+Chaque boutique possède un espace isolé contenant ses commandes, produits, clients, utilisateurs,
+intégrations, paramètres et statistiques.
+Le système doit être multi-tenant afin d’éviter tout mélange de données entre boutiques.
+Une boutique doit pouvoir configurer son nom, logo, paramètres de commande, seuils de stock,
+transporteurs et sources.
+6. Importation automatique depuis Google Sheets
+Le commerçant connecte son compte Google via OAuth et sélectionne le fichier et la feuille à
+synchroniser.
+EcomFlow détecte les nouvelles lignes et les transforme en commandes.
+Un identifiant externe ou une clé d’idempotence doit empêcher la création de doublons.
+Les données doivent être validées et normalisées : téléphone, wilaya, commune, quantité, prix et champs
+obligatoires.
+Les erreurs d’import doivent être visibles dans un journal avec la ligne concernée et une explication.
+Prévoir synchronisation automatique périodique et bouton de synchronisation manuelle.
+Le système doit conserver la source de la commande : Google Sheets, site, réseau social, saisie manuelle
+ou API.
+7. Modèle de commande
+ID interne unique : ORD-AAAA-XXXXXX.
+Champs principaux : date, client, téléphone, wilaya, commune, adresse, produit, SKU, variante, quantité,
+prix unitaire, frais de livraison, total, source, statut, transporteur, tracking, notes, utilisateur responsable.
+Dates métier : création, confirmation, préparation, expédition, livraison et retour.
+Une commande doit conserver son historique complet et ne pas perdre les anciennes valeurs
+importantes.
+8. Workflow des commandes
+Workflow principal : NEW → À CONFIRMER → CONFIRMÉE → EN PRÉPARATION → PRÊTE À EXPÉDIER →
+EXPÉDIÉE → EN LIVRAISON → LIVRÉE.
+Statuts alternatifs : NO ANSWER, CALL BACK, POSTPONED, CANCELLED, RETURNED, REFUSED, NUMÉRO
+INCORRECT.
+Chaque transition doit enregistrer la date, l’utilisateur, le statut précédent, le nouveau statut et
+éventuellement une note.
+
+===== PAGE 4 =====
+EcomFlow — Cahier des charges | Version 1.0
+Page 4
+Les transitions doivent être contrôlées par les permissions et les règles métier.
+9. Centre de confirmation téléphonique
+Interface optimisée pour le traitement rapide d’une file de commandes.
+Afficher les informations nécessaires : client, téléphone, adresse, wilaya, produit, quantité, total et notes.
+Actions rapides : Confirmer, Rappeler, Reporter, Annuler, Numéro incorrect.
+Enregistrer l’agent responsable, la date/heure et le résultat de l’appel.
+Permettre des filtres par statut, date, agent, wilaya et source.
+Prévoir une vue permettant de traiter les commandes une par une avec navigation rapide.
+10. Préparation et contrôle du stock
+Lors de la confirmation, vérifier la disponibilité du produit selon les règles définies.
+Permettre la préparation des commandes confirmées.
+Afficher les commandes prêtes à expédier.
+Le stock doit suivre les mouvements générés par les confirmations, annulations et retours selon les règles
+métier configurées.
+Prévoir stock disponible, stock à vérifier et alertes de seuil.
+11. Catalogue produits
+Fiche produit : nom, SKU, catégorie, prix d’achat, prix de vente, stock, variantes, couleur, taille, images,
+description et statut actif/inactif.
+Les variantes doivent pouvoir posséder leur propre SKU et quantité disponible.
+Le catalogue doit être exploitable depuis les commandes et les statistiques.
+12. Intégration des sociétés de livraison
+Concevoir un système de connecteurs afin d’ajouter plusieurs transporteurs indépendamment du cœur
+d’EcomFlow.
+Prévoir des intégrations avec les transporteurs disposant d’une API compatible, par exemple Yalidine, ZR
+Express, Ecotrack et autres.
+Après confirmation : sélection du transporteur → création du colis via API → récupération du tracking →
+sauvegarde dans EcomFlow.
+Le système doit gérer les erreurs API, les timeouts, les réponses invalides, les doublons d’envoi et les
+tentatives de reprise.
+Les identifiants et tokens d’intégration doivent être stockés de manière sécurisée et ne jamais être
+exposés au frontend.
+13. Synchronisation du tracking
+Récupérer les événements du transporteur via webhook lorsque disponible, sinon via synchronisation
+périodique.
+Mettre à jour automatiquement le statut de la commande.
+Conserver l’historique des événements transporteur.
+Exemple : EXPÉDIÉE → CENTRE DE TRI → ARRIVÉE À DESTINATION → EN LIVRAISON → LIVRÉE.
+
+===== PAGE 5 =====
+EcomFlow — Cahier des charges | Version 1.0
+Page 5
+14. Gestion des retours et refus
+Créer automatiquement un retour lié à la commande d’origine lorsque le transporteur signale un retour.
+Motifs configurables : client absent, refus, numéro incorrect, produit non conforme, client injoignable,
+autre.
+Suivre date, motif, état du produit et décision sur le stock.
+Permettre de distinguer retour à remettre en stock et retour à vérifier.
+15. Détection des doublons
+Détecter les commandes potentiellement dupliquées sur la base de téléphone, client, produit, adresse et
+période.
+Afficher une alerte sans supprimer automatiquement une commande.
+Permettre selon les droits : conserver, fusionner ou annuler.
+16. Dashboard et reporting
+KPIs : total commandes, nouvelles, à confirmer, confirmées, expédiées, livrées, retours et annulations.
+Indicateurs : taux de confirmation, taux d’annulation, taux de livraison et taux de retour.
+Indicateurs financiers : chiffre d’affaires, coûts de livraison, coûts produits et bénéfice estimé si les
+données sont disponibles.
+Graphiques par jour, produit, wilaya, source, agent et transporteur.
+Filtres par période et boutique.
+17. Recherche et filtres
+Recherche par nom, téléphone, ID commande, tracking, produit, SKU, wilaya ou commune.
+Filtres combinables par statut, période, source, agent et transporteur.
+Les résultats doivent être paginés et rapides même avec un grand volume de commandes.
+18. Notifications
+Notifier les événements importants : nouvelle commande, stock faible, commande confirmée, livraison,
+retour et erreur d’intégration.
+Prévoir préférences par boutique et rôle.
+Les erreurs d’import et d’API doivent être visibles dans un centre de notifications ou d’incidents.
+19. Import / Export
+Import : Google Sheets, CSV et Excel.
+Export : CSV, Excel et PDF.
+Exports disponibles pour commandes, produits, retours et rapports.
+20. Historique et audit
+Chaque commande possède une timeline complète.
+Exemple : importée depuis Google Sheets → prise en charge → confirmée → préparée → colis créé →
+tracking reçu → en livraison → livrée/retournée.
+
+===== PAGE 6 =====
+EcomFlow — Cahier des charges | Version 1.0
+Page 6
+Les actions sensibles doivent être enregistrées dans un audit log.
+21. Abonnement — essai gratuit de 7 jours
+À la création d’une boutique, démarrer automatiquement une période d’essai de 7 jours.
+Enregistrer trial_start_at et trial_end_at.
+Afficher dans l’interface le temps restant.
+Prévoir rappels à J-3, J-1 et le jour de l’expiration.
+À la fin des 7 jours sans abonnement actif : passer le compte à TRIAL_ENDED/EXPIRED et suspendre les
+fonctionnalités opérationnelles payantes.
+Conserver les données pendant une durée configurable afin de permettre la reprise après souscription.
+Après confirmation du paiement : abonnement ACTIVE et réactivation automatique des fonctionnalités.
+Le mécanisme de paiement devra être intégré selon le prestataire choisi et ne doit pas considérer une
+simple capture d’écran comme preuve automatique de paiement.
+22. Plans tarifaires
+Prévoir une architecture capable de supporter plusieurs plans : Starter, Pro et Business.
+Chaque plan peut définir des limites : nombre de commandes, utilisateurs, boutiques, intégrations et
+fonctionnalités.
+Les prix et limites exacts doivent être configurables depuis l’administration et ne doivent pas être codés
+en dur.
+Le plan d’essai reste limité à 7 jours et ne devient pas un accès gratuit permanent.
+23. Sécurité
+Authentification sécurisée et gestion des rôles.
+Isolation stricte des données entre tenants.
+Validation serveur de toutes les données.
+Protection API, rate limiting, gestion des sessions et logs.
+Chiffrement des secrets d’intégration et tokens OAuth.
+Sauvegardes automatiques et procédure de restauration.
+Journalisation des opérations administratives et sensibles.
+24. Architecture technique recommandée
+Frontend : Next.js / React.
+Backend : Node.js + NestJS.
+Base de données : PostgreSQL.
+Authentification : JWT et OAuth.
+Intégrations : Google Sheets API, APIs transporteurs, webhooks.
+Automatisation : n8n lorsque pertinent.
+Déploiement : Docker sur infrastructure Linux/VPS ou cloud.
+Stockage : service cloud pour images et documents.
+
+===== PAGE 7 =====
+EcomFlow — Cahier des charges | Version 1.0
+Page 7
+25. Architecture SaaS
+Le système doit être multi-tenant dès la conception.
+Entités principales recommandées : tenants/boutiques, users, roles, orders, order_items, customers,
+products, variants, inventory_movements, shipments, shipment_events, returns, integrations,
+subscriptions, plans, payments, notifications et audit_logs.
+Les relations doivent permettre une évolution future vers plusieurs boutiques par compte si cette option
+est retenue.
+26. UX/UI
+Interface professionnelle, rapide et adaptée au traitement de gros volumes de commandes.
+Dashboard immédiatement lisible.
+Navigation latérale claire : Dashboard, Commandes, Confirmation, Produits, Stock, Expéditions, Retours,
+Clients, Statistiques, Intégrations, Utilisateurs, Abonnement et Paramètres.
+Actions critiques avec confirmation.
+Prévoir états loading, empty, success, error et retry.
+Responsive desktop/tablette/mobile.
+27. MVP — Version 1
+Inscription et authentification.
+Création d’une boutique.
+Essai gratuit de 7 jours.
+Dashboard de base.
+Connexion Google Sheets.
+Import automatique des commandes.
+Gestion des commandes et statuts.
+Centre de confirmation.
+Catalogue produits et stock basique.
+Un premier connecteur transporteur.
+Création de colis et tracking.
+Retours.
+Statistiques essentielles.
+Gestion des utilisateurs et permissions de base.
+28. Roadmap post-MVP
+Ajouter plusieurs transporteurs et connecteurs.
+Ajouter des intégrations de site web et réseaux sociaux selon APIs disponibles.
+Notifications multicanales.
+Facturation et gestion avancée des abonnements.
+Application mobile Flutter.
+Automatisations avancées via n8n.
+
+===== PAGE 8 =====
+EcomFlow — Cahier des charges | Version 1.0
+Page 8
+Fonctions d’aide par IA : détection d’anomalies, prévision de stock et priorisation des commandes, sous
+réserve de validation métier.
+29. Critères d’acceptation
+Une nouvelle ligne valide de Google Sheets peut devenir une commande sans ressaisie manuelle.
+Une commande importée une seule fois ne peut pas être recréée par une synchronisation répétée.
+Un agent peut traiter une commande depuis le centre de confirmation.
+Une commande confirmée peut être préparée puis envoyée au transporteur configuré.
+Le tracking est sauvegardé automatiquement.
+Les statuts transporteur sont synchronisés et historisés.
+Les retours restent liés à leur commande d’origine.
+Le stock respecte les règles métier définies.
+Les données de deux boutiques ne sont jamais mélangées.
+Une nouvelle boutique commence avec 7 jours d’essai puis doit disposer d’un abonnement actif pour
+continuer.
+30. Vision finale
+EcomFlow doit devenir une plateforme de référence pour les opérations e-commerce en Algérie, en
+réunissant dans un même système la commande, la confirmation, la préparation, la livraison, le tracking,
+le retour, le stock et l’analyse.
+Le produit doit être conçu de manière modulaire afin de permettre l’ajout progressif de transporteurs,
+canaux de vente, moyens de paiement et fonctionnalités sans remettre en cause le cœur de la
+plateforme.
+
+===== PAGE 9 =====
+EcomFlow — Cahier des charges | Version 1.0
+Page 9
+Annexe A — Exemple de workflow
+Commande provenant de Google Sheets :
+Google Sheets → Import → Validation → NEW → À CONFIRMER → Confirmation →
+CONFIRMÉE → Préparation → PRÊTE À EXPÉDIER → API transporteur → Tracking →
+EXPÉDIÉE → EN LIVRAISON → LIVRÉE / RETOUR
+Annexe B — Exemple de colonnes Google Sheets
+Date
+Nom
+Téléphone
+Wilaya
+Commun
+e
+Adresse
+Produit
+SKU
+Qt
+é
+Prix
+Livrai
+son
+Total
+Statu
+t
+29/08/
+2026
+Sara
+05XXXXXX
+XX
+Alger
+Bab
+Ezzouar
+Adresse
+Robe
+ROB-0
+01
+1
+450
+0
+500
+5000
+NEW
+Annexe C — États du compte
+• TRIAL_ACTIVE — essai gratuit en cours.
+ 
+• TRIAL_ENDING — période d’essai proche de l’expiration.
+ 
+• TRIAL_ENDED / EXPIRED — essai terminé sans abonnement actif.
+ 
+• ACTIVE — abonnement valide.
+ 
+• PAST_DUE — paiement à régulariser, selon le prestataire.
+ 
+• SUSPENDED — accès opérationnel suspendu.
+ 
+• CANCELLED — abonnement résilié.
+ 
+Annexe D — Règles métier prioritaires
+• Une commande doit avoir une source et un identifiant externe lorsqu’elle provient d’une intégration.
+ 
+• Aucune synchronisation ne doit créer de doublon.
+ 
+• Une commande ne doit être envoyée au transporteur que lorsqu’elle respecte les conditions de
+ confirmation et de préparation.
+• Tout changement de statut important doit être traçable.
+ 
+• Les fonctionnalités doivent respecter le rôle de l’utilisateur.
+ 
+• Les données d’une boutique ne doivent jamais être accessibles à une autre boutique.
+ 
+• Après 7 jours d’essai, l’accès opérationnel nécessite un abonnement actif.
+ 

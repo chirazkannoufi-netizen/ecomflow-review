@@ -1,0 +1,50 @@
+{
+  // ===========================================================================
+  // Configuration de COMPILATION de l'API.
+  //
+  // POURQUOI ELLE DIVERGE DE `tsconfig.json`
+  //
+  //   `tsconfig.json` fait pointer `@ecomflow/shared` vers ses SOURCES
+  //   TypeScript. C'est excellent pour l'outillage — Jest, ts-node et l'editeur
+  //   voient les modifications du paquet partage sans etape de compilation.
+  //
+  //   Mais a la COMPILATION, cela fait entrer des fichiers situes HORS de
+  //   `apps/api` dans l'unite de compilation. TypeScript calcule alors la
+  //   racine commune a tous les fichiers d'entree — la racine du monorepo — et
+  //   reproduit cette arborescence sous `dist/` :
+  //
+  //       dist/apps/api/src/main.js      au lieu de      dist/main.js
+  //       dist/packages/shared/src/...
+  //
+  //   Or le CLI Nest lance `dist/<entryFile>.js`, soit `dist/main.js`.
+  //   Resultat : `nest start` echouait avec MODULE_NOT_FOUND.
+  //
+  // LA CORRECTION
+  //
+  //   Ici, et ici seulement, `@ecomflow/shared` est resolu par node_modules —
+  //   c'est-a-dire vers `packages/shared/dist` via le lien des workspaces npm.
+  //   Tous les fichiers d'entree vivent alors sous `apps/api/src`, `rootDir`
+  //   vaut `src`, et la sortie retrouve la structure attendue.
+  //
+  //   COROLLAIRE : le paquet partage doit etre COMPILE avant l'API. Les scripts
+  //   `build:api` et `dev:api` s'en chargent. Pour travailler simultanement sur
+  //   les deux, lancez `npm run dev:shared` dans un second terminal.
+  // ===========================================================================
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    // Cache incremental propre a cette configuration, dans `dist` : il
+    // disparait donc en meme temps que les fichiers qu il decrit.
+    "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo",
+    // `paths` REMPLACE integralement celui du parent : le mapping vers les
+    // sources de `@ecomflow/shared` disparait donc volontairement.
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  // Seul `src` est compile. `prisma/` et `scripts/` sont de l'outillage : ils
+  // vivent hors de `rootDir` et n'ont rien a faire dans l'artefact de
+  // production.
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
+}

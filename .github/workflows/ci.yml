@@ -1,0 +1,332 @@
+# =============================================================================
+# EcomFlow — Integration continue
+#
+# PRINCIPE : la CI doit echouer pour les memes raisons qu'une production
+# echouerait. Elle execute donc les tests d'integration et de bout en bout
+# contre un VRAI PostgreSQL, pas contre des doublures. Un test qui ne touche
+# jamais la base ne verifie ni les contraintes d'integrite, ni l'isolation
+# multi-tenant, ni le comportement transactionnel — c'est-a-dire l'essentiel
+# de ce qui protege les donnees d'un commercant.
+#
+# Les etages sont ordonnes du plus rapide au plus lent : un typage casse est
+# signale en une minute, sans attendre la suite complete.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20.18'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Qualite statique — rapide, bloque tot
+  # ---------------------------------------------------------------------------
+  static:
+    name: Typage et style
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Installer les dependances
+        run: npm ci
+
+      - name: Generer le client Prisma
+        run: npm run prisma:generate
+
+      - name: Compiler le paquet partage
+        # L'API et le front l'importent : sans compilation prealable, la
+        # verification de types echouerait pour une mauvaise raison.
+        run: npm run build:shared
+
+      - name: Verification des types
+        run: npm run typecheck
+
+      - name: Analyse statique
+        run: npm run lint
+
+  # ---------------------------------------------------------------------------
+  # 2. Tests unitaires — logique pure, sans infrastructure
+  # ---------------------------------------------------------------------------
+  unit:
+    name: Tests unitaires
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run prisma:generate
+
+      - name: Regles metier partagees
+        run: npm run test -w @ecomflow/shared
+
+      - name: Services isoles de l API
+        run: npm run test:unit -w @ecomflow/api
+
+      - name: Coherence des catalogues de traduction
+        # Une cle manquante en arabe compile parfaitement : elle ne se verrait
+        # qu'a l'ecran d'un utilisateur arabophone, sous forme de cle brute.
+        run: npm run test -w @ecomflow/web
+
+  # ---------------------------------------------------------------------------
+  # 3. Tests d'integration et de bout en bout — vrai PostgreSQL, vrai Redis
+  # ---------------------------------------------------------------------------
+  integration:
+    name: Integration et bout en bout
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [static]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ecomflow
+          POSTGRES_PASSWORD: ecomflow_ci
+          POSTGRES_DB: ecomflow_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ecomflow -d ecomflow_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      # Valeurs de CI, generees ici et jetables. Aucun secret reel ne transite
+      # par ce fichier : c'est la traduction directe de la regle §47.
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ecomflow:ecomflow_ci@localhost:5432/ecomflow_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-access-secret-uniquement-pour-integration-000
+      JWT_REFRESH_SECRET: ci-refresh-secret-uniquement-pour-integration-0
+      ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      HASH_PEPPER: ci-pepper-uniquement-pour-integration-0000000
+      MAIL_DRIVER: console
+      OTP_DRIVER: console
+      SWAGGER_ENABLED: 'true'
+      # La limitation de debit fausserait les tests de bout en bout, qui
+      # enchainent des dizaines d'appels en quelques secondes. Elle est
+      # couverte separement par ses propres tests.
+      THROTTLE_ENABLED: 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run prisma:generate
+
+      - name: Appliquer les migrations
+        run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+
+      - name: Tests d integration
+        run: npm run test:integration -w @ecomflow/api
+
+      - name: Tests de bout en bout
+        run: npm run test:e2e -w @ecomflow/api
+
+  # ---------------------------------------------------------------------------
+  # 4. Contrat d'API — la specification publiee doit decrire le code reel
+  # ---------------------------------------------------------------------------
+  openapi:
+    name: Specification OpenAPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [static]
+
+    env:
+      DATABASE_URL: postgresql://ecomflow:unused@localhost:5432/unused
+      JWT_ACCESS_SECRET: ci-access-secret-uniquement-pour-integration-000
+      JWT_REFRESH_SECRET: ci-refresh-secret-uniquement-pour-integration-0
+      ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      HASH_PEPPER: ci-pepper-uniquement-pour-integration-0000000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run prisma:generate
+
+      - name: Exporter la specification
+        # L'export ne touche aucune base : il ne lit que les metadonnees des
+        # decorateurs (voir apps/api/scripts/export-openapi.ts).
+        run: npx ts-node -r tsconfig-paths/register scripts/export-openapi.ts
+        working-directory: apps/api
+
+      - name: Verifier que la specification versionnee est a jour
+        run: |
+          if ! git diff --quiet -- apps/api/openapi.json; then
+            echo "::error::La specification OpenAPI versionnee ne correspond plus au code."
+            echo "Executez : npm run openapi:export -w @ecomflow/api, puis committez le resultat."
+            git diff --stat -- apps/api/openapi.json
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openapi
+          path: apps/api/openapi.json
+
+  # ---------------------------------------------------------------------------
+  # 5. Images Docker — la construction doit rester saine en permanence
+  # ---------------------------------------------------------------------------
+  docker:
+    name: Images de production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [unit, integration]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construire l image de l API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: production
+          push: false
+          load: true
+          tags: ecomflow-api:ci
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Construire l image du frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          target: production
+          push: false
+          load: true
+          tags: ecomflow-web:ci
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.exemple.dz/api/v1
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      - name: Verifier que l image de l API demarre
+        # Sans base de donnees, l API doit tout de meme repondre a sa sonde de
+        # vivacite : c'est ce qui permet a un orchestrateur de distinguer
+        # « processus vivant » de « service pret ».
+        run: |
+          docker run -d --name ecomflow-api-ci \
+            -e NODE_ENV=production \
+            -e ECOMFLOW_SKIP_DB_CONNECT=true \
+            -e DATABASE_URL=postgresql://u:p@127.0.0.1:5432/none \
+            -e REDIS_URL=redis://127.0.0.1:6379 \
+            -e JWT_ACCESS_SECRET=ci-access-secret-uniquement-pour-integration-000 \
+            -e JWT_REFRESH_SECRET=ci-refresh-secret-uniquement-pour-integration-0 \
+            -e ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+            -e HASH_PEPPER=ci-pepper-uniquement-pour-integration-0000000 \
+            -e SWAGGER_ENABLED=false \
+            -e MAIL_DRIVER=smtp -e SMTP_HOST=localhost -e SMTP_PORT=1025 \
+            -e API_URL=https://api.exemple.dz -e APP_URL=https://app.exemple.dz \
+            -p 3001:3001 ecomflow-api:ci
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3001/health/live > /dev/null; then
+              echo "API vivante."
+              docker rm -f ecomflow-api-ci
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "::error::L image de l API n a pas repondu a sa sonde de vivacite."
+          docker logs ecomflow-api-ci
+          docker rm -f ecomflow-api-ci
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # 6. Verifications de securite
+  # ---------------------------------------------------------------------------
+  security:
+    name: Securite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Vulnerabilites connues des dependances
+        # `--omit=dev` : une faille dans un outil de developpement ne met pas
+        # la production en danger et ne doit pas bloquer une livraison.
+        run: npm audit --audit-level=high --omit=dev
+
+      - name: Aucun fichier .env versionne
+        # Regle §47 : aucun secret dans Git. La verification est explicite
+        # plutot que confiee au seul .gitignore, qu'une commande `git add -f`
+        # contourne sans bruit.
+        run: |
+          tracked=$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::Fichiers d environnement versionnes :"
+            echo "$tracked"
+            exit 1
+          fi
+          echo "Aucun fichier .env versionne."
+
+      - name: .env.example present et sans valeur sensible
+        run: |
+          test -f .env.example || { echo "::error::.env.example manquant."; exit 1; }
+          # Une variable sensible peut porter un MARQUEUR explicite
+          # (`CHANGE_ME...`), qui documente le format attendu, mais jamais une
+          # valeur exploitable. Tout ce qui n'est ni vide ni marque est refuse.
+          suspects=$(grep -nE '^(JWT_[A-Z_]*SECRET|ENCRYPTION_KEY|HASH_PEPPER|[A-Z_]*PASSWORD|[A-Z_]*_TOKEN|[A-Z_]*SECRET[A-Z_]*)=.+' .env.example             | grep -viE '=(CHANGE_ME|REPLACE_ME|TODO|<[^>]*>|your[-_])' || true)
+          if [ -n "$suspects" ]; then
+            echo "::error::Valeurs renseignees pour des variables sensibles dans .env.example :"
+            echo "$suspects"
+            echo "Remplacez-les par un marqueur explicite (CHANGE_ME_...)."
+            exit 1
+          fi
+          echo ".env.example ne contient aucune valeur sensible exploitable."

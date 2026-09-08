@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": false,
+    "removeComments": false,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true,
+    // Le cache incremental doit vivre DANS `dist`. Place ailleurs, il
+    // survit a la suppression du dossier de sortie : TypeScript conclut
+    // alors « rien n a change » et n emet AUCUN fichier, tout en
+    // affichant « Found 0 errors ». Le symptome est deroutant — une
+    // compilation qui reussit sans rien produire — et c est ce qui
+    // faisait echouer `nest start --watch` avec MODULE_NOT_FOUND.
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
+    "skipLibCheck": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@/*": ["src/*"],
+      "@ecomflow/shared": ["../../packages/shared/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "test/**/*", "prisma/**/*", "scripts/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

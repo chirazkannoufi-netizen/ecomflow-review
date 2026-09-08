@@ -1,0 +1,49 @@
+# Contexte de build Docker.
+#
+# Sans ce fichier, `node_modules/` (plusieurs centaines de megaoctets) et le
+# fichier `.env` local seraient envoyes au demon Docker a chaque build : lent,
+# et surtout dangereux — un `.env` recopie par megarde dans une image se
+# retrouve lisible par quiconque tire cette image (mission §47).
+
+node_modules
+**/node_modules
+
+# Artefacts de compilation : reconstruits dans l'image
+dist
+build
+.next
+out
+*.tsbuildinfo
+**/dist
+**/.next
+
+# Secrets — jamais dans une image
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+
+# Outillage local
+.git
+.github
+.vscode
+.idea
+coverage
+**/coverage
+test-results
+logs
+*.log
+npm-debug.log*
+
+# Documentation et sources de specification : sans effet a l'execution
+docs
+*.md
+!README.md
+
+# Conteneurisation elle-meme
+infra/docker/*.yml
+**/Dockerfile
+.dockerignore

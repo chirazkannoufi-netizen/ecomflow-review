@@ -1,0 +1,163 @@
+# =============================================================================
+# EcomFlow — Environnement de PRODUCTION (et de recette)
+#
+#   docker compose -f infra/docker/docker-compose.prod.yml up -d
+#
+# PREREQUIS
+#   Un fichier `.env.production` renseigne A COTE de ce fichier, JAMAIS versionne.
+#   Partez de `.env.example` : il liste toutes les variables sans aucune valeur
+#   sensible (mission §47).
+#
+# CE QUE CE FICHIER NE FAIT PAS, VOLONTAIREMENT
+#
+#   PAS DE TERMINAISON TLS. HTTPS est obligatoire (V2 §31), mais il est assure
+#   en amont par le reverse proxy de l'hebergeur (Nginx, Traefik, Caddy, ou le
+#   routeur de la plateforme). Embarquer ici un certificat auto-signe donnerait
+#   l'illusion du chiffrement sans en offrir la garantie.
+#
+#   AUCUN PORT DE BASE DE DONNEES PUBLIE. PostgreSQL et Redis ne sont joignables
+#   que par le reseau interne. Exposer 5432 sur Internet est la premiere cause
+#   de compromission d'une base applicative.
+#
+#   PAS DE SAUVEGARDE AUTOMATIQUE ICI. La sauvegarde est un service a part
+#   entiere (retention, chiffrement, restauration testee). Le script
+#   `infra/scripts/backup.sh` couvre le cas simple ; un hebergement gere doit
+#   utiliser les sauvegardes de son fournisseur. Voir le README, section
+#   « Sauvegarde et restauration ».
+# =============================================================================
+
+name: ecomflow
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER est requis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD est requis}
+      POSTGRES_DB: ${POSTGRES_DB:-ecomflow}
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../postgres/init:/docker-entrypoint-initdb.d:ro
+    # Aucun port publie : seul le reseau interne de la stack y accede.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    # `noeviction` est un choix delibere : Redis porte les FILES DE TRAVAIL
+    # (synchronisations, relances de suivi, envois). Evincer une cle sous
+    # pression memoire ferait disparaitre des jobs en silence. Mieux vaut une
+    # erreur d'ecriture bruyante, qui declenche une alerte.
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory ${REDIS_MAXMEMORY:-512mb}
+      --maxmemory-policy noeviction
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD est requis}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$${REDIS_PASSWORD}" ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  # Applique les migrations AVANT que l'API ne demarre. Sans cette etape
+  # separee, plusieurs instances d'API lanceraient les migrations en parallele.
+  migrate:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      target: production
+    restart: 'no'
+    env_file: [.env.production]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ecomflow}?schema=public
+    command: ['npx', 'prisma', 'migrate', 'deploy', '--schema', 'apps/api/prisma/schema.prisma']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *default-logging
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      target: production
+    restart: always
+    env_file: [.env.production]
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ecomflow}?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    expose:
+      - '3001'
+    ports:
+      # Publie sur la boucle locale uniquement : le reverse proxy de l'hote
+      # assure TLS et la mise a disposition publique.
+      - '127.0.0.1:${API_PORT:-3001}:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      target: production
+      args:
+        # Inlinee dans le bundle navigateur : c'est bien l'URL PUBLIQUE de
+        # l'API qu'il faut fournir, pas son nom de service interne.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL est requis}
+    restart: always
+    environment:
+      NODE_ENV: production
+    ports:
+      - '127.0.0.1:${WEB_PORT:-3000}:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+volumes:
+  postgres_data:
+    name: ecomflow_prod_postgres_data
+  redis_data:
+    name: ecomflow_prod_redis_data

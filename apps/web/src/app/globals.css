@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Socle visuel EcomFlow — suite UI/UX "Foundations & Components".
+ *
+ * L'interface est un OUTIL DE TRAVAIL utilise plusieurs heures par jour :
+ * densite elevee, contraste franc, aucune fioriture qui coute une milliseconde
+ * d'attention. La couleur porte du sens (statuts) plutot que de la decoration —
+ * le lime reste reserve a l'unique action de creation d'un ecran.
+ */
+
+@layer base {
+  :root {
+    --font-manrope: 'Manrope', system-ui, sans-serif;
+    --font-plex-arabic: 'IBM Plex Sans Arabic', system-ui, sans-serif;
+    --font-plex-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+    /* Police d'interface effective. `font-sans` de Tailwind pointe sur cette
+       variable, ce qui rend la bascule de police globale — un seul endroit a
+       changer, aucun composant a modifier. */
+    --font-ui: var(--font-manrope);
+  }
+
+  /* L'arabe passe sur IBM Plex Sans Arabic. Le selecteur suit l'attribut
+     `lang` de <html>, pose par le serveur puis maintenu par le changement de
+     langue cote client : police et direction basculent donc ensemble. */
+  html[lang='ar'] {
+    --font-ui: var(--font-plex-arabic);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* L'arabe n'a ni capitales ni petites capitales : `uppercase` et
+     `letter-spacing` ne produisent rien d'utile et disloquent au contraire
+     les ligatures. Les libelles de section (jeton « Eyebrow ») restent donc
+     en casse normale, sans interlettrage, quand la langue est l'arabe. */
+  html[lang='ar'] .eyebrow {
+    @apply text-xs font-bold normal-case tracking-normal;
+  }
+
+  /* IBM Plex Sans Arabic s'arrete a la graisse 700. Demander 800 laisse le
+     navigateur FABRIQUER un gras synthetique — il epaissit le trait dans
+     toutes les directions, ce qui empate les boucles et les points de
+     l'arabe bien plus visiblement que sur une lettre latine. Les titres
+     retombent donc sur le vrai Bold dessine. */
+  html[lang='ar'] :is(.font-extrabold, .font-black, .text-display, .text-title, .text-metric, .text-eyebrow) {
+    font-weight: 700;
+  }
+
+  body {
+    @apply bg-canvas text-ink antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Les montants et references s'alignent verticalement dans les tableaux. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Anneau de focus visible : l'interface se pilote au clavier. */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-ink ring-offset-1 ring-offset-white;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-300;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400;
+  }
+}
+
+@layer components {
+  /* Surface par defaut : rayon Card (20px), elevation Card. */
+  .card {
+    @apply rounded-xl border border-line bg-surface shadow-card;
+  }
+
+  .card-header {
+    @apply flex items-center justify-between border-b border-line px-4 py-3;
+  }
+
+  .card-title {
+    @apply text-sm font-bold text-ink;
+  }
+
+  .field-label {
+    @apply mb-1 block text-xs font-bold text-ink-2;
+  }
+
+  .field-hint {
+    @apply mt-1 text-xs text-muted;
+  }
+
+  .field-error {
+    @apply mt-1 text-xs font-medium text-danger;
+  }
+
+  /* Libelle de section en petites capitales espacees — jeton "Eyebrow". */
+  .eyebrow {
+    @apply text-eyebrow uppercase text-muted;
+  }
+
+  /* Tableau dense, en-tete collant : la liste de commandes est longue. */
+  .data-table {
+    @apply w-full border-collapse text-sm;
+  }
+
+  .data-table thead th {
+    @apply sticky top-0 z-10 border-b border-line bg-canvas px-3 py-2.5
+      text-start text-xs font-bold uppercase tracking-wide text-muted;
+  }
+
+  .data-table tbody td {
+    @apply h-11 border-b border-line px-3 align-middle text-ink-2;
+  }
+
+  .data-table tbody tr {
+    @apply transition-colors;
+  }
+
+  .data-table tbody tr:hover {
+    @apply bg-canvas;
+  }
+
+  .data-table tbody tr[data-selected='true'] {
+    @apply bg-ink/[0.04];
+  }
+
+  .data-table tbody tr[data-flagged='true'] {
+    @apply bg-danger/[0.06];
+  }
+}
