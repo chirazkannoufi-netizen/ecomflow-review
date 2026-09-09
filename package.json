@@ -30,6 +30,7 @@
     "prisma:deploy": "npm run prisma:deploy -w @ecomflow/api",
     "seed": "npm run seed -w @ecomflow/api",
     "seed:demo": "npm run seed:demo -w @ecomflow/api",
+    "seed:queue": "npm run seed:queue -w @ecomflow/api",
     "docker:up": "docker compose -f infra/docker/docker-compose.dev.yml up -d",
     "docker:down": "docker compose -f infra/docker/docker-compose.dev.yml down",
     "docker:logs": "docker compose -f infra/docker/docker-compose.dev.yml logs -f"

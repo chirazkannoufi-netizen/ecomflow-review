@@ -136,6 +136,31 @@ describe('catalogues de traduction', () => {
     expect(untranslated).toEqual([]);
   });
 
+  it('ecrit les nombres arabes en chiffres latins', () => {
+    // L'ARABE ALGERIEN S'ECRIT AVEC 0-9.
+    //   C'est la raison d'etre de l'etiquette `ar-DZ` plutot que `ar` ou
+    //   `ar-EG` (D-037) : ٠١٢٣ est illisible pour un commercant algerien, qui
+    //   lit ses factures, ses releves bancaires et ses bordereaux
+    //   transporteur en chiffres latins.
+    //
+    //   `Intl` respecte deja ce choix pour tout nombre CALCULE. Ce test couvre
+    //   l'autre moitie du probleme, que `Intl` ne voit pas : les chiffres
+    //   ECRITS EN DUR dans le catalogue — « 7 jours », « 1. Annonce », « loi
+    //   n° 18-07 ». Vingt-neuf messages etaient dans ce cas, ce qui donnait
+    //   des ecrans ou un « ٧ » fige cotoyait un « 7 » formate.
+    //
+    //   Sont refuses avec eux les symboles arabes qui accompagnent
+    //   habituellement ces chiffres : ٪ (pourcent), ٫ (decimale), ٬ (milliers).
+    //   Melanges a des chiffres latins, ils produisent « 12 ٪ ».
+    const EASTERN_DIGITS = /[٠-٩۰-۹٪-٬]/;
+
+    const offending = [...arabic.entries()]
+      .filter(([, value]) => EASTERN_DIGITS.test(value))
+      .map(([key, value]) => `${key} : ${value}`);
+
+    expect(offending).toEqual([]);
+  });
+
   it('ecrit les messages arabes en alphabet arabe', () => {
     const arabicScript = /[؀-ۿ]/;
 

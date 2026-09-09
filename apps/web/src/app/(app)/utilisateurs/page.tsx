@@ -37,7 +37,7 @@ import {
   Select,
   Textarea,
   formatDate,
-  formatRelative,
+  useRelativeTime,
 } from '@/components/ui';
 
 interface Member {
@@ -79,6 +79,7 @@ interface PermissionDescriptor {
 export default function UsersPage() {
   const t = useTranslations('users');
   const tCommon = useTranslations('common');
+  const relativeTime = useRelativeTime();
   const { can, user: currentUser } = useSession();
   const queryClient = useQueryClient();
 
@@ -353,7 +354,7 @@ export default function UsersPage() {
                         </td>
                         <td className="whitespace-nowrap text-xs text-slate-500">
                           {member.user.lastLoginAt
-                            ? formatRelative(member.user.lastLoginAt)
+                            ? relativeTime(member.user.lastLoginAt)
                             : tCommon('never')}
                         </td>
                         <td className="whitespace-nowrap text-xs text-slate-500">

@@ -29,7 +29,7 @@ import {
   ErrorState,
   LoadingState,
   StatusBadge,
-  formatRelative,
+  useRelativeTime,
 } from '@/components/ui';
 
 interface OrderRow {
@@ -129,6 +129,7 @@ function PreparationColumn({
 }) {
   const t = useTranslations('preparation');
   const tCommon = useTranslations('common');
+  const relativeTime = useRelativeTime();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['preparation', column.status],
     queryFn: () =>
@@ -184,7 +185,7 @@ function PreparationColumn({
                   <div className="text-end">
                     <StatusBadge status={order.status} />
                     <p className="mt-0.5 text-xs text-slate-400">
-                      {formatRelative(order.orderedAt)}
+                      {relativeTime(order.orderedAt)}
                     </p>
                   </div>
                 </div>

@@ -1,0 +1,34 @@
+-- =============================================================================
+-- Refus client au telephone : un resultat d'appel a part entiere
+--
+-- LE PROBLEME
+--   Le centre de confirmation ne savait pas enregistrer « le client a dit
+--   non ». L'agent n'avait que ANNULER, si bien que deux faits tres
+--   differents finissaient dans le meme seau :
+--
+--     REFUSEE  le CLIENT ne veut pas de la commande. Rien n'a ete engage,
+--              mais le client vient de faire perdre une vente : son score de
+--              fiabilite doit s'en souvenir.
+--     ANNULEE  la BOUTIQUE renonce — rupture de stock, doublon, erreur de
+--              saisie. La decision vient de nous ; le client n'y est pour
+--              rien et son score ne doit pas en souffrir.
+--
+--   Les confondre fausse le score de fiabilite dans les deux sens, et rend
+--   impossible la seule question qui compte pour un vendeur en paiement a la
+--   livraison : « combien de mes clients refusent, et lesquels ? »
+--
+-- CE QUE FAIT CETTE MIGRATION
+--   Le statut de commande REFUSED existait deja (refus du colis au pas de la
+--   porte, depuis SHIPPED / IN_DELIVERY). Seul manquait le RESULTAT D'APPEL
+--   correspondant, pour tracer le refus dans l'historique des tentatives.
+--
+--   Aucune donnee existante n'est touchee : on ajoute une valeur, on n'en
+--   reecrit aucune. Les annulations deja enregistrees restent des
+--   annulations — les requalifier reviendrait a inventer une intention que
+--   personne n'a exprimee au moment de l'appel.
+-- =============================================================================
+
+-- `ADD VALUE` est non transactionnel sous PostgreSQL : cette migration ne doit
+-- donc contenir que cette instruction. `IF NOT EXISTS` la rend rejouable, ce
+-- qui compte parce qu'un `ADD VALUE` interrompu ne peut pas etre annule.
+ALTER TYPE "CallOutcome" ADD VALUE IF NOT EXISTS 'REFUSED' AFTER 'CANCELLED';

@@ -14,23 +14,31 @@ import clsx from 'clsx';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   ArrowRight,
+  BarChart3,
+  Bell,
   Boxes,
+  Check,
+  ChevronDown,
   ClipboardList,
   CreditCard,
+  FileText,
   LayoutDashboard,
   LogOut,
+  MapPin,
   Menu,
   Package,
   Phone,
   Plug,
   PlusCircle,
+  ScrollText,
   Search,
   Settings,
   ShieldCheck,
+  Store,
   TrendingUp,
   Truck,
   Undo2,
@@ -41,44 +49,55 @@ import {
 } from 'lucide-react';
 import { PERMISSIONS } from '@ecomflow/shared';
 import { api } from '@/lib/api-client';
-import { useSession } from '@/lib/session';
+import { useSession, type SessionTenant } from '@/lib/session';
 import { subscriptionReasonKey } from '@/lib/subscription-reason';
 import { LanguageSwitcher } from './language-switcher';
 import { Badge, Button, LoadingState } from './ui';
 
 interface NavEntry {
-  readonly href: string;
+  /**
+   * Route de l'entree, ou `null` tant que l'ecran n'existe pas.
+   *
+   * Une entree sans route est affichee, mais INERTE : elle tient sa place dans
+   * la structure du menu sans conduire a un 404. Voir `NAVIGATION`.
+   */
+  readonly href: string | null;
   readonly labelKey: string;
   readonly icon: LucideIcon;
   /** Permission requise pour afficher l'entree. */
   readonly permission?: string;
   /** Cle du compteur d'alerte a afficher en pastille. */
-  readonly alertKey?: 'pendingConfirmation' | 'lowStock' | 'failedImports' | 'pendingDuplicates';
+  readonly alertKey?:
+    | 'pendingConfirmation'
+    | 'lowStock'
+    | 'failedImports'
+    | 'pendingDuplicates'
+    | 'inPreparation'
+    | 'inReturn';
 }
 
 /**
- * Navigation, dans l'ordre du cahier des charges (V1 §26, V2 §25).
+ * Navigation, dans les quatre groupes du systeme de design (Suite UI/UX v1.0,
+ * ecrans 07 a 26) : MAIN, OPERATIONS, ANALYTICS, SYSTEM.
  *
  * Les entrees portent une CLE de traduction (`nav.orders`) et non un libelle :
  * c'est ce qui permet a la barre laterale de basculer en arabe sans dupliquer
  * la structure du menu.
+ *
+ * QUATRE ECRANS SONT ENCORE A CONSTRUIRE — `href: null`.
+ *   Suivi, Statistiques, Notifications et Journal d'audit figurent au systeme
+ *   de design mais n'ont pas encore de route. Ils sont listes ICI plutot
+ *   qu'omis : la place qu'ils occupent dans la hierarchie fait partie de la
+ *   maquette, et un menu qui se reorganise a chaque ecran livre desoriente
+ *   plus qu'il n'aide. Ils s'affichent estompes et non cliquables ; il suffira
+ *   de renseigner `href` le jour ou la page existe.
  */
 const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEntry[] }[] = [
   {
-    sectionKey: 'pilotage',
+    sectionKey: 'main',
     entries: [
       { href: '/', labelKey: 'dashboard', icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD_VIEW },
-      {
-        href: '/rentabilite',
-        labelKey: 'profitability',
-        icon: TrendingUp,
-        permission: PERMISSIONS.PROFITABILITY_VIEW,
-      },
-    ],
-  },
-  {
-    sectionKey: 'operations',
-    entries: [
+      { href: '/commandes', labelKey: 'orders', icon: ClipboardList, permission: PERMISSIONS.ORDERS_READ },
       {
         href: '/confirmation',
         labelKey: 'confirmation',
@@ -86,24 +105,11 @@ const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEntry[] }[
         permission: PERMISSIONS.CONFIRMATION_MANAGE,
         alertKey: 'pendingConfirmation',
       },
-      { href: '/commandes', labelKey: 'orders', icon: ClipboardList, permission: PERMISSIONS.ORDERS_READ },
-      {
-        href: '/preparation',
-        labelKey: 'preparation',
-        icon: Package,
-        permission: PERMISSIONS.PREPARATION_MANAGE,
-      },
-      {
-        href: '/expeditions',
-        labelKey: 'shipments',
-        icon: Truck,
-        permission: PERMISSIONS.SHIPMENTS_READ,
-      },
-      { href: '/retours', labelKey: 'returns', icon: Undo2, permission: PERMISSIONS.RETURNS_READ },
+      { href: '/clients', labelKey: 'customers', icon: Users, permission: PERMISSIONS.CUSTOMERS_READ },
     ],
   },
   {
-    sectionKey: 'catalogue',
+    sectionKey: 'operations',
     entries: [
       { href: '/produits', labelKey: 'products', icon: Boxes, permission: PERMISSIONS.PRODUCTS_READ },
       {
@@ -113,11 +119,44 @@ const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEntry[] }[
         permission: PERMISSIONS.INVENTORY_READ,
         alertKey: 'lowStock',
       },
-      { href: '/clients', labelKey: 'customers', icon: Users, permission: PERMISSIONS.CUSTOMERS_READ },
+      {
+        href: '/preparation',
+        labelKey: 'preparation',
+        icon: Package,
+        permission: PERMISSIONS.PREPARATION_MANAGE,
+        alertKey: 'inPreparation',
+      },
+      {
+        href: '/expeditions',
+        labelKey: 'shipments',
+        icon: Truck,
+        permission: PERMISSIONS.SHIPMENTS_READ,
+      },
+      { href: null, labelKey: 'tracking', icon: MapPin, permission: PERMISSIONS.SHIPMENTS_TRACK },
+      {
+        href: '/retours',
+        labelKey: 'returns',
+        icon: Undo2,
+        permission: PERMISSIONS.RETURNS_READ,
+        alertKey: 'inReturn',
+      },
     ],
   },
   {
-    sectionKey: 'administration',
+    sectionKey: 'analytics',
+    entries: [
+      { href: null, labelKey: 'statistics', icon: BarChart3, permission: PERMISSIONS.REPORTS_VIEW },
+      {
+        href: '/rentabilite',
+        labelKey: 'profitability',
+        icon: TrendingUp,
+        permission: PERMISSIONS.PROFITABILITY_VIEW,
+      },
+      { href: null, labelKey: 'reports', icon: FileText, permission: PERMISSIONS.REPORTS_VIEW },
+    ],
+  },
+  {
+    sectionKey: 'system',
     entries: [
       {
         href: '/integrations',
@@ -128,6 +167,13 @@ const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEntry[] }[
       },
       { href: '/utilisateurs', labelKey: 'users', icon: UserCog, permission: PERMISSIONS.USERS_READ },
       { href: '/abonnement', labelKey: 'subscription', icon: CreditCard, permission: PERMISSIONS.BILLING_VIEW },
+      {
+        href: null,
+        labelKey: 'notifications',
+        icon: Bell,
+        permission: PERMISSIONS.NOTIFICATIONS_MANAGE,
+      },
+      { href: null, labelKey: 'auditLogs', icon: ScrollText, permission: PERMISSIONS.AUDIT_VIEW },
       { href: '/parametres', labelKey: 'settings', icon: Settings, permission: PERMISSIONS.SETTINGS_MANAGE },
     ],
   },
@@ -146,6 +192,17 @@ interface AlertCounts {
   readonly failedImports: number;
   readonly pendingDuplicates: number;
   readonly integrationsInError: number;
+  /**
+   * Compteurs d'ETAPE, et non d'alerte.
+   *
+   * Une commande en preparation n'appelle aucune action corrective : le
+   * nombre dit simplement la charge de travail qui attend au depot. Le
+   * systeme de design les veut malgre tout en pastille, au meme endroit que
+   * les alertes — c'est la charge de l'ecran, pas sa sante, qui interesse
+   * quelqu'un qui parcourt le menu.
+   */
+  readonly inPreparation: number;
+  readonly inReturn: number;
 }
 
 /** Initiales d'affichage — avatar circulaire quand aucune photo n'existe. */
@@ -153,6 +210,90 @@ function initialsOf(fullName: string): string {
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';
   return (parts[0]![0] + (parts[1]?.[0] ?? '')).toUpperCase();
+}
+
+/**
+ * Selecteur de boutique — l'identite du TENANT, dans l'en-tete.
+ *
+ * POURQUOI UN SELECTEUR POUR UNE SEULE BOUTIQUE
+ *   Un compte n'est rattache qu'a une boutique aujourd'hui. Le controle est
+ *   neanmoins un menu, et non une simple etiquette : c'est l'emplacement que
+ *   le systeme de design reserve a l'identite de la boutique, et le jour ou un
+ *   compte en portera plusieurs, la liste s'allonge sans que rien ne bouge
+ *   dans la mise en page ni dans l'habitude des utilisateurs.
+ *
+ *   Le menu affiche donc la boutique courante, cochee, et son identifiant
+ *   technique — le `slug`, qui est ce qui distingue deux boutiques
+ *   homonymes.
+ */
+function StoreSwitcher({ tenant }: { tenant: SessionTenant | null }) {
+  const tNav = useTranslations('nav');
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Fermeture au clic exterieur et a la touche Echap : un menu qui ne se ferme
+  // qu'en recliquant sur son declencheur piege l'utilisateur.
+  useEffect(() => {
+    if (!open) return;
+
+    function onPointerDown(event: MouseEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  if (!tenant) return null;
+
+  return (
+    <div ref={containerRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={tNav('storeSwitcher')}
+        className="flex h-9 max-w-[12rem] items-center gap-2 rounded-md border border-line bg-surface px-2.5 text-sm font-bold text-ink hover:bg-canvas"
+      >
+        <Store className="h-4 w-4 shrink-0 text-muted" strokeWidth={1.8} aria-hidden="true" />
+        <span className="truncate">{tenant.name}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} aria-hidden="true" />
+      </button>
+
+      {open ? (
+        // `start-0` (logique) : le menu s'aligne sur le bord de DEBUT du
+        // bouton, donc a gauche en francais et a droite en arabe. Sans
+        // ancrage horizontal explicite, un `absolute` se pose a sa position
+        // statique et deborderait de l'en-tete en arabe.
+        <div
+          role="menu"
+          className="absolute start-0 top-full z-30 mt-1 min-w-[15rem] rounded-xl border border-line bg-surface p-1.5 shadow-lg"
+        >
+          <p className="eyebrow px-2 pb-1 pt-0.5">{tNav('storeSection')}</p>
+          <div
+            role="menuitem"
+            aria-current="true"
+            className="flex items-center gap-2 rounded-lg bg-canvas px-2 py-1.5"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold text-ink">{tenant.name}</p>
+              <p className="truncate font-mono text-xs text-muted">{tenant.slug}</p>
+            </div>
+            <Check className="h-4 w-4 shrink-0 text-lime-deep" strokeWidth={2.5} aria-hidden="true" />
+          </div>
+          <p className="px-2 pb-1 pt-2 text-xs text-muted">{tNav('storeSingleHint')}</p>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -244,12 +385,23 @@ export function AppShell({ children }: { children: ReactNode }) {
           sidebarOpen ? 'translate-x-0' : 'max-lg:-translate-x-full max-lg:rtl:translate-x-full',
         )}
       >
+        {/* --- Marque de la PLATEFORME, jamais celle de la boutique ---------
+            Ce bloc porte le logo et le nom d'EcomFlow, et rien d'autre.
+            L'identite de la BOUTIQUE vit dans l'en-tete (selecteur de
+            boutique), conformement au systeme de design.
+
+            La forme precedente affichait `tenant?.name ?? 'EcomFlow'` : le nom
+            du produit n'apparaissait donc que sur un compte SANS boutique,
+            c'est-a-dire quasiment jamais. En pratique la barre laterale
+            annoncait « Boutique Demo » — un utilisateur ne pouvait plus dire
+            quel logiciel il avait sous les yeux, et les deux identites
+            (plateforme, boutique) se disputaient le meme emplacement. */}
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line px-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink text-sm font-extrabold text-lime">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink text-sm font-extrabold text-lime">
             E
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-extrabold text-ink">{tenant?.name ?? 'EcomFlow'}</p>
+            <p className="truncate text-sm font-extrabold text-ink">{t('appName')}</p>
             {role ? <p className="truncate text-xs text-muted">{role}</p> : null}
           </div>
         </div>
@@ -261,39 +413,64 @@ export function AppShell({ children }: { children: ReactNode }) {
               <ul className="space-y-0.5">
                 {section.entries.map((entry) => {
                   const active =
-                    entry.href === '/' ? pathname === '/' : pathname.startsWith(entry.href);
+                    entry.href === null
+                      ? false
+                      : entry.href === '/'
+                        ? pathname === '/'
+                        : pathname.startsWith(entry.href);
                   const count = entry.alertKey ? (alerts?.[entry.alertKey] ?? 0) : 0;
                   const Icon = entry.icon;
 
+                  const inner = (
+                    <>
+                      <Icon
+                        className={clsx('h-4 w-4 shrink-0', active ? 'text-lime' : 'text-muted')}
+                        strokeWidth={1.6}
+                        aria-hidden="true"
+                      />
+                      <span className="flex-1 truncate">{tNav(entry.labelKey)}</span>
+                      {entry.href === null ? (
+                        <span className="rounded-full bg-canvas px-1.5 py-0.5 text-[10px] font-bold text-muted">
+                          {tNav('soon')}
+                        </span>
+                      ) : count > 0 ? (
+                        <span
+                          className={clsx(
+                            'tabular rounded-full px-1.5 py-0.5 text-[11px] font-bold',
+                            active ? 'bg-lime text-ink' : 'bg-peach text-peach-deep',
+                          )}
+                        >
+                          {count > 99 ? '99+' : count}
+                        </span>
+                      ) : null}
+                    </>
+                  );
+
                   return (
-                    <li key={entry.href}>
-                      <Link
-                        href={entry.href}
-                        onClick={() => setSidebarOpen(false)}
-                        className={clsx(
-                          'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors',
-                          active
-                            ? 'bg-ink text-white'
-                            : 'text-ink-2 hover:bg-canvas',
-                        )}
-                      >
-                        <Icon
-                          className={clsx('h-4 w-4 shrink-0', active ? 'text-lime' : 'text-muted')}
-                          strokeWidth={1.6}
-                          aria-hidden="true"
-                        />
-                        <span className="flex-1 truncate">{tNav(entry.labelKey)}</span>
-                        {count > 0 ? (
-                          <span
-                            className={clsx(
-                              'tabular rounded-full px-1.5 py-0.5 text-[11px] font-bold',
-                              active ? 'bg-lime text-ink' : 'bg-peach text-peach-deep',
-                            )}
-                          >
-                            {count > 99 ? '99+' : count}
-                          </span>
-                        ) : null}
-                      </Link>
+                    <li key={entry.labelKey}>
+                      {entry.href === null ? (
+                        // Ecran pas encore construit : rendu en <span> et non en
+                        // <a> desactive. Un lien sans destination reste focusable
+                        // au clavier et annonce « lien » aux lecteurs d'ecran,
+                        // promettant une navigation qui n'existe pas.
+                        <span
+                          className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-muted opacity-60"
+                          title={tNav('soonHint')}
+                        >
+                          {inner}
+                        </span>
+                      ) : (
+                        <Link
+                          href={entry.href}
+                          onClick={() => setSidebarOpen(false)}
+                          className={clsx(
+                            'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors',
+                            active ? 'bg-ink text-white' : 'text-ink-2 hover:bg-canvas',
+                          )}
+                        >
+                          {inner}
+                        </Link>
+                      )}
                     </li>
                   );
                 })}
@@ -347,6 +524,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Menu className="h-5 w-5" strokeWidth={1.8} aria-hidden="true" />
           </button>
 
+          {/* Identite de la BOUTIQUE : ici, et non dans la barre laterale,
+              qui porte celle de la plateforme. */}
+          <StoreSwitcher tenant={tenant} />
+
           <div className="relative hidden max-w-sm flex-1 sm:block">
             <Search
               className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
@@ -373,6 +554,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Button>
               </Link>
             ) : null}
+
+            {/* Le selecteur de langue est encadre de DEUX filets, et non d'un
+                seul. Il etait colle au bouton « Nouvelle commande » : deux
+                controles de nature opposee — une action de creation, un
+                reglage d'affichage — se lisaient comme un seul groupe, et
+                « Francais » ressemblait a une troisieme option du bouton. */}
+            <div className="mx-1 hidden h-6 w-px bg-line sm:block" />
 
             <LanguageSwitcher className="hidden sm:block" />
 

@@ -119,12 +119,28 @@ enum WhatsappFilterState {
   HANDED_OVER
 }
 
+/// Mode de livraison convenu avec le client.
+///
+/// Les deux valeurs reprennent MOT POUR MOT celles de l'interface
+/// transporteur (`CarrierAdapter.deliveryType`), pour qu'aucune table de
+/// correspondance ne s'intercale entre ce que l'agent choisit au telephone et
+/// ce qui part chez Yalidine ou Noest. `PICKUP_POINT` est le « stopdesk » des
+/// transporteurs algeriens : le client retire son colis au bureau.
+enum DeliveryType {
+  HOME
+  PICKUP_POINT
+}
+
 enum CallOutcome {
   CONFIRMED
   NO_ANSWER
   CALL_BACK
   POSTPONED
   CANCELLED
+  // Le CLIENT a refuse la commande au telephone. Distinct de CANCELLED, ou
+  // c'est la boutique qui renonce : les deux ne disent pas la meme chose du
+  // client, et le score de fiabilite les compte differemment.
+  REFUSED
   WRONG_NUMBER
   BUSY
   OTHER
@@ -934,6 +950,12 @@ model Order {
   wilayaCodeSnapshot   Int?    @map("wilaya_code_snapshot")
   communeSnapshot      String? @map("commune_snapshot")
   addressSnapshot      String? @map("address_snapshot")
+  /// Domicile ou bureau (« stopdesk »). Convenu pendant l'appel de
+  /// confirmation, puis transmis tel quel au transporteur a l'expedition.
+  /// Auparavant, le mode n'existait qu'a l'instant de creer le colis et valait
+  /// toujours « domicile » : ce que le client avait demande au telephone
+  /// n'etait ecrit nulle part.
+  deliveryType DeliveryType @default(HOME) @map("delivery_type")
 
   // --- Montants (centimes) ---
   itemsTotalCentimes    Int @default(0) @map("items_total_centimes")

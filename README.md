@@ -421,6 +421,25 @@ complète et non partielle. L'arabe s'affiche en **RTL réel** : ce n'est pas
 seulement le texte qui change de langue, c'est toute la mise en page qui se
 retourne.
 
+> **L'anglais n'est pas une langue de l'interface, et ne l'a jamais été.**
+> La page de garde de la *UI/UX Design Suite v1.0* porte la mention
+> « Interface language: English ». Elle décrit **la langue dans laquelle les
+> maquettes ont été dessinées**, pas celle du produit : les écrans anglais de
+> ce document sont un support de conception. Le produit livré est
+> français + arabe, et rien d'autre. Voir **D-043**.
+
+### Chiffres : toujours 0-9, y compris en arabe
+
+L'arabe algérien s'écrit avec les **chiffres latins**. Un commerçant algérien
+lit ses factures, ses relevés bancaires et ses bordereaux transporteur en
+`0-9` ; `٠١٢٣` lui serait illisible. Deux garde-fous le verrouillent, parce que
+les deux moitiés du problème se cassent séparément :
+
+| Garde-fou | Ce qu'il empêche |
+|---|---|
+| `packages/shared/src/locale.spec.ts` | Qu'on « corrige » l'étiquette `ar-DZ` en `ar-EG` — ou qu'on lui ajoute `-u-nu-arab`. Tout nombre **calculé** (montants, dates, quantités) basculerait en `٠١٢٣` sans qu'aucun type ne bronche |
+| `apps/web/src/i18n/messages.spec.ts` | Qu'un chiffre `٧` soit **écrit en dur** dans le catalogue arabe. `Intl` ne voit pas ces chiffres-là : ils cohabitaient avec des `7` formatés sur le même écran |
+
 ### Ce qui est traduit
 
 | Périmètre | État |

@@ -506,29 +506,72 @@ export class DashboardService {
   }
 
   /** Compteurs d'attention, affiches en bandeau. */
+  /**
+   * Compteurs affiches en pastille dans la navigation et en onglets d'etape.
+   *
+   * TOUS SONT COMPTES DANS LA MEME REQUETE PARALLELE, et non calcules ecran
+   * par ecran : la barre laterale est presente sur toutes les pages, et
+   * multiplier les appels pour afficher trois nombres couterait plus cher que
+   * les pages elles-memes.
+   *
+   * `inPreparation`, `inDelivery` et `inReturn` decrivent les ETAPES du cycle
+   * de vie, telles que le systeme de design les presente en onglets au-dessus
+   * de la file d'appel. Ils ne sont pas des alertes — un colis en livraison
+   * n'appelle aucune action — mais ils viennent de la meme source, et les
+   * separer aurait impose un second aller-retour.
+   */
   async getAlerts(tenantId: string): Promise<{
     pendingConfirmation: number;
     lowStock: number;
     failedImports: number;
     pendingDuplicates: number;
     integrationsInError: number;
+    inPreparation: number;
+    inDelivery: number;
+    inReturn: number;
   }> {
-    const [pendingConfirmation, failedImports, pendingDuplicates, integrationsInError, lowStock] =
-      await Promise.all([
-        this.prisma.order.count({
-          where: {
-            tenantId,
-            archivedAt: null,
-            status: { in: ['TO_CONFIRM', 'NO_ANSWER', 'CALL_BACK', 'POSTPONED'] },
-          },
-        }),
-        this.prisma.sheetRowImport.count({ where: { tenantId, status: 'FAILED' } }),
-        this.prisma.orderDuplicateFlag.count({ where: { tenantId, resolution: 'PENDING' } }),
-        this.prisma.integration.count({
-          where: { tenantId, status: { in: ['ERROR', 'DEGRADED'] } },
-        }),
-        this.countLowStock(tenantId),
-      ]);
+    const [
+      pendingConfirmation,
+      failedImports,
+      pendingDuplicates,
+      integrationsInError,
+      lowStock,
+      inPreparation,
+      inDelivery,
+      inReturn,
+    ] = await Promise.all([
+      this.prisma.order.count({
+        where: {
+          tenantId,
+          archivedAt: null,
+          status: { in: ['TO_CONFIRM', 'NO_ANSWER', 'CALL_BACK', 'POSTPONED'] },
+        },
+      }),
+      this.prisma.sheetRowImport.count({ where: { tenantId, status: 'FAILED' } }),
+      this.prisma.orderDuplicateFlag.count({ where: { tenantId, resolution: 'PENDING' } }),
+      this.prisma.integration.count({
+        where: { tenantId, status: { in: ['ERROR', 'DEGRADED'] } },
+      }),
+      this.countLowStock(tenantId),
+      // Preparation : confirmee (le depot peut s'en saisir) jusqu'a prete a
+      // expedier incluse — c'est exactement le perimetre du tableau
+      // « Preparation ».
+      this.prisma.order.count({
+        where: {
+          tenantId,
+          archivedAt: null,
+          status: { in: ['CONFIRMED', 'IN_PREPARATION', 'READY_TO_SHIP'] },
+        },
+      }),
+      this.prisma.order.count({
+        where: { tenantId, archivedAt: null, status: { in: ['SHIPPED', 'IN_DELIVERY'] } },
+      }),
+      // « En retour » compte les commandes dont la marchandise revient ou est
+      // revenue, refus compris : c'est le refus qui declenche le retour.
+      this.prisma.order.count({
+        where: { tenantId, archivedAt: null, status: { in: ['RETURNED', 'REFUSED'] } },
+      }),
+    ]);
 
     return {
       pendingConfirmation,
@@ -536,6 +579,9 @@ export class DashboardService {
       failedImports,
       pendingDuplicates,
       integrationsInError,
+      inPreparation,
+      inDelivery,
+      inReturn,
     };
   }
 

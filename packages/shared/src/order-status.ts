@@ -190,6 +190,14 @@ function buildCallbackTransitions(): OrderTransitionRule[] {
       requiresReason: true,
       guards: [],
     });
+    rules.push({
+      from,
+      to: 'REFUSED',
+      permission: P.CONFIRMATION,
+      actors: ['USER'],
+      requiresReason: false,
+      guards: [],
+    });
     // Passage lateral entre statuts d'attente (ex. NO_ANSWER -> CALL_BACK).
     for (const to of CALLBACK_STATUSES) {
       if (to === from) continue;
@@ -276,6 +284,33 @@ export const ORDER_TRANSITIONS: readonly OrderTransitionRule[] = [
     permission: P.CONFIRMATION,
     actors: ['USER', 'SYSTEM'],
     requiresReason: true,
+    guards: [],
+  },
+  // REFUS DU CLIENT AU TELEPHONE — a ne pas confondre avec une annulation.
+  //
+  //   REFUSEE : le CLIENT a dit non. La vente ne s'est pas faite, mais rien
+  //   n'a ete engage : c'est un manque a gagner, et le score de fiabilite du
+  //   client doit s'en souvenir.
+  //
+  //   ANNULEE : la BOUTIQUE a renonce — rupture, doublon, erreur de saisie.
+  //   La decision vient de nous, d'ou le motif obligatoire.
+  //
+  //   Le statut REFUSED existait deja, mais seulement en sortie de SHIPPED et
+  //   IN_DELIVERY (refus du colis au pas de la porte). Les deux refus sont le
+  //   meme fait — le client ne veut pas de la commande — a deux moments dont
+  //   le COUT differe, et c'est le calcul de rentabilite qui fait la
+  //   difference : il additionne les frais reellement engages, nuls tant
+  //   qu'aucun colis n'est parti. Voir `computeOrderProfitability`.
+  //
+  // Aucun motif n'est exige, contrairement a l'annulation : le statut dit
+  // deja tout ce qu'il y a a dire, et cet ecran se joue au clavier, cinquante
+  // appels par jour.
+  {
+    from: 'TO_CONFIRM',
+    to: 'REFUSED',
+    permission: P.CONFIRMATION,
+    actors: ['USER'],
+    requiresReason: false,
     guards: [],
   },
 

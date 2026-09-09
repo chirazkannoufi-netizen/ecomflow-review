@@ -86,7 +86,9 @@ export default function LoginPage() {
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="vous@boutique.dz"
+          // Exemple d'adresse, pas une phrase : il reste lisible dans les deux
+          // langues. « vous@ » etait le seul mot francais d'un ecran arabe.
+          placeholder="sara@boutique.dz"
         />
 
         <Input

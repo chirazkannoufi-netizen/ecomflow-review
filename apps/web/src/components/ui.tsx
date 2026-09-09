@@ -26,10 +26,17 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
-import { forwardRef, useId } from 'react';
+import { forwardRef, useCallback, useId } from 'react';
 import { useTranslations } from 'next-intl';
 import { AlertTriangle, CheckCircle2, Info, Loader2, XCircle } from 'lucide-react';
-import { formatCentimes, type OrderStatus } from '@ecomflow/shared';
+import {
+  DEFAULT_LOCALE,
+  LOCALE_TAGS,
+  formatCentimes,
+  type Locale,
+  type OrderStatus,
+} from '@ecomflow/shared';
+import { useLocalePreference } from '@/i18n/provider';
 
 // ---------------------------------------------------------------------------
 // Bouton
@@ -460,12 +467,30 @@ export function ErrorState({
  * Cancelled/Wrong Number) recoit un pastel dedie. Le pastel ne porte jamais
  * seul le sens : le libelle traduit reste toujours affiche a cote.
  */
+/**
+ * LES QUATRE STATUTS DE LA FILE D'APPEL SE DISTINGUENT A L'OEIL.
+ *
+ * Ils partageaient tous la meme teinte peche. Dans la colonne STATUT du
+ * centre de confirmation — la seule colonne qu'un agent balaie pour decider
+ * par quoi commencer — « Sans reponse » et « Rappel prevu » etaient donc
+ * strictement identiques, et la couleur n'apportait rien : il fallait lire.
+ *
+ * La repartition suit ce que chaque statut demande a l'agent :
+ *   A CONFIRMER    ciel      — entree dans la file, personne n'a encore appele
+ *   SANS REPONSE   gris/rouge — on a essaye, ca a echoue
+ *   RAPPEL PREVU   peche     — une heure est fixee, l'attente est normale
+ *   REPORTEE       alerte    — repoussee a la demande du client
+ *
+ * `ring` et texte restent lisibles sur fond clair : une pastille ne porte
+ * jamais le sens seule (systeme de design, planche 4) — teinte, libelle, et
+ * un point.
+ */
 const STATUS_STYLES: Record<OrderStatus, string> = {
   NEW: 'bg-slate-100 text-ink-2 ring-slate-200',
-  TO_CONFIRM: 'bg-peach/40 text-peach-deep ring-peach/60',
-  NO_ANSWER: 'bg-peach/40 text-peach-deep ring-peach/60',
+  TO_CONFIRM: 'bg-sky/35 text-sky-deep ring-sky/50',
+  NO_ANSWER: 'bg-slate-100 text-danger ring-danger/30',
   CALL_BACK: 'bg-peach/40 text-peach-deep ring-peach/60',
-  POSTPONED: 'bg-peach/40 text-peach-deep ring-peach/60',
+  POSTPONED: 'bg-warning/10 text-warning ring-warning/30',
   WRONG_NUMBER: 'bg-danger/10 text-danger ring-danger/25',
   CONFIRMED: 'bg-mint/40 text-mint-deep ring-mint/60',
   IN_PREPARATION: 'bg-lavender/25 text-lavender-deep ring-lavender/40',
@@ -812,6 +837,19 @@ export function Pagination({
 // Formatage
 // ---------------------------------------------------------------------------
 
+/**
+ * POURQUOI LES DATES RESTENT EN `fr-DZ` DANS LES DEUX LANGUES
+ *
+ *   `formatDate` et `formatDateTime` ne produisent que des CHIFFRES et des
+ *   separateurs — « 31/08/2026 ». Il n'y a pas un mot a traduire, et les
+ *   chiffres sont latins dans les deux langues (voir D-037). La sortie est
+ *   donc deja identique pour un lecteur arabophone, a ceci pres que `ar-DZ`
+ *   y insererait des marques de direction invisibles qui desalignent les
+ *   colonnes de tableau.
+ *
+ *   `formatRelative`, lui, produit des MOTS — « il y a 9 jours ». C'est une
+ *   distinction de nature, pas de degre : voir la fonction plus bas.
+ */
 export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return '—';
   const date = typeof value === 'string' ? new Date(value) : value;
@@ -836,20 +874,60 @@ export function formatDateTime(value: string | Date | null | undefined): string 
   }).format(date);
 }
 
-/** Duree relative lisible : « il y a 3 h », « dans 2 j ». */
-export function formatRelative(value: string | Date | null | undefined): string {
+/**
+ * Duree relative lisible : « il y a 3 heures », « قبل 3 ساعات ».
+ *
+ * CETTE FONCTION PRODUIT DES MOTS, ET DOIT DONC SUIVRE LA LANGUE.
+ *   Elle etait figee sur `'fr'`. Une interface arabe affichait par consequent
+ *   « وردت il y a 9 jours » — du francais au milieu d'une phrase arabe, dans
+ *   la file de confirmation, l'ecran le plus regarde du produit. Le defaut ne
+ *   pouvait pas se voir en francais, ou la valeur figee est justement la
+ *   bonne.
+ *
+ *   L'etiquette passe par `LOCALE_TAGS` : `ar-DZ` donne « قبل 9 أيام », avec
+ *   des chiffres LATINS, la ou `ar-EG` donnerait « قبل ٩ أيام » (D-037).
+ *
+ * Preferer le hook `useRelativeTime` dans un composant : il fournit la langue
+ * courante sans avoir a la passer a chaque appel.
+ */
+export function formatRelative(
+  value: string | Date | null | undefined,
+  locale: Locale = DEFAULT_LOCALE,
+): string {
   if (!value) return '—';
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '—';
 
   const diffMs = date.getTime() - Date.now();
   const diffMinutes = Math.round(diffMs / 60_000);
-  const formatter = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
+  const formatter = new Intl.RelativeTimeFormat(LOCALE_TAGS[locale], { numeric: 'auto' });
 
   if (Math.abs(diffMinutes) < 60) return formatter.format(diffMinutes, 'minute');
   const diffHours = Math.round(diffMinutes / 60);
   if (Math.abs(diffHours) < 24) return formatter.format(diffHours, 'hour');
   return formatter.format(Math.round(diffHours / 24), 'day');
+}
+
+/**
+ * `formatRelative` lie a la langue de l'interface.
+ *
+ * LA LANGUE VIENT DE `useLocalePreference`, PAS DE `useLocale` DE NEXT-INTL.
+ *   Le fournisseur est monte avec l'ETIQUETTE COMPLETE (`LOCALE_TAGS[locale]`,
+ *   donc « ar-DZ »), parce que c'est elle qui commande le formatage ICU des
+ *   nombres et des dates. `useLocale()` rend donc « ar-DZ » la ou le type
+ *   `Locale` du produit vaut « ar » — deux vocabulaires proches qu'il est
+ *   facile de confondre, et la confusion est silencieuse : un filtrage sur
+ *   `isLocale('ar-DZ')` echoue sans bruit et retombe sur le francais, ce qui
+ *   redonne exactement le defaut que ce hook corrige.
+ *
+ *   `useLocalePreference` expose la valeur canonique (`'fr' | 'ar'`), typee,
+ *   et c'est l'autorite du produit en matiere de langue.
+ */
+export function useRelativeTime(): (value: string | Date | null | undefined) => string {
+  const { locale } = useLocalePreference();
+  return useCallback((value: string | Date | null | undefined) => formatRelative(value, locale), [
+    locale,
+  ]);
 }
 
 /** Formatte un pourcentage, ou « — » si la valeur est absente. */

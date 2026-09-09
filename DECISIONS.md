@@ -1133,6 +1133,82 @@ build est désormais **reproductible** — deux `nest build` successifs après
 
 ---
 
+## D-043 — La *Design Suite* annonce une interface en anglais : mention périmée, jamais appliquée
+
+**Date** — 08/09/2026
+
+**Contexte** — Réception de la *UI/UX Design System and Screen Suite v1.0*
+(31/08/2026, 29 planches). Sa page de garde se termine par : « Version 1.0 ·
+Companion to Cahier des charges V1 / V2 and the Addendum · **Interface
+language: English** ». Les 29 planches sont effectivement légendées en anglais
+(*Confirmation Center*, *Inventory*, *Team & Roles*…).
+
+**Problème** — Prise au pied de la lettre, cette ligne commande d'ajouter une
+troisième langue d'interface, voire de remplacer le français par l'anglais.
+Elle contredit frontalement **D-037 à D-040**, qui ont établi le français par
+défaut et l'arabe comme seconde langue **complète** — décision déjà
+implémentée, testée et livrée : deux catalogues symétriques verrouillés par
+`messages.spec.ts`, RTL réel, six formes plurielles arabes, messages WhatsApp
+traduits.
+
+Le risque n'est pas théorique. Une mention imprimée sur la page de garde d'un
+document de référence est exactement ce qu'un relecteur — ou un nouvel arrivant
+— rouvre dans six mois pour demander « pourquoi l'anglais n'a-t-il jamais été
+fait ? ». Sans trace écrite, la question se rejoue à chaque fois.
+
+**Analyse** — La mention décrit **la langue de fabrication des maquettes**, pas
+celle du produit. Trois éléments le confirment :
+
+- le document se déclare *companion* du cahier des charges, lequel spécifie une
+  clientèle de commerçants algériens en paiement à la livraison — un public dont
+  l'anglais n'est la langue de travail ni pour les factures, ni pour les
+  bordereaux transporteur, ni pour les échanges avec les livreurs ;
+- aucune des trois sources contractuelles (V1, V2, Addendum) ne mentionne
+  l'anglais ;
+- les planches sont un support de **conception** — structure, hiérarchie,
+  composants — et non un catalogue de libellés. Ce qu'elles apportent est la
+  grille de navigation et les écrans, pas leur traduction.
+
+**Alternatives écartées** —
+- *Ajouter l'anglais comme troisième langue* : triple le coût de chaque libellé
+  ajouté, pour un public qui n'existe pas. Le vrai coût n'est pas la traduction
+  initiale mais l'entretien : un catalogue à trois branches dérive plus vite
+  qu'il ne se corrige.
+- *Basculer l'interface en anglais* : rendrait le produit inutilisable par sa
+  seule clientèle.
+- *Ignorer la mention sans rien écrire* : laisse la contradiction dormir dans un
+  document que l'équipe rouvrira.
+
+**Décision** — La mention « Interface language: English » de la *Design Suite
+v1.0* est **périmée et sans effet**. Elle ne remplace pas D-037 ; c'est D-037
+qui fait foi. Les langues d'interface restent **français (défaut) + arabe**, et
+`LOCALES` demeure `['fr', 'ar']` — une valeur `'en'` est d'ailleurs refusée par
+les contraintes `CHECK` en base (migration `20260830120000_i18n_locales`).
+
+Ce qui est **retenu** de la Design Suite : la structure de navigation en quatre
+groupes (MAIN / OPERATIONS / ANALYTICS / SYSTEM), les écrans et leur hiérarchie,
+et le placement de l'identité — la marque **EcomFlow** dans la barre latérale,
+la **boutique** dans l'en-tête. Les intitulés anglais des planches sont traduits
+à l'import : *Confirmation Center* → « Centre de confirmation » / « مركز
+التأكيد », *Inventory* → « Inventaire » / « المخزون ».
+
+**Corollaire vérifié au passage** — Les nombres doivent s'afficher en chiffres
+latins **y compris en arabe** (raison d'être de l'étiquette `ar-DZ`, D-037). Le
+formatage `Intl` était correct ; le **catalogue arabe ne l'était pas** : 29
+messages portaient des chiffres arabo-indiens écrits en dur (« ٧ أيام »,
+« ١٢ حرفًا », « ١. الإعلان »), là où d'autres messages du même écran écrivaient
+« 7 » — la même page mélangeait donc les deux graphies. Corrigé, et verrouillé
+par deux tests distincts, parce que les deux moitiés du problème se cassent
+séparément : `locale.spec.ts` refuse qu'un formateur produise `٠١٢٣`,
+`messages.spec.ts` refuse qu'un chiffre arabo-indien soit écrit dans le
+catalogue.
+
+**Impact** — Aucun changement de code lié à la langue. Une ligne d'un document
+de référence est neutralisée par écrit, ici et dans le README §9, pour que la
+question ne se rouvre pas.
+
+---
+
 ---
 
 *Ce journal est mis à jour à chaque décision structurante. Les entrées ne sont

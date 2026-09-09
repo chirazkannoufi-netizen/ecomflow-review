@@ -39,6 +39,7 @@ import {
   ErrorState,
   LoadingState,
   Money,
+  Input,
   Select,
   Textarea,
   formatDate,
@@ -105,6 +106,13 @@ export default function ReturnsPage() {
   const queryClient = useQueryClient();
 
   const [status, setStatus] = useState('');
+  /**
+   * Recherche LOCALE de cet ecran, distincte de celle de l'en-tete.
+   *
+   * `/returns` renvoie la liste complete pour le statut demande, sans
+   * pagination : le filtrage se fait ici, sur ce qui est deja charge.
+   */
+  const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'danger'; text: string } | null>(
     null,
@@ -115,6 +123,17 @@ export default function ReturnsPage() {
   const listQuery = useQuery({
     queryKey: ['returns', status],
     queryFn: () => api.get<ReturnRow[]>('/returns', { query: { status: status || undefined } }),
+  });
+
+  // Reference du retour, reference de la commande ou nom du client : les trois
+  // facons dont un retour est designe au telephone ou au depot.
+  const returnsSearch = search.trim().toLowerCase();
+  const visibleReturns = (listQuery.data ?? []).filter((entry) => {
+    if (!returnsSearch) return true;
+    return [entry.reference, entry.order.reference, entry.order.customerNameSnapshot]
+      .join(' ')
+      .toLowerCase()
+      .includes(returnsSearch);
   });
 
   const detailQuery = useQuery({
@@ -159,7 +178,13 @@ export default function ReturnsPage() {
       ) : null}
 
       <Card className="mb-3">
-        <div className="sm:max-w-xs">
+        <div className="grid gap-3 sm:grid-cols-2 sm:max-w-2xl">
+          <Input
+            label={tCommon('search')}
+            placeholder={t('searchPlaceholder')}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
           <Select
             label={tCommon('status')}
             value={status}
@@ -191,10 +216,10 @@ export default function ReturnsPage() {
               }
               onRetry={() => void listQuery.refetch()}
             />
-          ) : (listQuery.data?.length ?? 0) === 0 ? (
+          ) : visibleReturns.length === 0 ? (
             <EmptyState
               title={t('emptyTitle')}
-              description={status ? t('emptyFiltered') : t('emptyFirst')}
+              description={status || search ? t('emptyFiltered') : t('emptyFirst')}
             />
           ) : (
             <div className="overflow-x-auto">
@@ -210,7 +235,7 @@ export default function ReturnsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {listQuery.data?.map((entry) => (
+                  {visibleReturns.map((entry) => (
                     <tr
                       key={entry.id}
                       className={selectedId === entry.id ? 'bg-brand-50/60' : undefined}

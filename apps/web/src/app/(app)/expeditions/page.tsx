@@ -36,7 +36,7 @@ import {
   Pagination,
   Select,
   formatDateTime,
-  formatRelative,
+  useRelativeTime,
 } from '@/components/ui';
 
 interface ShipmentRow {
@@ -95,6 +95,7 @@ export default function ShipmentsPage() {
   const t = useTranslations('shipments');
   const tStatus = useTranslations('shipmentStatus');
   const tCommon = useTranslations('common');
+  const relativeTime = useRelativeTime();
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(1);
@@ -292,7 +293,7 @@ export default function ShipmentsPage() {
                         </td>
                         <td className="whitespace-nowrap text-xs">
                           <span className={isStale ? 'font-medium text-warning' : 'text-slate-500'}>
-                            {formatRelative(lastSignal)}
+                            {relativeTime(lastSignal)}
                           </span>
                           {isStale ? (
                             <p

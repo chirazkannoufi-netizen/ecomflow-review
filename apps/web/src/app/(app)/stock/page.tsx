@@ -81,6 +81,15 @@ export default function StockPage() {
 
   const [selected, setSelected] = useState<LowStockEntry | null>(null);
   const [mode, setMode] = useState<'inbound' | 'adjust'>('inbound');
+  /**
+   * Recherche LOCALE de cet ecran, distincte de celle de l'en-tete.
+   *
+   * `/inventory/low-stock` renvoie la liste complete des declinaisons sous
+   * seuil, sans pagination : le filtrage se fait donc ici, sur les donnees
+   * deja chargees. Aucun aller-retour reseau, et le compte affiche reste juste
+   * puisque rien n'est tronque cote serveur.
+   */
+  const [search, setSearch] = useState('');
   const [quantity, setQuantity] = useState('');
   const [note, setNote] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -90,6 +99,17 @@ export default function StockPage() {
   const lowStockQuery = useQuery({
     queryKey: ['inventory', 'low-stock'],
     queryFn: () => api.get<LowStockEntry[]>('/inventory/low-stock'),
+  });
+
+  // Nom de produit, declinaison ou SKU : l'agent cherche avec ce qu'il a sous
+  // la main, un code-barres comme un nom de robe.
+  const alertsSearch = search.trim().toLowerCase();
+  const visibleAlerts = (lowStockQuery.data ?? []).filter((entry) => {
+    if (!alertsSearch) return true;
+    return [entry.productName, entry.variantLabel ?? '', entry.sku]
+      .join(' ')
+      .toLowerCase()
+      .includes(alertsSearch);
   });
 
   const reconciliationQuery = useQuery({
@@ -191,6 +211,14 @@ export default function StockPage() {
             ) : null
           }
         >
+          <div className="border-b border-line p-3">
+            <Input
+              placeholder={t('searchPlaceholder')}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+
           {lowStockQuery.isLoading ? (
             <LoadingState />
           ) : lowStockQuery.error ? (
@@ -202,7 +230,7 @@ export default function StockPage() {
               }
               onRetry={() => void lowStockQuery.refetch()}
             />
-          ) : (lowStockQuery.data?.length ?? 0) === 0 ? (
+          ) : visibleAlerts.length === 0 ? (
             <EmptyState
               title={t('noAlertTitle')}
               description={t('noAlert')}
@@ -227,7 +255,7 @@ export default function StockPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {lowStockQuery.data?.map((entry) => (
+                  {visibleAlerts.map((entry) => (
                     <tr
                       key={entry.variantId}
                       className={

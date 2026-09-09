@@ -26,6 +26,7 @@
     "prisma:diff": "prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script",
     "seed": "dotenv -e ../../.env -- ts-node -r tsconfig-paths/register prisma/seed.ts",
     "seed:demo": "dotenv -e ../../.env -- ts-node -r tsconfig-paths/register prisma/seed.ts --with-demo",
+    "seed:queue": "dotenv -e ../../.env -- ts-node -r tsconfig-paths/register prisma/seed-confirmation-queue.ts",
     "openapi:export": "dotenv -e ../../.env -- ts-node -r tsconfig-paths/register scripts/export-openapi.ts"
   },
   "prisma": {

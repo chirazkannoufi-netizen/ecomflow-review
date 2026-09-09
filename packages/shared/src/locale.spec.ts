@@ -43,6 +43,37 @@ describe('langues', () => {
     expect(new Intl.NumberFormat(LOCALE_TAGS.ar).format(1234)).toMatch(/[0-9]/);
   });
 
+  it('n affiche JAMAIS de chiffres arabo-indiens, quel que soit le formateur', () => {
+    // POURQUOI CE TEST EXISTE
+    //   `ar-DZ` ressemble a une coquille : la correction « evidente » est de
+    //   le remplacer par `ar`, ou par `ar-EG` puisque l'Egypte est le plus
+    //   gros marche arabophone. Les deux font basculer TOUTE l'application en
+    //   ٠١٢٣ — montants, quantites, numeros de suivi, dates — sans qu'aucun
+    //   type ne bronche, et sans qu'un relecteur francophone ne s'en apercoive.
+    //
+    //   L'assertion porte donc sur le RESULTAT observable plutot que sur
+    //   l'etiquette : elle tient encore si quelqu'un ajoute un
+    //   `-u-nu-arab` a la fin du tag, ce qu'une egalite de chaine laisserait
+    //   passer.
+    const EASTERN_DIGITS = /[٠-٩۰-۹]/;
+    const tag = LOCALE_TAGS.ar;
+
+    const rendered = [
+      new Intl.NumberFormat(tag).format(1234567.89),
+      new Intl.NumberFormat(tag, { style: 'currency', currency: 'DZD' }).format(4500),
+      new Intl.NumberFormat(tag, { style: 'percent' }).format(0.125),
+      new Intl.DateTimeFormat(tag, { dateStyle: 'short' }).format(new Date('2026-08-31T10:00:00Z')),
+      new Intl.DateTimeFormat(tag, { dateStyle: 'long' }).format(new Date('2026-08-31T10:00:00Z')),
+    ];
+
+    for (const value of rendered) {
+      expect(value).not.toMatch(EASTERN_DIGITS);
+      // Un formatage qui ne produirait AUCUN chiffre signalerait un tag
+      // invalide silencieusement retombe sur autre chose.
+      expect(value).toMatch(/[0-9]/);
+    }
+  });
+
   describe('isLocale', () => {
     it('accepte les langues connues', () => {
       expect(isLocale('fr')).toBe(true);

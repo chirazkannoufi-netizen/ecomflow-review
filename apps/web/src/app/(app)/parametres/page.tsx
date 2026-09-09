@@ -23,6 +23,23 @@ import { PageHeader } from '@/components/app-shell';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { Alert, Button, Card, ErrorState, Input, LoadingState, Select } from '@/components/ui';
 
+/**
+ * Champs que le serveur gere lui-meme et REFUSE en ecriture.
+ *
+ * Ils sont presents dans la reponse du GET mais absents du DTO de mise a
+ * jour, qui rejette toute propriete inconnue. Les retirer avant d'envoyer est
+ * donc obligatoire, et le faire a partir d'une liste nommee — plutot qu'en
+ * recopiant les champs editables un a un — evite qu'un futur reglage ajoute a
+ * l'ecran soit oublie dans l'enregistrement.
+ */
+const SERVER_MANAGED_FIELDS = ['tenantId', 'createdAt', 'updatedAt'] as const;
+
+function editableOnly(settings: Settings): Partial<Settings> {
+  const payload: Record<string, unknown> = { ...settings };
+  for (const field of SERVER_MANAGED_FIELDS) delete payload[field];
+  return payload;
+}
+
 interface Settings {
   readonly defaultLocale: string;
   readonly customerMessageLocale: string | null;
@@ -82,7 +99,12 @@ export default function SettingsPage() {
   }, [settingsQuery.data, draft]);
 
   const saveMutation = useMutation({
-    mutationFn: (payload: Partial<Settings>) => api.patch('/tenants/settings', payload),
+    // `editableOnly` : le GET renvoie AUSSI `tenantId`, `createdAt` et
+    // `updatedAt`, que le serveur gere lui-meme et refuse en ecriture. Renvoyer
+    // la reponse telle quelle faisait echouer TOUT enregistrement de cet ecran
+    // en 400 (« property tenantId should not exist ») — les vingt-six reglages
+    // etaient modifiables a l'ecran et aucun ne partait jamais.
+    mutationFn: (payload: Settings) => api.patch('/tenants/settings', editableOnly(payload)),
     onSuccess: () => {
       setFeedback({ tone: 'success', text: t('saved') });
       void queryClient.invalidateQueries({ queryKey: ['settings'] });

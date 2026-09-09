@@ -14,6 +14,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -21,6 +22,8 @@ import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swa
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsDate,
   IsIn,
@@ -30,6 +33,7 @@ import {
   IsUUID,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { CONFIRMATION_QUEUE_STATUSES, PERMISSIONS, parseAlgerianPhone } from '@ecomflow/shared';
 import {
@@ -101,14 +105,111 @@ export class QueueQueryDto extends PaginationQueryDto {
   @IsString()
   @MaxLength(120)
   search?: string;
+
+  @ApiPropertyOptional({
+    description: 'Ne garde que les commandes contenant ce SKU (rupture, lot defectueux).',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(64)
+  productSku?: string;
+
+  @ApiPropertyOptional({ description: 'Debut de la plage de dates de commande (AAAA-MM-JJ).' })
+  @IsOptional()
+  @Transform(toDate)
+  @IsDate({ message: 'Date de debut invalide.' })
+  orderedFrom?: Date;
+
+  @ApiPropertyOptional({ description: 'Fin de la plage de dates de commande, incluse (AAAA-MM-JJ).' })
+  @IsOptional()
+  @Transform(toDate)
+  @IsDate({ message: 'Date de fin invalide.' })
+  orderedTo?: Date;
+}
+
+export class UpdateDeliveryDetailsDto {
+  @ApiPropertyOptional({ description: 'Nom du client, tel qu il figurera sur le colis.' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(150)
+  customerName?: string;
+
+  @ApiPropertyOptional({ example: '0555123456' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 58 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  wilayaCode?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(120)
+  commune?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(255)
+  address?: string;
+
+  @ApiPropertyOptional({
+    enum: ['HOME', 'PICKUP_POINT'],
+    description: 'Livraison a domicile, ou retrait au bureau du transporteur (« stopdesk »).',
+  })
+  @IsOptional()
+  @IsIn(['HOME', 'PICKUP_POINT'])
+  deliveryType?: 'HOME' | 'PICKUP_POINT';
+}
+
+export class ConfirmationItemLineDto {
+  @ApiProperty({ description: 'Identifiant de la ligne de commande a ajuster.' })
+  @IsUUID()
+  orderItemId!: string;
+
+  @ApiProperty({
+    description: 'Quantite voulue. Zero retire la ligne de la commande.',
+    minimum: 0,
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  quantity!: number;
+}
+
+export class UpdateConfirmationItemsDto {
+  @ApiProperty({
+    type: [ConfirmationItemLineDto],
+    description:
+      'Lignes a ajuster. Les lignes absentes de la liste gardent leur quantite actuelle.',
+  })
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => ConfirmationItemLineDto)
+  lines!: ConfirmationItemLineDto[];
 }
 
 export class ConfirmationActionDto {
   @ApiProperty({
-    enum: ['CONFIRM', 'CALL_BACK', 'POSTPONE', 'NO_ANSWER', 'CANCEL', 'WRONG_NUMBER'],
-    description: 'Action rapide du centre de confirmation (V1 §9).',
+    enum: ['CONFIRM', 'CALL_BACK', 'POSTPONE', 'NO_ANSWER', 'CANCEL', 'REFUSED', 'WRONG_NUMBER'],
+    description:
+      'Action rapide du centre de confirmation (V1 §9). REFUSED (le client dit non) ' +
+      'et CANCEL (la boutique renonce) sont deux issues distinctes : seule la premiere ' +
+      'pese sur le score de fiabilite du client.',
   })
-  @IsIn(['CONFIRM', 'CALL_BACK', 'POSTPONE', 'NO_ANSWER', 'CANCEL', 'WRONG_NUMBER'])
+  @IsIn(['CONFIRM', 'CALL_BACK', 'POSTPONE', 'NO_ANSWER', 'CANCEL', 'REFUSED', 'WRONG_NUMBER'])
   action!: ConfirmationAction;
 
   @ApiPropertyOptional({ description: 'Note d appel, visible dans l historique.' })
@@ -189,6 +290,9 @@ export class ConfirmationController {
         unassignedOnly: query.unassignedOnly,
         dueOnly: query.dueOnly ?? true,
         search: query.search,
+        productSku: query.productSku,
+        orderedFrom: query.orderedFrom,
+        orderedTo: query.orderedTo,
       },
       { page: query.page, pageSize: query.pageSize },
     );
@@ -253,6 +357,82 @@ export class ConfirmationController {
       callbackAt: dto.callbackAt ?? null,
       callDurationSeconds: dto.callDurationSeconds ?? null,
     });
+  }
+
+  @Patch('orders/:id/items')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.CONFIRMATION_MANAGE)
+  @RequiresOperationalSubscription()
+  @Audited({ action: 'ORDER_UPDATED', entityType: 'Order', entityIdParam: 'id' })
+  @ApiOperation({
+    summary: 'Ajuster les quantites pendant l appel',
+    description:
+      'Modifie les quantites des lignes d une commande ENCORE EN FILE de confirmation, ' +
+      'et renvoie les montants recalcules par le serveur. Une quantite a zero retire la ' +
+      'ligne ; au moins une ligne doit subsister. Aucun statut de la file ne reserve de ' +
+      'stock, l operation ne touche donc a aucune reservation. Elle est refusee des que ' +
+      'la commande a quitte la file.',
+  })
+  async updateItems(
+    @TenantId() tenantId: string,
+    @Param('id', ParseUUIDPipe) orderId: string,
+    @Body() dto: UpdateConfirmationItemsDto,
+    @Ctx() context: RequestContext,
+  ) {
+    return this.confirmation.updateItems({
+      tenantId,
+      orderId,
+      membershipId: context.membershipId as string,
+      lines: dto.lines,
+    });
+  }
+
+  @Patch('orders/:id/delivery-details')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.CONFIRMATION_MANAGE)
+  @RequiresOperationalSubscription()
+  @ApiOperation({
+    summary: 'Corriger les coordonnees de livraison pendant l appel',
+    description:
+      'Met a jour nom, telephone, wilaya, commune, adresse et mode de livraison ' +
+      '(domicile ou bureau) d une commande ENCORE EN FILE. Ce sont les copies ' +
+      'portees par la commande qui changent, pas la fiche client : corriger une ' +
+      'livraison ne doit pas reecrire l historique des commandes precedentes. ' +
+      'Chaque champ modifie est trace dans le journal d audit.',
+  })
+  async updateDeliveryDetails(
+    @TenantId() tenantId: string,
+    @Param('id', ParseUUIDPipe) orderId: string,
+    @Body() dto: UpdateDeliveryDetailsDto,
+    @Ctx() context: RequestContext,
+  ) {
+    // Le telephone est normalise ICI, comme partout ailleurs : la base ne
+    // contient que de l'E.164, quelle que soit la forme saisie par l'agent.
+    let phoneE164: string | undefined;
+    if (dto.phone !== undefined) {
+      const parsed = parseAlgerianPhone(dto.phone);
+      if (!parsed.ok) {
+        throw new ValidationException(
+          'Numero de telephone inexploitable. Format attendu : 0555 12 34 56.',
+          { details: { field: 'phone', value: dto.phone, reason: parsed.error } },
+        );
+      }
+      phoneE164 = parsed.value.e164;
+    }
+
+    await this.confirmation.updateCustomerDetails({
+      tenantId,
+      orderId,
+      membershipId: context.membershipId as string,
+      customerName: dto.customerName,
+      phoneE164,
+      wilayaCode: dto.wilayaCode,
+      commune: dto.commune,
+      address: dto.address,
+      deliveryType: dto.deliveryType,
+    });
+
+    return { updated: true };
   }
 
   @Post('orders/:id/correct-phone')

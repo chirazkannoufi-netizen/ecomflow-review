@@ -369,7 +369,7 @@ export default function NewOrderPage() {
                           )
                         }
                       >
-                        <option value="">Selectionner…</option>
+                        <option value="">{tCommon('select')}</option>
                         {variantOptions.map((entry) => (
                           <option key={entry.id} value={entry.id}>
                             {t('variantOption', {

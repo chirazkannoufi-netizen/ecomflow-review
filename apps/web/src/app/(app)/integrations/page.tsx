@@ -41,7 +41,7 @@ import {
   LoadingState,
   Select,
   formatDateTime,
-  formatRelative,
+  useRelativeTime,
 } from '@/components/ui';
 
 interface GoogleStatus {
@@ -148,6 +148,7 @@ export default function IntegrationsPage() {
 function IntegrationsContent() {
   const t = useTranslations('integrations');
   const tCommon = useTranslations('common');
+  const relativeTime = useRelativeTime();
   const searchParams = useSearchParams();
   const { can } = useSession();
   const queryClient = useQueryClient();
@@ -334,7 +335,7 @@ function IntegrationsContent() {
               <p className="text-xs text-slate-500">
                 {t('authorizedOn', { date: formatDateTime(status.connectedAt) })}
                 {status.lastCheckedAt
-                  ? t('lastCheck', { when: formatRelative(status.lastCheckedAt) })
+                  ? t('lastCheck', { when: relativeTime(status.lastCheckedAt) })
                   : ''}
               </p>
               {status.lastErrorMessage ? (
@@ -423,7 +424,7 @@ function IntegrationsContent() {
                       <p className="text-xs text-slate-500">
                         {t('syncEvery', { minutes: config.syncIntervalMinutes })}
                         {config.lastSuccessAt
-                          ? t('lastSuccess', { when: formatRelative(config.lastSuccessAt) })
+                          ? t('lastSuccess', { when: relativeTime(config.lastSuccessAt) })
                           : t('neverSynced')}
                         {config.lastProcessedRow
                           ? t('resumeRow', { row: config.lastProcessedRow })
@@ -457,7 +458,7 @@ function IntegrationsContent() {
                       <Alert tone="warning">
                         {t('consecutiveFailures', { count: config.consecutiveFailures })}
                         {config.backoffUntil
-                          ? t('nextAttempt', { when: formatRelative(config.backoffUntil) })
+                          ? t('nextAttempt', { when: relativeTime(config.backoffUntil) })
                           : ''}
                       </Alert>
                     </div>
@@ -589,7 +590,7 @@ function IntegrationsContent() {
                         ) : null}
                         {run.retryAfter ? (
                           <p className="text-xs text-warning">
-                            {t('resumeAt', { when: formatRelative(run.retryAfter) })}
+                            {t('resumeAt', { when: relativeTime(run.retryAfter) })}
                           </p>
                         ) : null}
                       </td>
@@ -603,7 +604,7 @@ function IntegrationsContent() {
                           : `${Math.round(run.durationMs / 100) / 10} s`}
                       </td>
                       <td className="whitespace-nowrap text-xs text-slate-500">
-                        {formatRelative(run.startedAt)}
+                        {relativeTime(run.startedAt)}
                       </td>
                     </tr>
                   ))}
@@ -631,6 +632,7 @@ function SheetWizard({
   onError: (text: string) => void;
 }) {
   const t = useTranslations('integrations.wizard');
+  const tCommon = useTranslations('common');
   const [spreadsheetId, setSpreadsheetId] = useState('');
   const [sheetName, setSheetName] = useState('');
   const [sheetGid, setSheetGid] = useState('');
@@ -741,7 +743,7 @@ function SheetWizard({
                   setMapping({});
                 }}
               >
-                <option value="">Selectionner…</option>
+                <option value="">{tCommon('select')}</option>
                 {spreadsheetsQuery.data?.map((entry) => (
                   <option key={entry.id} value={entry.id}>
                     {entry.name}
@@ -763,7 +765,7 @@ function SheetWizard({
                   setMapping({});
                 }}
               >
-                <option value="">Selectionner…</option>
+                <option value="">{tCommon('select')}</option>
                 {sheetsQuery.data?.sheets.map((entry) => (
                   <option key={String(entry.sheetId)} value={entry.title}>
                     {entry.title}

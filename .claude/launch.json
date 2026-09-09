@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--workspace", "apps/web"],
       "port": 3000
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace", "apps/api"],
+      "port": 3001
     }
   ]
 }

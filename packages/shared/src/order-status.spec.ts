@@ -216,6 +216,40 @@ describe('machine a etats des commandes', () => {
     });
   });
 
+  describe('refus du client au telephone', () => {
+    // Le refus existait uniquement APRES expedition (le client refuse le colis
+    // au pas de la porte). Un client qui dit non AU TELEPHONE finissait donc en
+    // ANNULEE, au milieu des commandes que la boutique avait elle-meme
+    // retirees : impossible ensuite de savoir combien de clients refusent.
+    it('est possible depuis chaque statut de la file de confirmation', () => {
+      for (const from of ['TO_CONFIRM', 'NO_ANSWER', 'CALL_BACK', 'POSTPONED'] as const) {
+        expect(isTransitionAllowed(from, 'REFUSED')).toBe(true);
+      }
+    });
+
+    it('n exige pas de motif, contrairement a l annulation', () => {
+      // Deux issues negatives, deux exigences differentes : le refus est
+      // dicte par le client et se passe d'explication ; l'annulation est une
+      // decision de la boutique, qui doit se justifier.
+      expect(findTransition('TO_CONFIRM', 'REFUSED')?.requiresReason).toBe(false);
+      expect(findTransition('TO_CONFIRM', 'CANCELLED')?.requiresReason).toBe(true);
+    });
+
+    it('reste reserve a un humain', () => {
+      // Aucune automatisation ne doit pouvoir declarer qu'un client a refuse :
+      // c'est une parole rapportee par un agent.
+      expect(findTransition('TO_CONFIRM', 'REFUSED')?.actors).toEqual(['USER']);
+    });
+
+    it('demande la permission du centre de confirmation', () => {
+      expect(findTransition('CALL_BACK', 'REFUSED')?.permission).toBe('confirmation.manage');
+    });
+
+    it('compte comme un echec, au meme titre qu apres expedition', () => {
+      expect(getStatusGroup('REFUSED')).toBe('FAILURE');
+    });
+  });
+
   describe('utilitaires', () => {
     it('reconnait un statut valide', () => {
       expect(isOrderStatus('DELIVERED')).toBe(true);

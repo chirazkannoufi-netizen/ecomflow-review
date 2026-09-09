@@ -72,7 +72,20 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
         // (passerelle API), ou pendant les tests de bout en bout, ou plusieurs
         // inscriptions s'enchainent en quelques secondes. La limitation elle-meme
         // conserve son propre test dedie.
-        skipIf: () => !config.throttle.enabled,
+        //
+        // EN DEVELOPPEMENT, ELLE EST TOUJOURS NEUTRALISEE.
+        //   L'inscription demande un code de verification, et le mode
+        //   developpement affiche ce code a l'ecran plutot que de l'envoyer par
+        //   SMS. Mais `/auth/register` n'accepte que trois tentatives par
+        //   minute : quiconque teste le parcours deux ou trois fois de suite se
+        //   heurte a « Trop de tentatives » et ne peut plus rien saisir pendant
+        //   une minute — sur un ecran dont c'est precisement le but d'etre
+        //   reessaye.
+        //
+        //   Le garde-fou reste entier la ou il protege quelque chose : en
+        //   production, et dans son test dedie (`NODE_ENV=test`), qui ne passe
+        //   pas par cette branche.
+        skipIf: () => !config.throttle.enabled || config.isDevelopment,
       }),
     }),
 

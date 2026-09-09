@@ -532,6 +532,7 @@ export class ShipmentsService {
         wilayaCodeSnapshot: true,
         communeSnapshot: true,
         addressSnapshot: true,
+        deliveryType: true,
         totalCentimes: true,
         itemsTotalCentimes: true,
         notes: true,
@@ -640,7 +641,11 @@ export class ShipmentsService {
       wilayaName: order.address?.wilayaName ?? '',
       commune: order.communeSnapshot ?? order.address?.commune ?? '',
       addressText: order.addressSnapshot ?? order.address?.addressText ?? '',
-      deliveryType: input.deliveryType ?? 'HOME',
+      // Le mode convenu AVEC LE CLIENT pendant l'appel fait foi ; l'appelant ne
+      // le force que s'il le precise explicitement. Auparavant ce parametre
+      // valait toujours « domicile » a defaut, et un client qui avait demande
+      // le bureau voyait quand meme un livreur se presenter chez lui.
+      deliveryType: input.deliveryType ?? order.deliveryType,
       pickupPointId: input.pickupPointId ?? null,
       // En COD, le montant a encaisser est le TOTAL, frais de livraison compris.
       codAmountCentimes: order.totalCentimes,
