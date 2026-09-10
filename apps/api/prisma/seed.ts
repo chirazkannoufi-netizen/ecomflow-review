@@ -375,53 +375,158 @@ async function seedSuperAdmin(
  *                        l'indique clairement.
  * Aucun transporteur n'est presente comme fonctionnel sans l'etre.
  */
+/**
+ * Capacites de chaque connecteur.
+ *
+ * UNE SEULE SOURCE ECRITE A LA MAIN
+ *   `supportsWebhooks` et `supportsCancellation` existaient deja sur `Carrier`
+ *   et sont lus par plusieurs services. Plutot que de les saisir une seconde
+ *   fois dans la matrice, ils en sont DERIVES ci-dessous : la capacite est
+ *   ecrite ici, la colonne historique la recopie. Il n'y a donc jamais deux
+ *   verites a maintenir d'accord.
+ *
+ * CE QUI EST DECLARE ICI DOIT EXISTER DANS L'ADAPTATEUR
+ *   Ces booleens pilotent l'affichage des actions : une capacite declaree que
+ *   le code ne sait pas honorer produit exactement le bouton-qui-echoue que la
+ *   matrice doit supprimer. Pour les connecteurs `PLANNED`, la ligne decrit la
+ *   CIBLE d'integration ; ils sont de toute facon refuses a l'expedition par
+ *   `implementationStatus`.
+ */
+const CARRIER_CAPABILITIES = {
+  MOCK_CARRIER: {
+    createShipment: true,
+    cancelShipment: true,
+    updateShipment: true,
+    trackingPolling: true,
+    trackingWebhook: true,
+    proofOfDelivery: true,
+    printableLabel: true,
+    pickupManifest: true,
+    pickupPointDelivery: true,
+    pickupPointDirectory: true,
+    cashOnDelivery: true,
+    feeQuotation: true,
+    packageOpening: true,
+    exchangeOnDelivery: true,
+    secondaryPhone: true,
+    declaredWeight: true,
+    wilayaCoverageQuery: true,
+  },
+  YALIDINE: {
+    createShipment: true,
+    cancelShipment: true,
+    updateShipment: false,
+    trackingPolling: true,
+    trackingWebhook: false,
+    proofOfDelivery: false,
+    printableLabel: true,
+    pickupManifest: false,
+    pickupPointDelivery: true,
+    pickupPointDirectory: true,
+    cashOnDelivery: true,
+    feeQuotation: true,
+    packageOpening: true,
+    exchangeOnDelivery: false,
+    secondaryPhone: true,
+    declaredWeight: true,
+    wilayaCoverageQuery: true,
+  },
+  ZR_EXPRESS: {
+    createShipment: true,
+    cancelShipment: true,
+    updateShipment: false,
+    trackingPolling: true,
+    trackingWebhook: false,
+    proofOfDelivery: false,
+    printableLabel: true,
+    pickupManifest: false,
+    pickupPointDelivery: true,
+    pickupPointDirectory: false,
+    cashOnDelivery: true,
+    feeQuotation: false,
+    packageOpening: true,
+    exchangeOnDelivery: false,
+    secondaryPhone: true,
+    declaredWeight: false,
+    wilayaCoverageQuery: false,
+  },
+  ECOTRACK: {
+    createShipment: true,
+    cancelShipment: true,
+    updateShipment: false,
+    trackingPolling: true,
+    trackingWebhook: true,
+    proofOfDelivery: false,
+    printableLabel: true,
+    pickupManifest: true,
+    pickupPointDelivery: true,
+    pickupPointDirectory: false,
+    cashOnDelivery: true,
+    feeQuotation: false,
+    packageOpening: true,
+    exchangeOnDelivery: false,
+    secondaryPhone: false,
+    declaredWeight: false,
+    wilayaCoverageQuery: false,
+  },
+} as const;
+
+type CarrierCode = keyof typeof CARRIER_CAPABILITIES;
+
 const CARRIERS = [
   {
     code: 'MOCK_CARRIER',
     name: 'Transporteur de test',
-    supportsWebhooks: true,
-    supportsCancellation: true,
     implementationStatus: 'AVAILABLE',
     isActive: true,
   },
   {
     code: 'YALIDINE',
     name: 'Yalidine Express',
-    supportsWebhooks: false,
-    supportsCancellation: true,
     implementationStatus: 'AVAILABLE',
     isActive: true,
   },
   {
     code: 'ZR_EXPRESS',
     name: 'ZR Express',
-    supportsWebhooks: false,
-    supportsCancellation: true,
     implementationStatus: 'PLANNED',
     isActive: false,
   },
   {
     code: 'ECOTRACK',
     name: 'Ecotrack',
-    supportsWebhooks: true,
-    supportsCancellation: true,
     implementationStatus: 'PLANNED',
     isActive: false,
   },
-] as const;
+] as const satisfies readonly { code: CarrierCode; [key: string]: unknown }[];
 
 async function seedCarriers(prisma: PrismaClient): Promise<number> {
   for (const carrier of CARRIERS) {
-    await prisma.carrier.upsert({
+    const capabilities = CARRIER_CAPABILITIES[carrier.code];
+
+    // Les deux colonnes historiques de `Carrier` sont DERIVEES de la matrice :
+    // une seule ligne a maintenir, deux projections.
+    const legacyFlags = {
+      supportsWebhooks: capabilities.trackingWebhook,
+      supportsCancellation: capabilities.cancelShipment,
+    };
+
+    const row = await prisma.carrier.upsert({
       where: { code: carrier.code },
-      create: { ...carrier },
+      create: { ...carrier, ...legacyFlags },
       update: {
         name: carrier.name,
-        supportsWebhooks: carrier.supportsWebhooks,
-        supportsCancellation: carrier.supportsCancellation,
         implementationStatus: carrier.implementationStatus,
         isActive: carrier.isActive,
+        ...legacyFlags,
       },
+      select: { id: true },
+    });
+
+    await prisma.carrierCapability.upsert({
+      where: { carrierId: row.id },
+      create: { carrierId: row.id, ...capabilities },
+      update: { ...capabilities },
     });
   }
   return CARRIERS.length;

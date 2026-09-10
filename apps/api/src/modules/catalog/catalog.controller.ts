@@ -6,6 +6,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -21,6 +22,8 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsDateString,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsObject,
@@ -31,7 +34,13 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { PERMISSIONS } from '@ecomflow/shared';
+import {
+  OUT_OF_STOCK_BEHAVIORS,
+  PERMISSIONS,
+  STOCK_EXIT_STRATEGIES,
+  type OutOfStockBehavior,
+  type StockExitStrategy,
+} from '@ecomflow/shared';
 import {
   Audited,
   CurrentMembershipId,
@@ -217,6 +226,16 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Consignes affichees au confirmateur pendant l appel. Chaine vide pour effacer.',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(2000)
+  confirmationNotes?: string;
 }
 
 export class ListProductsQueryDto extends PaginationQueryDto {
@@ -237,6 +256,56 @@ export class ListProductsQueryDto extends PaginationQueryDto {
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   activeOnly?: boolean;
+}
+
+export class UpdateVariantStockSettingsDto {
+  @ApiPropertyOptional({
+    enum: OUT_OF_STOCK_BEHAVIORS,
+    description:
+      'Comportement en rupture. INHERIT suit le reglage de la boutique ' +
+      '(allowOversell / reserveStockOnConfirm).',
+  })
+  @IsOptional()
+  @IsIn(OUT_OF_STOCK_BEHAVIORS)
+  outOfStockBehavior?: OutOfStockBehavior;
+
+  @ApiPropertyOptional({
+    enum: STOCK_EXIT_STRATEGIES,
+    description: 'Ordre de consommation des lots. Sans lot, sans effet.',
+  })
+  @IsOptional()
+  @IsIn(STOCK_EXIT_STRATEGIES)
+  stockExitStrategy?: StockExitStrategy;
+
+  @ApiPropertyOptional({ minimum: 0, description: 'Seuil d alerte propre a la variante.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  lowStockThreshold?: number;
+}
+
+export class AddCrossSellDto {
+  @ApiProperty({
+    description: 'SKU du produit a proposer en vente additionnelle.',
+    example: 'HOU-001',
+  })
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty({ message: 'Indiquez le SKU du produit a proposer.' })
+  @MaxLength(100)
+  sku!: string;
+}
+
+export class ListBatchesQueryDto {
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Inclure les lots dont le reste est nul.',
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  includeExhausted?: boolean;
 }
 
 export class StockAdjustmentDto {
@@ -269,6 +338,38 @@ export class StockInboundDto {
   @IsString()
   @MaxLength(500)
   note?: string;
+
+  // --- Suivi par lots (facultatif) ------------------------------------------
+  //
+  // Renseigner `costCentimes` cree un LOT pour cette reception : c'est le seul
+  // declencheur. Une entree sans cout reste un simple incrementement du
+  // compteur, comme avant. Le choix est laisse a chaque reception plutot qu'a
+  // un reglage global : une boutique connait le cout de certaines receptions
+  // et pas d'autres, et l'obliger a inventer un chiffre pour continuer serait
+  // le plus sur moyen d'obtenir des marges fausses.
+
+  @ApiPropertyOptional({
+    minimum: 0,
+    description:
+      'Cout d achat UNITAIRE de cette reception, en centimes. Sa presence cree un lot.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  costCentimes?: number;
+
+  @ApiPropertyOptional({ description: 'Date de peremption du lot (ISO 8601).' })
+  @IsOptional()
+  @IsDateString()
+  expiresAt?: string;
+
+  @ApiPropertyOptional({ description: 'Reference du bon de livraison fournisseur.' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  batchReference?: string;
 }
 
 @ApiTags('Catalogue et stock')
@@ -370,6 +471,85 @@ export class CatalogController {
     return this.catalog.addVariant(tenantId, id, dto);
   }
 
+  @Patch('products/:id/variants/:variantId/stock-settings')
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  @RequiresOperationalSubscription()
+  @ApiOperation({
+    summary: 'Regler le comportement de stock d une declinaison',
+    description:
+      'Comportement en rupture et ordre de consommation des lots. Ces deux ' +
+      'reglages decrivent le stock, pas l article : ils vivent donc a part du ' +
+      'reste de la fiche produit.',
+  })
+  async updateVariantStockSettings(
+    @TenantId() tenantId: string,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Body() dto: UpdateVariantStockSettingsDto,
+  ) {
+    await this.catalog.updateVariantStockSettings(tenantId, variantId, dto);
+    return { acknowledged: true as const };
+  }
+
+  @Get('products/:id/cross-sells')
+  @RequirePermissions(PERMISSIONS.PRODUCTS_READ)
+  @ApiOperation({ summary: 'Lister les produits proposes en vente additionnelle' })
+  async listCrossSells(
+    @TenantId() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.catalog.listCrossSells(tenantId, id);
+  }
+
+  @Post('products/:id/cross-sells')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  @RequiresOperationalSubscription()
+  @ApiOperation({
+    summary: 'Proposer un produit en vente additionnelle',
+    description:
+      'Le produit est designe par son SKU, celui que le commercant lit sur ' +
+      'son etiquette. Le lien est oriente : proposer B avec A ne propose pas ' +
+      'A avec B.',
+  })
+  async addCrossSell(
+    @TenantId() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AddCrossSellDto,
+  ) {
+    await this.catalog.addCrossSell(tenantId, id, dto.sku);
+    return { acknowledged: true as const };
+  }
+
+  @Delete('products/:id/cross-sells/:crossSellProductId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  @ApiOperation({ summary: 'Retirer un produit complementaire' })
+  async removeCrossSell(
+    @TenantId() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('crossSellProductId', ParseUUIDPipe) crossSellProductId: string,
+  ): Promise<void> {
+    await this.catalog.removeCrossSell(tenantId, id, crossSellProductId);
+  }
+
+  @Get('inventory/variants/:variantId/batches')
+  @RequirePermissions(PERMISSIONS.INVENTORY_READ)
+  @ApiOperation({
+    summary: 'Lister les lots d une declinaison',
+    description:
+      'Les lots epuises sont inclus sur demande : leur cout d achat reste la ' +
+      'seule trace de ce qu a coute une marchandise deja vendue.',
+  })
+  async batches(
+    @TenantId() tenantId: string,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Query() query: ListBatchesQueryDto,
+  ) {
+    return this.catalog.listBatches(tenantId, variantId, {
+      includeExhausted: query.includeExhausted ?? false,
+    });
+  }
+
   @Get('categories')
   @RequirePermissions(PERMISSIONS.PRODUCTS_READ)
   @ApiOperation({ summary: 'Lister les categories' })
@@ -436,11 +616,25 @@ export class CatalogController {
   ) {
     await this.prisma.$transaction(async (rawTx) => {
       const tx = rawTx as PrismaTransactionClient;
-      await this.inventory.inbound(tx, tenantId, variantId, dto.quantity, {
-        referenceType: 'MANUAL',
-        actorId: membershipId,
-        note: dto.note ?? 'Reception fournisseur',
-      });
+      await this.inventory.inbound(
+        tx,
+        tenantId,
+        variantId,
+        dto.quantity,
+        {
+          referenceType: 'MANUAL',
+          actorId: membershipId,
+          note: dto.note ?? 'Reception fournisseur',
+        },
+        dto.costCentimes === undefined
+          ? undefined
+          : {
+              costCentimes: dto.costCentimes,
+              expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+              reference: dto.batchReference ?? null,
+              note: dto.note ?? null,
+            },
+      );
     });
 
     const [snapshot] = await this.inventory.getSnapshots(tenantId, [variantId]);

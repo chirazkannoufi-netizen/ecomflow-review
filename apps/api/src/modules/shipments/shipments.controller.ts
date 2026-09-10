@@ -11,7 +11,9 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -26,15 +28,19 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
 import {
+  CARRIER_ACCOUNT_KINDS,
   PERMISSIONS,
   PRODUCT_CONDITIONS,
   RETURN_REASONS,
   SHIPMENT_STATUSES,
+  WILAYA_COUNT,
+  type CarrierAccountKind,
 } from '@ecomflow/shared';
 import {
   Audited,
@@ -223,6 +229,54 @@ export class ListShipmentsQueryDto extends PaginationQueryDto {
   search?: string;
 }
 
+export class SetCarrierCoverageDto {
+  @ApiProperty({ minimum: 1, maximum: WILAYA_COUNT, description: 'Code wilaya, 1 a 58.' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(WILAYA_COUNT)
+  wilayaCode!: number;
+
+  @ApiProperty({ description: 'Livraison a domicile desservie.' })
+  @IsBoolean()
+  homeDelivery!: boolean;
+
+  @ApiProperty({ description: 'Retrait au bureau du transporteur desservi.' })
+  @IsBoolean()
+  pickupPoint!: boolean;
+
+  @ApiPropertyOptional({ minimum: 0, description: 'Delai indicatif en jours.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  leadTimeDays?: number;
+}
+
+export class UpdateCarrierAccountSettingsDto {
+  @ApiPropertyOptional({
+    enum: CARRIER_ACCOUNT_KINDS,
+    description: 'Agent de livraison independant, ou societe de livraison.',
+  })
+  @IsOptional()
+  @IsIn(CARRIER_ACCOUNT_KINDS)
+  kind?: CarrierAccountKind;
+
+  @ApiPropertyOptional({
+    description:
+      'Transmettre le numero de commande de la source plutot que la reference ' +
+      'EcomFlow. Sans numero externe, la reference reste envoyee.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  sendOrderNumberInsteadOfReference?: boolean;
+
+  @ApiPropertyOptional({ description: 'Le transporteur detient le stock de la boutique.' })
+  @IsOptional()
+  @IsBoolean()
+  stockHeldByCourier?: boolean;
+}
+
 @ApiTags('Expedition, suivi et retours')
 @ApiBearerAuth()
 @Controller()
@@ -249,6 +303,67 @@ export class ShipmentsController {
   })
   listCarriers() {
     return this.registry.describeAll();
+  }
+
+  @Get('carrier-catalogue')
+  @RequirePermissions(PERMISSIONS.SHIPMENTS_READ)
+  @ApiOperation({
+    summary: 'Transporteurs et matrice de capacites',
+    description:
+      'Contrairement a `/carriers`, cette vue inclut les transporteurs ' +
+      'planifies : le commercant doit pouvoir voir que son transporteur ' +
+      'habituel arrive, plutot que de le redemander. `capabilities: null` ' +
+      'signifie « non renseignees », a ne pas confondre avec « aucune ».',
+  })
+  async carrierCatalogue() {
+    return this.shipments.listCarrierCatalogue();
+  }
+
+  @Get('carriers/:carrierId/coverage')
+  @RequirePermissions(PERMISSIONS.SHIPMENTS_READ)
+  @ApiOperation({
+    summary: 'Couverture declaree d un transporteur, wilaya par wilaya',
+    description:
+      'Une wilaya absente signifie « couverture inconnue », pas « non ' +
+      'desservie » : tant que le tableau n est pas rempli, rien n est affirme.',
+  })
+  async carrierCoverage(@Param('carrierId', ParseUUIDPipe) carrierId: string) {
+    return this.shipments.listCarrierCoverage(carrierId);
+  }
+
+  @Put('carriers/:carrierId/coverage')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  @ApiOperation({
+    summary: 'Declarer la couverture d une wilaya',
+    description:
+      'Decocher les deux modes SUPPRIME la ligne : l absence de ligne porte ' +
+      'deja le sens « couverture inconnue », et deux facons d ecrire la meme ' +
+      'chose finiraient par se contredire.',
+  })
+  async setCarrierCoverage(
+    @Param('carrierId', ParseUUIDPipe) carrierId: string,
+    @Body() dto: SetCarrierCoverageDto,
+  ) {
+    await this.shipments.setCarrierCoverage(carrierId, dto);
+    return { acknowledged: true as const };
+  }
+
+  @Patch('carrier-accounts/:id/settings')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  @ApiOperation({
+    summary: 'Reglages d exploitation d un compte transporteur',
+    description:
+      'Nature du compte (agent ou societe), reference envoyee au ' +
+      'transporteur, et detention du stock. Ce sont des arrangements entre ' +
+      'CETTE boutique et son transporteur, pas des proprietes du reseau.',
+  })
+  async updateAccountSettings(
+    @TenantId() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCarrierAccountSettingsDto,
+  ) {
+    await this.shipments.updateCarrierAccountSettings(tenantId, id, dto);
+    return { acknowledged: true as const };
   }
 
   @Get('carrier-accounts')

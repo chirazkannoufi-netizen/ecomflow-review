@@ -23,6 +23,10 @@ export const TENANT_SCOPED_MODELS = [
   'ProductVariant',
   'InventoryLevel',
   'InventoryMovement',
+  'StockBatch',
+  'ProductCrossSell',
+  'TenantDeliveryFee',
+  'ProductDeliveryFeeOverride',
   'OrderSequence',
   'Order',
   'OrderItem',
@@ -75,6 +79,11 @@ export const GLOBAL_MODELS = [
   'RolePermission',
   'Plan',
   'Carrier',
+  // Capacites et couverture : des faits du RESEAU du transporteur, identiques
+  // pour toutes les boutiques. Ce que chaque boutique en fait est porte par
+  // `CarrierAccount`, lui bien scope.
+  'CarrierCapability',
+  'CarrierWilayaCoverage',
   // Deduplication des webhooks : doit avoir lieu AVANT la resolution du tenant.
   'ProcessedWebhook',
   // Fils de conversation WhatsApp : portes par WhatsappThread, deja scope.

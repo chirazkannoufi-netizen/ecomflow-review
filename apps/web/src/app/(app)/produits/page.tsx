@@ -13,7 +13,13 @@
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PERMISSIONS, dinarsToCentimes, formatCentimes } from '@ecomflow/shared';
+import {
+  PERMISSIONS,
+  dinarsToCentimes,
+  formatCentimes,
+  type OutOfStockBehavior,
+  type StockExitStrategy,
+} from '@ecomflow/shared';
 import { api, ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 import { PageHeader } from '@/components/app-shell';
@@ -30,6 +36,7 @@ import {
   Pagination,
   Textarea,
 } from '@/components/ui';
+import { ProductSettingsPanel } from './product-settings-panel';
 
 interface Variant {
   readonly id: string;
@@ -38,6 +45,8 @@ interface Variant {
   readonly attributes: Record<string, string>;
   readonly salePriceCentimes: number;
   readonly isActive: boolean;
+  readonly outOfStockBehavior: OutOfStockBehavior;
+  readonly stockExitStrategy: StockExitStrategy;
   readonly onHand: number;
   readonly reserved: number;
   readonly available: number;
@@ -51,6 +60,7 @@ interface Product {
   readonly purchasePriceCentimes: number | null;
   readonly isActive: boolean;
   readonly imageUrls: readonly string[];
+  readonly confirmationNotes: string | null;
   readonly categoryName: string | null;
   readonly variants: readonly Variant[];
   readonly totalAvailable: number;
@@ -399,6 +409,14 @@ export default function ProductsPage() {
                               </tr>
                             ))
                           : null}
+
+                        {expanded === product.id ? (
+                          <tr className="bg-slate-50/60">
+                            <td colSpan={8} className="ps-8 pb-3">
+                              <ProductSettingsPanel product={product} canManage={canManage} />
+                            </td>
+                          </tr>
+                        ) : null}
                       </Fragment>
                     );
                   })}

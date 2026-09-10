@@ -15,7 +15,14 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { ERROR_CODES, buildPageMeta, toSkipTake, type Paginated } from '@ecomflow/shared';
+import {
+  ERROR_CODES,
+  buildPageMeta,
+  toSkipTake,
+  type OutOfStockBehavior,
+  type Paginated,
+  type StockExitStrategy,
+} from '@ecomflow/shared';
 import {
   ConflictException,
   NotFoundException,
@@ -208,6 +215,7 @@ export class CatalogService {
       categoryName?: string | null;
       imageUrls?: readonly string[];
       isActive?: boolean;
+      confirmationNotes?: string | null;
     },
   ): Promise<void> {
     const categoryId =
@@ -237,6 +245,9 @@ export class CatalogService {
         ...(categoryId !== undefined ? { categoryId } : {}),
         ...(changes.imageUrls !== undefined ? { imageUrls: [...changes.imageUrls] } : {}),
         ...(changes.isActive !== undefined ? { isActive: changes.isActive } : {}),
+        ...(changes.confirmationNotes !== undefined
+          ? { confirmationNotes: changes.confirmationNotes?.trim() || null }
+          : {}),
       },
     });
 
@@ -326,6 +337,7 @@ export class CatalogService {
           purchasePriceCentimes: true,
           isActive: true,
           imageUrls: true,
+          confirmationNotes: true,
           category: { select: { id: true, name: true } },
           variants: {
             where: { archivedAt: null },
@@ -336,6 +348,8 @@ export class CatalogService {
               attributes: true,
               salePriceCentimes: true,
               isActive: true,
+              outOfStockBehavior: true,
+              stockExitStrategy: true,
               level: { select: { onHand: true, reserved: true, quarantine: true } },
             },
           },
@@ -352,6 +366,7 @@ export class CatalogService {
         purchasePriceCentimes: row.purchasePriceCentimes,
         isActive: row.isActive,
         imageUrls: row.imageUrls,
+        confirmationNotes: row.confirmationNotes,
         categoryName: row.category?.name ?? null,
         variants: row.variants.map((variant) => ({
           id: variant.id,
@@ -360,6 +375,8 @@ export class CatalogService {
           attributes: variant.attributes as Record<string, string>,
           salePriceCentimes: variant.salePriceCentimes ?? row.salePriceCentimes,
           isActive: variant.isActive,
+          outOfStockBehavior: variant.outOfStockBehavior,
+          stockExitStrategy: variant.stockExitStrategy,
           onHand: variant.level?.onHand ?? 0,
           reserved: variant.level?.reserved ?? 0,
           available: (variant.level?.onHand ?? 0) - (variant.level?.reserved ?? 0),
@@ -396,6 +413,203 @@ export class CatalogService {
     return product;
   }
 
+  /**
+   * Regle le comportement de rupture et la strategie de sortie d'une variante.
+   *
+   * POURQUOI UN POINT D'ENTREE SEPARE DE `updateProduct`
+   *   Ces deux reglages ne decrivent pas l'article vendu, mais la facon dont
+   *   le stock se comporte. Ils changent pour des raisons differentes de celles
+   *   qui font changer un prix ou un libelle — un article devient perissable
+   *   sans changer de nom — et par des personnes differentes : le magasinier
+   *   les touche, pas le responsable du catalogue.
+   */
+  async updateVariantStockSettings(
+    tenantId: string,
+    variantId: string,
+    changes: {
+      outOfStockBehavior?: OutOfStockBehavior;
+      stockExitStrategy?: StockExitStrategy;
+      lowStockThreshold?: number | null;
+    },
+  ): Promise<void> {
+    const updated = await this.prisma.productVariant.updateMany({
+      where: { tenantId, id: variantId, archivedAt: null },
+      data: {
+        ...(changes.outOfStockBehavior !== undefined
+          ? { outOfStockBehavior: changes.outOfStockBehavior }
+          : {}),
+        ...(changes.stockExitStrategy !== undefined
+          ? { stockExitStrategy: changes.stockExitStrategy }
+          : {}),
+        ...(changes.lowStockThreshold !== undefined
+          ? { lowStockThreshold: changes.lowStockThreshold }
+          : {}),
+      },
+    });
+
+    if (updated.count === 0) {
+      throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Variante introuvable.');
+    }
+  }
+
+  /** Produits proposes en vente additionnelle avec `productId`. */
+  async listCrossSells(
+    tenantId: string,
+    productId: string,
+  ): Promise<readonly CrossSellItem[]> {
+    const rows = await this.prisma.productCrossSell.findMany({
+      where: { tenantId, productId },
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        crossSellProductId: true,
+        position: true,
+        crossSellProduct: {
+          select: { name: true, sku: true, salePriceCentimes: true, isActive: true },
+        },
+      },
+    });
+
+    return rows.map((row) => ({
+      productId: row.crossSellProductId,
+      name: row.crossSellProduct.name,
+      sku: row.crossSellProduct.sku,
+      salePriceCentimes: row.crossSellProduct.salePriceCentimes,
+      isActive: row.crossSellProduct.isActive,
+      position: row.position,
+    }));
+  }
+
+  /**
+   * Ajoute un produit complementaire, designe par son SKU.
+   *
+   * LE SKU PLUTOT QUE L'IDENTIFIANT
+   *   C'est ce que le commercant a sous les yeux, sur l'etiquette et dans sa
+   *   feuille. Exiger un UUID obligerait a passer par un selecteur qui charge
+   *   tout le catalogue pour retrouver un article dont on connait deja la
+   *   reference.
+   */
+  async addCrossSell(
+    tenantId: string,
+    productId: string,
+    crossSellSku: string,
+  ): Promise<void> {
+    const sku = crossSellSku.trim();
+
+    if (!sku) {
+      throw new ValidationException('Indiquez le SKU du produit a proposer.', {
+        details: { field: 'sku' },
+      });
+    }
+
+    const target = await this.prisma.product.findFirst({
+      where: { tenantId, sku, archivedAt: null },
+      select: { id: true },
+    });
+
+    if (!target) {
+      throw new NotFoundException(
+        ERROR_CODES.NOT_FOUND,
+        `Aucun produit actif ne porte le SKU « ${sku} ».`,
+      );
+    }
+
+    if (target.id === productId) {
+      // La base l'interdit aussi (CHECK), mais un message clair vaut mieux
+      // qu'une violation de contrainte remontee telle quelle.
+      throw new ValidationException('Un produit ne peut pas se proposer lui-meme.', {
+        details: { field: 'sku', value: sku },
+      });
+    }
+
+    const source = await this.prisma.product.findFirst({
+      where: { tenantId, id: productId, archivedAt: null },
+      select: { id: true },
+    });
+
+    if (!source) {
+      throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Produit introuvable.');
+    }
+
+    const last = await this.prisma.productCrossSell.findFirst({
+      where: { tenantId, productId },
+      orderBy: { position: 'desc' },
+      select: { position: true },
+    });
+
+    try {
+      await this.prisma.productCrossSell.create({
+        data: {
+          tenantId,
+          productId,
+          crossSellProductId: target.id,
+          position: (last?.position ?? -1) + 1,
+        },
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new ConflictException(
+          ERROR_CODES.CONFLICT,
+          'Ce produit est deja propose en vente additionnelle.',
+        );
+      }
+      throw error;
+    }
+  }
+
+  async removeCrossSell(
+    tenantId: string,
+    productId: string,
+    crossSellProductId: string,
+  ): Promise<void> {
+    await this.prisma.productCrossSell.deleteMany({
+      where: { tenantId, productId, crossSellProductId },
+    });
+  }
+
+  /**
+   * Lots d'une variante, du plus ancien au plus recent.
+   *
+   * Les lots EPUISES restent listes : « ou est passe le lot d'octobre ? » est
+   * une question qui se pose apres coup, et un lot qui disparait de l'ecran
+   * des qu'il est vide ne laisse aucune trace lisible de son cout d'achat.
+   */
+  async listBatches(
+    tenantId: string,
+    variantId: string,
+    options: { includeExhausted?: boolean } = {},
+  ): Promise<readonly StockBatchItem[]> {
+    const rows = await this.prisma.stockBatch.findMany({
+      where: {
+        tenantId,
+        variantId,
+        ...(options.includeExhausted ? {} : { remainingQuantity: { gt: 0 } }),
+      },
+      orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }],
+      take: 100,
+      select: {
+        id: true,
+        reference: true,
+        quantity: true,
+        remainingQuantity: true,
+        costCentimes: true,
+        expiresAt: true,
+        receivedAt: true,
+        note: true,
+      },
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      reference: row.reference,
+      quantity: row.quantity,
+      remainingQuantity: row.remainingQuantity,
+      costCentimes: row.costCentimes,
+      expiresAt: row.expiresAt,
+      receivedAt: row.receivedAt,
+      note: row.note,
+    }));
+  }
+
   async listCategories(tenantId: string) {
     return this.prisma.productCategory.findMany({
       where: { tenantId },
@@ -428,6 +642,26 @@ export class CatalogService {
   }
 }
 
+export interface CrossSellItem {
+  readonly productId: string;
+  readonly name: string;
+  readonly sku: string;
+  readonly salePriceCentimes: number;
+  readonly isActive: boolean;
+  readonly position: number;
+}
+
+export interface StockBatchItem {
+  readonly id: string;
+  readonly reference: string | null;
+  readonly quantity: number;
+  readonly remainingQuantity: number;
+  readonly costCentimes: number;
+  readonly expiresAt: Date | null;
+  readonly receivedAt: Date;
+  readonly note: string | null;
+}
+
 export interface ProductListItem {
   readonly id: string;
   readonly name: string;
@@ -436,6 +670,8 @@ export interface ProductListItem {
   readonly purchasePriceCentimes: number | null;
   readonly isActive: boolean;
   readonly imageUrls: readonly string[];
+  /// Consignes lues par le confirmateur pendant l'appel.
+  readonly confirmationNotes: string | null;
   readonly categoryName: string | null;
   readonly variants: readonly {
     id: string;
@@ -444,6 +680,8 @@ export interface ProductListItem {
     attributes: Record<string, string>;
     salePriceCentimes: number;
     isActive: boolean;
+    outOfStockBehavior: OutOfStockBehavior;
+    stockExitStrategy: StockExitStrategy;
     onHand: number;
     reserved: number;
     available: number;

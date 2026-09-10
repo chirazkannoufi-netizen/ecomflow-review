@@ -305,10 +305,18 @@ export class SheetSyncService {
       } catch (error) {
         rowsFailed += 1;
         const message = error instanceof Error ? error.message : String(error);
-        const code =
-          error instanceof BusinessException && error.code === ERROR_CODES.VALIDATION_FAILED
+        // Trois familles, pas deux. Un article regle sur « refuser la commande »
+        // fait echouer la ligne DELIBEREMENT : la ranger dans
+        // `UNEXPECTED_ERROR` ferait passer une decision du commercant pour une
+        // panne de la synchronisation, et enverrait chercher un bug la ou il
+        // n'y a qu'un stock vide.
+        const code = !(error instanceof BusinessException)
+          ? 'UNEXPECTED_ERROR'
+          : error.code === ERROR_CODES.VALIDATION_FAILED
             ? 'MAPPING_ERROR'
-            : 'UNEXPECTED_ERROR';
+            : error.code === ERROR_CODES.INSUFFICIENT_STOCK
+              ? 'STOCK_REFUSED'
+              : 'UNEXPECTED_ERROR';
 
         await this.recordRowFailure(
           tenantId,

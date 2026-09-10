@@ -26,6 +26,7 @@ import {
   CONFIRMATION_QUEUE_STATUSES,
   ERROR_CODES,
   buildPageMeta,
+  computeOrderTotal,
   getWilayaByCode,
   reliabilityQueueWeight,
   toSkipTake,
@@ -177,7 +178,10 @@ export interface QueueItem {
 /** Montants d'une commande apres recalcul serveur. */
 export interface OrderAmountsResult {
   readonly itemsTotalCentimes: number;
+  readonly discountCentimes: number;
   readonly deliveryFeeCentimes: number;
+  /** Ajustement d'echange (SAV), signe. Voir `Order.exchangeAmountCentimes`. */
+  readonly exchangeAmountCentimes: number;
   readonly totalCentimes: number;
 }
 
@@ -532,6 +536,7 @@ export class ConfirmationService {
           status: true,
           deliveryFeeCentimes: true,
           discountCentimes: true,
+          exchangeAmountCentimes: true,
           items: {
             select: {
               id: true,
@@ -620,7 +625,12 @@ export class ConfirmationService {
       });
 
       const itemsTotal = recomputed.reduce((total, line) => total + line.lineTotalCentimes, 0);
-      const total = itemsTotal + order.deliveryFeeCentimes;
+      const total = computeOrderTotal({
+        itemsTotalCentimes: itemsTotal,
+        discountCentimes: order.discountCentimes,
+        deliveryFeeCentimes: order.deliveryFeeCentimes,
+        exchangeAmountCentimes: order.exchangeAmountCentimes,
+      });
 
       // --- Ecriture ---------------------------------------------------------
       if (removed.length > 0) {
@@ -668,7 +678,9 @@ export class ConfirmationService {
 
       return {
         itemsTotalCentimes: itemsTotal,
+        discountCentimes: order.discountCentimes,
         deliveryFeeCentimes: order.deliveryFeeCentimes,
+        exchangeAmountCentimes: order.exchangeAmountCentimes,
         totalCentimes: total,
       };
     });

@@ -103,6 +103,61 @@ export const INVENTORY_MOVEMENT_EFFECTS: Record<
   ADJUSTMENT: { onHand: 1, reserved: 0, quarantine: 0 },
 };
 
+export const OUT_OF_STOCK_BEHAVIORS = [
+  'INHERIT',
+  'ALLOW',
+  'REFUSE_ORDER',
+  'REFUSE_CONFIRMATION',
+] as const;
+export type OutOfStockBehavior = (typeof OUT_OF_STOCK_BEHAVIORS)[number];
+
+export const OUT_OF_STOCK_BEHAVIOR_LABELS: Record<OutOfStockBehavior, string> = {
+  INHERIT: 'Suivre le reglage de la boutique',
+  ALLOW: 'Vendre quand meme (precommande)',
+  REFUSE_ORDER: 'Refuser la commande',
+  REFUSE_CONFIRMATION: 'Accepter, mais bloquer la confirmation',
+};
+
+/** Comportement de rupture REELLEMENT applique a une variante. */
+export type EffectiveOutOfStockBehavior = Exclude<OutOfStockBehavior, 'INHERIT'>;
+
+/**
+ * Resout `INHERIT` en une decision applicable.
+ *
+ * POURQUOI CETTE FONCTION EST PARTAGEE
+ *   La regle doit donner le meme resultat a trois endroits qui la posent
+ *   differemment : la garde de confirmation (« puis-je confirmer ? »), la
+ *   creation de commande (« puis-je seulement l'enregistrer ? ») et l'ecran
+ *   produit (« qu'est-ce que ce reglage va faire ? »). Une regle recopiee trois
+ *   fois est une regle qui divergera.
+ *
+ * EQUIVALENCE AVEC L'EXISTANT
+ *   Sous `INHERIT`, le resultat reproduit exactement la condition qui prevalait
+ *   avant l'introduction du reglage par variante : la confirmation n'etait
+ *   bloquee que si la boutique refusait la survente ET reservait son stock a la
+ *   confirmation. Une variante qui n'a rien demande se comporte donc comme
+ *   avant, ce qui est la condition pour que la migration ne change l'issue
+ *   d'aucune commande en cours.
+ */
+export function resolveOutOfStockBehavior(
+  variantBehavior: OutOfStockBehavior,
+  shop: { readonly allowOversell: boolean; readonly reserveStockOnConfirm: boolean },
+): EffectiveOutOfStockBehavior {
+  if (variantBehavior !== 'INHERIT') return variantBehavior;
+  if (shop.allowOversell || !shop.reserveStockOnConfirm) return 'ALLOW';
+  return 'REFUSE_CONFIRMATION';
+}
+
+export const STOCK_EXIT_STRATEGIES = ['FIFO', 'LIFO', 'FEFO', 'RANDOM'] as const;
+export type StockExitStrategy = (typeof STOCK_EXIT_STRATEGIES)[number];
+
+export const STOCK_EXIT_STRATEGY_LABELS: Record<StockExitStrategy, string> = {
+  FIFO: 'Premier entre, premier sorti',
+  LIFO: 'Dernier entre, premier sorti',
+  FEFO: 'Peremption la plus proche d abord',
+  RANDOM: 'Aleatoire',
+};
+
 export const INVENTORY_REFERENCE_TYPES = [
   'ORDER',
   'RETURN',
@@ -169,6 +224,14 @@ export type StockDecision = (typeof STOCK_DECISIONS)[number];
 // ---------------------------------------------------------------------------
 
 /** Statut interne du colis cote EcomFlow (independant du transporteur). */
+export const CARRIER_ACCOUNT_KINDS = ['DELIVERY_AGENT', 'DELIVERY_COMPANY'] as const;
+export type CarrierAccountKind = (typeof CARRIER_ACCOUNT_KINDS)[number];
+
+export const CARRIER_ACCOUNT_KIND_LABELS: Record<CarrierAccountKind, string> = {
+  DELIVERY_AGENT: 'Agent de livraison',
+  DELIVERY_COMPANY: 'Societe de livraison',
+};
+
 export const SHIPMENT_STATUSES = [
   'DRAFT',
   'CREATION_PENDING',

@@ -31,8 +31,12 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import type { InventoryMovementType, InventoryReferenceType } from '@prisma/client';
-import { ERROR_CODES } from '@ecomflow/shared';
+import type { InventoryMovementType, InventoryReferenceType, Prisma } from '@prisma/client';
+import {
+  ERROR_CODES,
+  type OutOfStockBehavior,
+  type StockExitStrategy,
+} from '@ecomflow/shared';
 import { InsufficientStockException, ValidationException } from '../../common/errors/business.exception';
 import { NotFoundException } from '../../common/errors/business.exception';
 import { InjectPrisma, type PrismaClientExtended } from '../../infra/prisma/prisma.service';
@@ -48,6 +52,33 @@ export interface StockShortage {
   readonly sku: string;
   readonly requested: number;
   readonly available: number;
+  /**
+   * Reglage de rupture de la variante, NON RESOLU (`INHERIT` possible).
+   *
+   * La resolution appartient a l'appelant, parce qu'elle demande les reglages
+   * de la boutique : le service de stock constate un manque, il ne decide pas
+   * si ce manque est bloquant.
+   */
+  readonly outOfStockBehavior: OutOfStockBehavior;
+}
+
+/** Description d'un lot recu, jointe a une entree en stock. */
+export interface StockBatchInput {
+  /** Cout d'achat UNITAIRE reellement paye pour ce lot, en centimes. */
+  readonly costCentimes: number;
+  readonly expiresAt?: Date | null;
+  /** Reference du bon de livraison fournisseur. */
+  readonly reference?: string | null;
+  readonly note?: string | null;
+  /** Date de reception, si differente de maintenant (saisie retroactive). */
+  readonly receivedAt?: Date;
+}
+
+/** Part d'une sortie imputee a un lot precis. */
+export interface BatchConsumption {
+  readonly batchId: string;
+  readonly quantity: number;
+  readonly costCentimes: number;
 }
 
 export interface MovementContext {
@@ -119,7 +150,7 @@ export class InventoryService {
         variantId: true,
         onHand: true,
         reserved: true,
-        variant: { select: { sku: true } },
+        variant: { select: { sku: true, outOfStockBehavior: true } },
       },
     });
 
@@ -130,14 +161,28 @@ export class InventoryService {
       const level = levelByVariant.get(variantId);
 
       if (!level) {
-        // Aucune ligne de stock : la variante n'a jamais recu d'entree.
-        shortages.push({ variantId, sku: variantId, requested, available: 0 });
+        // Aucune ligne de stock : la variante n'a jamais recu d'entree. Son
+        // reglage de rupture reste inconnu ici, faute de ligne jointe : on
+        // retombe sur `INHERIT`, donc sur la decision de la boutique.
+        shortages.push({
+          variantId,
+          sku: variantId,
+          requested,
+          available: 0,
+          outOfStockBehavior: 'INHERIT',
+        });
         continue;
       }
 
       const available = level.onHand - level.reserved;
       if (available < requested) {
-        shortages.push({ variantId, sku: level.variant.sku, requested, available });
+        shortages.push({
+          variantId,
+          sku: level.variant.sku,
+          requested,
+          available,
+          outOfStockBehavior: level.variant.outOfStockBehavior,
+        });
       }
     }
 
@@ -343,21 +388,145 @@ export class InventoryService {
           { details: { variantId, quantity } },
         );
       }
+      await this.consumeBatches(tx, tenantId, variantId, quantity);
       await this.recordMovement(tx, tenantId, variantId, 'OUTBOUND', quantity, context, updated);
     }
   }
 
-  /** Entree en stock (reception fournisseur). */
+  /**
+   * Impute une sortie sur les lots de la variante, selon sa strategie.
+   *
+   * LE COMPTEUR RESTE L'AUTORITE
+   *   `InventoryLevel` a deja ete decremente, sous condition, par
+   *   `outboundConditionally`. Cette methode ne redecide donc pas si la sortie
+   *   est possible : elle repartit une sortie DEJA ACQUISE sur les lots, pour
+   *   savoir lequel part et a quel cout.
+   *
+   * COUVERTURE PARTIELLE ASSUMEE
+   *   La somme des `remainingQuantity` d'une variante peut etre INFERIEURE a
+   *   son `onHand`, jamais superieure : le stock anterieur a l'adoption des
+   *   lots, et les retours remis en vente, ne sont rattaches a aucun lot. Une
+   *   sortie qui depasse ce qui est trace consomme donc tout ce qui existe et
+   *   s'arrete la, sans echouer. Refuser l'expedition d'un colis reel parce
+   *   qu'un lot n'a pas ete saisi serait faire primer la comptabilite du
+   *   detail sur le fait physique.
+   */
+  private async consumeBatches(
+    tx: PrismaTransactionClient,
+    tenantId: string,
+    variantId: string,
+    quantity: number,
+  ): Promise<readonly BatchConsumption[]> {
+    const variant = await tx.productVariant.findFirst({
+      where: { tenantId, id: variantId },
+      select: { stockExitStrategy: true },
+    });
+
+    if (!variant) return [];
+
+    const open = await tx.stockBatch.findMany({
+      where: { tenantId, variantId, remainingQuantity: { gt: 0 } },
+      select: { id: true, remainingQuantity: true, costCentimes: true },
+      orderBy: this.batchOrder(variant.stockExitStrategy),
+    });
+
+    if (open.length === 0) return [];
+
+    const ordered =
+      variant.stockExitStrategy === 'RANDOM' ? shuffle(open) : open;
+
+    const consumed: BatchConsumption[] = [];
+    let left = quantity;
+
+    for (const batch of ordered) {
+      if (left <= 0) break;
+
+      const take = Math.min(left, batch.remainingQuantity);
+
+      // Decrement CONDITIONNEL : deux sorties concurrentes sur la meme variante
+      // ne doivent pas pouvoir vider le meme lot deux fois. La condition sur
+      // `remainingQuantity` fait de la mise a jour son propre verrou ; un lot
+      // rafle entre-temps renvoie 0 ligne et l'on passe au suivant.
+      const { count } = await tx.stockBatch.updateMany({
+        where: { tenantId, id: batch.id, remainingQuantity: { gte: take } },
+        data: { remainingQuantity: { decrement: take } },
+      });
+
+      if (count === 0) continue;
+
+      consumed.push({ batchId: batch.id, quantity: take, costCentimes: batch.costCentimes });
+      left -= take;
+    }
+
+    return consumed;
+  }
+
+  /**
+   * Traduit la strategie en tri SQL.
+   *
+   * FEFO trie sur la peremption, en placant les lots sans date EN DERNIER
+   * (`nulls: 'last'`) : une marchandise non perissable ne doit pas passer
+   * devant une marchandise qui se perime, ce que ferait un tri naif ou `NULL`
+   * remonte en tete.
+   */
+  private batchOrder(
+    strategy: StockExitStrategy,
+  ): Prisma.StockBatchOrderByWithRelationInput[] {
+    switch (strategy) {
+      case 'LIFO':
+        return [{ receivedAt: 'desc' }, { id: 'desc' }];
+      case 'FEFO':
+        return [{ expiresAt: { sort: 'asc', nulls: 'last' } }, { receivedAt: 'asc' }];
+      case 'RANDOM':
+      case 'FIFO':
+      default:
+        return [{ receivedAt: 'asc' }, { id: 'asc' }];
+    }
+  }
+
+  /**
+   * Entree en stock (reception fournisseur).
+   *
+   * `batch` est FACULTATIF, et c'est ce qui rend le suivi par lots adoptable
+   * progressivement : une boutique qui ne renseigne ni cout ni peremption
+   * continue de fonctionner exactement comme avant, avec le seul compteur
+   * `InventoryLevel`. Renseigner un lot ajoute le detail sans rien changer au
+   * compteur.
+   */
   async inbound(
     tx: PrismaTransactionClient,
     tenantId: string,
     variantId: string,
     quantity: number,
     context: MovementContext,
+    batch?: StockBatchInput,
   ): Promise<void> {
     this.assertPositive(quantity);
     const updated = await this.increment(tx, tenantId, variantId, { onHand: quantity });
     if (!updated) throw this.variantNotFound(variantId);
+
+    if (batch) {
+      if (batch.costCentimes < 0) {
+        throw new ValidationException('Le cout d achat d un lot ne peut pas etre negatif.', {
+          details: { variantId, costCentimes: batch.costCentimes },
+        });
+      }
+
+      await tx.stockBatch.create({
+        data: {
+          tenantId,
+          variantId,
+          quantity,
+          remainingQuantity: quantity,
+          costCentimes: batch.costCentimes,
+          expiresAt: batch.expiresAt ?? null,
+          reference: batch.reference ?? null,
+          note: batch.note ?? null,
+          ...(batch.receivedAt ? { receivedAt: batch.receivedAt } : {}),
+        },
+      });
+    }
+
     await this.recordMovement(tx, tenantId, variantId, 'INBOUND', quantity, context, updated);
   }
 
@@ -678,5 +847,21 @@ function aggregate(lines: readonly StockLine[]): Map<string, number> {
   return result;
 }
 
+/**
+ * Melange une liste sans modifier l'originale (Fisher-Yates).
+ *
+ * Sert la strategie de sortie `RANDOM`, qui existe pour les articles
+ * interchangeables dont on veut faire tourner les lots plutot que d'epuiser
+ * toujours le meme.
+ */
+function shuffle<T>(items: readonly T[]): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 /** Reexporte pour les tests, qui verifient l'agregation. */
-export const __testables = { aggregate };
+export const __testables = { aggregate, shuffle };

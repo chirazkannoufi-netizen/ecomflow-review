@@ -44,7 +44,9 @@
     "previous": "السابق",
     "next": "التالي",
     "logout": "تسجيل الخروج",
-    "openingWorkspace": "جارٍ فتح مساحتكم…"
+    "openingWorkspace": "جارٍ فتح مساحتكم…",
+    "add": "إضافة",
+    "remove": "إزالة"
   },
   "language": {
     "label": "اللغة",
@@ -87,7 +89,8 @@
     "storeSingleHint": "حسابكم مرتبط بهذا المتجر فقط.",
     "openMenu": "فتح القائمة",
     "searchPlaceholder": "ابحث عن طلب، عميل، أو رمز منتج...",
-    "newOrder": "طلب جديد"
+    "newOrder": "طلب جديد",
+    "carriers": "شركات التوصيل"
   },
   "orderStatus": {
     "NEW": "جديد",
@@ -710,7 +713,38 @@
     "invalidPurchasePrice": "سعر شراء غير صالح.",
     "createFailed": "تعذّر الإنشاء.",
     "namePlaceholder": "فستان طويل مطرَّز",
-    "categoryPlaceholder": "ملابس"
+    "categoryPlaceholder": "ملابس",
+    "settings": {
+      "open": "إعدادات البيع",
+      "title": "إعدادات البيع",
+      "standardVariant": "قياسي",
+      "inactive": "غير نشط",
+      "saveFailed": "فشل الحفظ.",
+      "addFailed": "فشلت الإضافة.",
+      "confirmationNotes": "تعليمات لمكالمة التأكيد",
+      "confirmationNotesHint": "تظهر لموظف التأكيد أثناء المكالمة، في لوحة التأكيد.",
+      "confirmationNotesPlaceholder": "تحقق من المقاس قبل التأكيد. اقترح الغطاء المطابق.",
+      "stockBehavior": "السلوك عند نفاد المخزون",
+      "stockBehaviorHint": "يُضبط لكل نسخة. « اتباع المتجر » يطبّق الإعدادات العامة.",
+      "outOfStock": "عند نفاد المخزون",
+      "outOfStockOptions": {
+        "INHERIT": "اتباع إعداد المتجر",
+        "ALLOW": "البيع رغم ذلك (طلب مسبق)",
+        "REFUSE_ORDER": "رفض الطلب",
+        "REFUSE_CONFIRMATION": "القبول مع منع التأكيد"
+      },
+      "exitStrategy": "ترتيب إخراج الدفعات",
+      "exitStrategyOptions": {
+        "FIFO": "الأول دخولاً هو الأول خروجاً",
+        "LIFO": "الأخير دخولاً هو الأول خروجاً",
+        "FEFO": "الأقرب انتهاءً أولاً",
+        "RANDOM": "عشوائي"
+      },
+      "crossSells": "منتجات مكمّلة",
+      "crossSellsHint": "تُقترح على موظف التأكيد أثناء المكالمة، للبيع الإضافي.",
+      "crossSellsEmpty": "لا توجد منتجات مكمّلة.",
+      "addBySku": "إضافة برمز SKU"
+    }
   },
   "stock": {
     "title": "المخزون",
@@ -765,7 +799,20 @@
       "RETURN_DISCARD": "إرجاع إلى الإتلاف",
       "ADJUSTMENT": "تعديل"
     },
-    "searchPlaceholder": "المنتج أو التنويعة أو رمز المنتج…"
+    "searchPlaceholder": "المنتج أو التنويعة أو رمز المنتج…",
+    "batchSection": "تتبّع بالدفعات (اختياري)",
+    "batchSectionHint": "إدخال التكلفة يُنشئ دفعة لهذا الاستلام. بدون تكلفة، يتغيّر العدّاد فقط.",
+    "batchCost": "تكلفة الشراء للوحدة (دج)",
+    "batchCostHint": "السعر المدفوع فعلياً لهذا الاستلام، لا سعر الكتالوج.",
+    "batchExpiry": "تاريخ انتهاء الصلاحية",
+    "batchExpiryHint": "تستخدمها استراتيجية « الأقرب انتهاءً أولاً ».",
+    "batchReference": "وصل التسليم",
+    "batchesTitle": "الدفعات في المخزون",
+    "batchRemaining": "{remaining} متبقية من {quantity}",
+    "batchReceived": "استُلمت في {date}",
+    "batchExpires": "تنتهي في {date}",
+    "batchShowExhausted": "إظهار الدفعات المستنفدة",
+    "invalidBatchCost": "يجب أن تكون تكلفة الشراء مبلغاً موجباً."
   },
   "customers": {
     "title": "العملاء",
@@ -1355,5 +1402,63 @@
     "WRONG_NUMBER": "رقم خاطئ",
     "BUSY": "مشغول",
     "OTHER": "أخرى"
+  },
+  "carriers": {
+    "title": "شركات التوصيل",
+    "subtitle": "ما تستطيع كل شركة توصيل فعله، وإلى أين تصل.",
+    "emptyTitle": "لا توجد شركة توصيل في الكتالوج",
+    "emptyDescription": "يُهيَّأ كتالوج الموصّلات عند إقلاع المنصة.",
+    "statusAvailable": "متاح",
+    "statusPlanned": "مُخطَّط له",
+    "accountCount": "{count, plural, zero {لا حساب} one {حساب واحد} two {حسابان} few {# حسابات} many {# حساباً} other {# حساب}}",
+    "wilayaCovered": "{count, plural, zero {لا ولاية} one {ولاية واحدة} two {ولايتان} few {# ولايات} many {# ولاية} other {# ولاية}}",
+    "wilayaUnknown": "التغطية غير مُدخلة",
+    "capabilities": "القدرات",
+    "capabilitiesUnknown": "قدرات شركة التوصيل هذه غير مُدخلة. وما دامت كذلك، لا يُخفى أي إجراء ولا يُوعد بأي منها.",
+    "capabilityGroups": {
+      "lifecycle": "دورة حياة الطرد",
+      "tracking": "التتبّع",
+      "documents": "الوثائق",
+      "delivery": "أنماط التوصيل",
+      "money": "المال",
+      "market": "أعراف السوق"
+    },
+    "capabilityNames": {
+      "createShipment": "إنشاء طرد",
+      "cancelShipment": "إلغاء طرد",
+      "updateShipment": "تعديل طرد مُنشأ",
+      "trackingPolling": "الاستعلام عن الحالة",
+      "trackingWebhook": "استقبال الأحداث",
+      "proofOfDelivery": "إثبات التسليم",
+      "printableLabel": "ملصق قابل للطباعة",
+      "pickupManifest": "وصل الاستلام",
+      "pickupPointDelivery": "التسليم في المكتب",
+      "pickupPointDirectory": "دليل المكاتب",
+      "cashOnDelivery": "الدفع عند الاستلام",
+      "feeQuotation": "حساب الرسوم",
+      "packageOpening": "فتح الطرد قبل الدفع",
+      "exchangeOnDelivery": "الاستبدال عند التسليم",
+      "secondaryPhone": "رقم هاتف ثانٍ",
+      "declaredWeight": "الوزن المُصرَّح",
+      "wilayaCoverageQuery": "التغطية قابلة للاستعلام"
+    },
+    "coverage": "التغطية حسب الولاية",
+    "coverageOpen": "عرض التغطية حسب الولاية",
+    "coverageHint": "ولاية غير مُحدَّدة في النمطين تعني « تغطية غير معروفة »، لا « غير مخدومة ».",
+    "home": "المنزل",
+    "pickupPoint": "المكتب",
+    "accountSettings": "إعدادات الحساب — {label}",
+    "defaultAccount": "افتراضي",
+    "accountKind": "طبيعة الحساب",
+    "accountKindHint": "تغيّر التقارير: الموصّل المستقل والشركة لا يُداران بالطريقة نفسها.",
+    "accountKinds": {
+      "DELIVERY_AGENT": "موصّل مستقل",
+      "DELIVERY_COMPANY": "شركة توصيل"
+    },
+    "sendOrderNumber": "إرسال رقم الطلب",
+    "sendOrderNumberHint": "بدل مرجع EcomFlow، للعثور على الطرد هاتفياً مع شركة التوصيل. بدون رقم خارجي، يبقى المرجع هو المُرسَل.",
+    "stockHeldByCourier": "شركة التوصيل تحتفظ بالمخزون",
+    "stockHeldByCourierHint": "البضاعة عندها أصلاً: لا حاجة لتنظيم استلام.",
+    "lastCheck": "آخر تحقّق: {date}"
   }
 }

@@ -3,6 +3,7 @@ import {
   applyPercentage,
   assertCentimes,
   centimesToDinars,
+  computeOrderTotal,
   dinarsToCentimes,
   formatCentimes,
   money,
@@ -98,6 +99,69 @@ describe('representation monetaire', () => {
 
     it('retourne un tableau vide sans ligne', () => {
       expect(allocateCentimes(1_000, [])).toEqual([]);
+    });
+  });
+
+  describe('total de commande', () => {
+    it('additionne articles et livraison', () => {
+      expect(
+        computeOrderTotal({ itemsTotalCentimes: 450_000, deliveryFeeCentimes: 50_000 }),
+      ).toBe(500_000);
+    });
+
+    it('soustrait la remise de commande', () => {
+      // Le defaut que cette fonction corrige : la remise etait lue partout et
+      // soustraite nulle part.
+      expect(
+        computeOrderTotal({
+          itemsTotalCentimes: 450_000,
+          discountCentimes: 50_000,
+          deliveryFeeCentimes: 50_000,
+        }),
+      ).toBe(450_000);
+    });
+
+    it('n applique pas la remise aux frais de livraison', () => {
+      // Une remise superieure aux articles ne doit pas manger le transport :
+      // le transporteur le facture quand meme.
+      const total = computeOrderTotal({
+        itemsTotalCentimes: 100_000,
+        discountCentimes: 100_000,
+        deliveryFeeCentimes: 50_000,
+      });
+      expect(total).toBe(50_000);
+    });
+
+    it('ajoute un echange a la charge du client', () => {
+      expect(
+        computeOrderTotal({ itemsTotalCentimes: 450_000, exchangeAmountCentimes: 20_000 }),
+      ).toBe(470_000);
+    });
+
+    it('accepte un echange negatif quand la boutique rembourse', () => {
+      expect(
+        computeOrderTotal({ itemsTotalCentimes: 450_000, exchangeAmountCentimes: -20_000 }),
+      ).toBe(430_000);
+    });
+
+    it('traite remise et echange comme deux lignes distinctes', () => {
+      // Tout l'interet de la ligne « echange » : deux ajustements de meme
+      // montant, de sens contraires, ne s'annulent pas dans le meme compteur.
+      const total = computeOrderTotal({
+        itemsTotalCentimes: 450_000,
+        discountCentimes: 20_000,
+        deliveryFeeCentimes: 50_000,
+        exchangeAmountCentimes: 20_000,
+      });
+      expect(total).toBe(500_000);
+    });
+
+    it('reste au comportement anterieur quand rien n est renseigne', () => {
+      expect(computeOrderTotal({ itemsTotalCentimes: 450_000 })).toBe(450_000);
+    });
+
+    it('refuse un montant non entier', () => {
+      expect(() => computeOrderTotal({ itemsTotalCentimes: 4_500.5 })).toThrow(RangeError);
     });
   });
 

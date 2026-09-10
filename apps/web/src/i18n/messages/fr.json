@@ -44,7 +44,9 @@
     "previous": "Précédent",
     "next": "Suivant",
     "logout": "Se déconnecter",
-    "openingWorkspace": "Ouverture de votre espace…"
+    "openingWorkspace": "Ouverture de votre espace…",
+    "add": "Ajouter",
+    "remove": "Retirer"
   },
   "language": {
     "label": "Langue",
@@ -87,7 +89,8 @@
     "storeSingleHint": "Votre compte n'est rattache qu'à cette boutique.",
     "openMenu": "Ouvrir la navigation",
     "searchPlaceholder": "Rechercher une commande, un client, un SKU...",
-    "newOrder": "Nouvelle commande"
+    "newOrder": "Nouvelle commande",
+    "carriers": "Transporteurs"
   },
   "orderStatus": {
     "NEW": "Nouvelle",
@@ -710,7 +713,38 @@
     "invalidPurchasePrice": "Prix d'achat invalide.",
     "createFailed": "Création impossible.",
     "namePlaceholder": "Robe longue brodee",
-    "categoryPlaceholder": "Vêtements"
+    "categoryPlaceholder": "Vêtements",
+    "settings": {
+      "open": "Réglages de vente",
+      "title": "Réglages de vente",
+      "standardVariant": "Standard",
+      "inactive": "Inactif",
+      "saveFailed": "L'enregistrement a échoué.",
+      "addFailed": "L'ajout a échoué.",
+      "confirmationNotes": "Consignes pour l'appel de confirmation",
+      "confirmationNotesHint": "Affichées au confirmateur pendant l'appel, dans le tiroir de confirmation.",
+      "confirmationNotesPlaceholder": "Vérifier la taille avant de confirmer. Proposer la housse assortie.",
+      "stockBehavior": "Comportement en rupture",
+      "stockBehaviorHint": "Réglé par déclinaison. « Suivre la boutique » applique les paramètres généraux.",
+      "outOfStock": "En rupture de stock",
+      "outOfStockOptions": {
+        "INHERIT": "Suivre le réglage de la boutique",
+        "ALLOW": "Vendre quand même (précommande)",
+        "REFUSE_ORDER": "Refuser la commande",
+        "REFUSE_CONFIRMATION": "Accepter, bloquer la confirmation"
+      },
+      "exitStrategy": "Sortie des lots",
+      "exitStrategyOptions": {
+        "FIFO": "Premier entré, premier sorti",
+        "LIFO": "Dernier entré, premier sorti",
+        "FEFO": "Péremption la plus proche",
+        "RANDOM": "Aléatoire"
+      },
+      "crossSells": "Produits complémentaires",
+      "crossSellsHint": "Proposés au confirmateur pendant l'appel, pour la vente additionnelle.",
+      "crossSellsEmpty": "Aucun produit complémentaire.",
+      "addBySku": "Ajouter par SKU"
+    }
   },
   "stock": {
     "title": "Stock",
@@ -765,7 +799,20 @@
       "RETURN_DISCARD": "Retour mis au rebut",
       "ADJUSTMENT": "Ajustement"
     },
-    "searchPlaceholder": "Produit, déclinaison ou SKU…"
+    "searchPlaceholder": "Produit, déclinaison ou SKU…",
+    "batchSection": "Suivi par lot (facultatif)",
+    "batchSectionHint": "Renseigner un coût crée un lot pour cette réception. Sans coût, seul le compteur bouge.",
+    "batchCost": "Coût d'achat unitaire (DA)",
+    "batchCostHint": "Le prix réellement payé pour cette réception, pas le prix catalogue.",
+    "batchExpiry": "Date de péremption",
+    "batchExpiryHint": "Utilisée par la stratégie de sortie « péremption la plus proche ».",
+    "batchReference": "Bon de livraison",
+    "batchesTitle": "Lots en stock",
+    "batchRemaining": "{remaining} restants sur {quantity}",
+    "batchReceived": "Reçu le {date}",
+    "batchExpires": "Périme le {date}",
+    "batchShowExhausted": "Afficher les lots épuisés",
+    "invalidBatchCost": "Le coût d'achat doit être un montant positif."
   },
   "customers": {
     "title": "Clients",
@@ -1355,5 +1402,63 @@
     "WRONG_NUMBER": "Numéro incorrect",
     "BUSY": "Occupe",
     "OTHER": "Autre"
+  },
+  "carriers": {
+    "title": "Transporteurs",
+    "subtitle": "Ce que chaque transporteur sait faire, et jusqu'où il livre.",
+    "emptyTitle": "Aucun transporteur au catalogue",
+    "emptyDescription": "Le catalogue des connecteurs est amorcé au démarrage de la plateforme.",
+    "statusAvailable": "Disponible",
+    "statusPlanned": "Prévu",
+    "accountCount": "{count, plural, one {# compte} other {# comptes}}",
+    "wilayaCovered": "{count, plural, one {# wilaya} other {# wilayas}}",
+    "wilayaUnknown": "Couverture non renseignée",
+    "capabilities": "Capacités",
+    "capabilitiesUnknown": "Les capacités de ce transporteur ne sont pas renseignées. Tant qu'elles ne le sont pas, aucune action n'est masquée ni promise.",
+    "capabilityGroups": {
+      "lifecycle": "Cycle de vie du colis",
+      "tracking": "Suivi",
+      "documents": "Documents",
+      "delivery": "Modes de livraison",
+      "money": "Argent",
+      "market": "Usages du marché"
+    },
+    "capabilityNames": {
+      "createShipment": "Créer un colis",
+      "cancelShipment": "Annuler un colis",
+      "updateShipment": "Corriger un colis créé",
+      "trackingPolling": "Interroger le statut",
+      "trackingWebhook": "Recevoir les événements",
+      "proofOfDelivery": "Preuve de livraison",
+      "printableLabel": "Étiquette imprimable",
+      "pickupManifest": "Bordereau de ramassage",
+      "pickupPointDelivery": "Livraison au bureau",
+      "pickupPointDirectory": "Annuaire des bureaux",
+      "cashOnDelivery": "Paiement à la livraison",
+      "feeQuotation": "Calcul des frais",
+      "packageOpening": "Colis ouvert avant paiement",
+      "exchangeOnDelivery": "Échange à la livraison",
+      "secondaryPhone": "Second numéro",
+      "declaredWeight": "Poids déclaré",
+      "wilayaCoverageQuery": "Couverture interrogeable"
+    },
+    "coverage": "Couverture par wilaya",
+    "coverageOpen": "Voir la couverture par wilaya",
+    "coverageHint": "Une wilaya décochée des deux modes signifie « couverture inconnue », pas « non desservie ».",
+    "home": "Domicile",
+    "pickupPoint": "Bureau",
+    "accountSettings": "Réglages du compte — {label}",
+    "defaultAccount": "Par défaut",
+    "accountKind": "Nature du compte",
+    "accountKindHint": "Change le reporting : un agent indépendant et une société ne se pilotent pas pareil.",
+    "accountKinds": {
+      "DELIVERY_AGENT": "Agent de livraison",
+      "DELIVERY_COMPANY": "Société de livraison"
+    },
+    "sendOrderNumber": "Envoyer le numéro de commande",
+    "sendOrderNumberHint": "Plutôt que la référence EcomFlow, pour retrouver un colis au téléphone avec le transporteur. Sans numéro externe, la référence reste envoyée.",
+    "stockHeldByCourier": "Le transporteur détient le stock",
+    "stockHeldByCourierHint": "La marchandise est déjà chez lui : il n'y a pas d'enlèvement à organiser.",
+    "lastCheck": "Dernière vérification : {date}"
   }
 }

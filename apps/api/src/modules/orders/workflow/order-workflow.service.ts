@@ -29,6 +29,7 @@ import {
   STOCK_RESERVED_STATUSES,
   findTransition,
   getOutgoingTransitions,
+  resolveOutOfStockBehavior,
   type OrderStatus,
   type OrderTransitionRule,
   type TransitionActorKind,
@@ -297,16 +298,18 @@ export class OrderWorkflowService {
       }
 
       case 'REQUIRE_STOCK_AVAILABLE': {
+        // Le stock deja reserve pour cette commande n'a pas a l'etre deux fois.
+        if (order.stockReserved) return;
+
         const settings = await client.tenantSettings.findUnique({
           where: { tenantId: order.tenantId },
           select: { allowOversell: true, reserveStockOnConfirm: true },
         });
 
-        // Si la boutique ne reserve pas a la confirmation, ou tolere la
-        // survente, le controle de stock ne doit pas bloquer la confirmation.
-        if (settings?.allowOversell || settings?.reserveStockOnConfirm === false) return;
-        // Le stock deja reserve pour cette commande n'a pas a l'etre deux fois.
-        if (order.stockReserved) return;
+        const shop = {
+          allowOversell: settings?.allowOversell ?? false,
+          reserveStockOnConfirm: settings?.reserveStockOnConfirm ?? true,
+        };
 
         const shortages = await this.inventory.findShortages(
           order.tenantId,
@@ -314,15 +317,31 @@ export class OrderWorkflowService {
           client,
         );
 
-        if (shortages.length > 0) {
+        // Le controle est desormais LIGNE PAR LIGNE.
+        //
+        // Auparavant, un seul reglage de boutique decidait pour tout le
+        // catalogue, et la garde sortait avant meme de regarder le stock des
+        // que la boutique tolerait la survente. Une variante ne pouvait donc
+        // pas se proteger seule — or c'est precisement ce que demande un
+        // article perissable dans une boutique qui accepte les precommandes
+        // sur le reste de sa gamme.
+        //
+        // Une variante restee sur `INHERIT` retrouve exactement l'ancienne
+        // condition (voir `resolveOutOfStockBehavior`).
+        const blocking = shortages.filter(
+          (shortage) => resolveOutOfStockBehavior(shortage.outOfStockBehavior, shop) !== 'ALLOW',
+        );
+
+        if (blocking.length > 0) {
           throw new TransitionGuardFailedException(
             guard,
             'Stock insuffisant pour confirmer cette commande.',
             {
-              shortages: shortages.map((shortage) => ({
+              shortages: blocking.map((shortage) => ({
                 sku: shortage.sku,
                 requested: shortage.requested,
                 available: shortage.available,
+                reason: resolveOutOfStockBehavior(shortage.outOfStockBehavior, shop),
               })),
             },
           );

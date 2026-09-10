@@ -19,7 +19,7 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import { PERMISSIONS } from '@ecomflow/shared';
+import { PERMISSIONS, dinarsToCentimes } from '@ecomflow/shared';
 import { api, ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 import { PageHeader } from '@/components/app-shell';
@@ -32,7 +32,9 @@ import {
   ErrorState,
   Input,
   LoadingState,
+  Money,
   Textarea,
+  formatDate,
   formatDateTime,
 } from '@/components/ui';
 
@@ -61,6 +63,17 @@ interface Movement {
   readonly reservedAfter: number;
   readonly quarantineAfter: number;
   readonly createdAt: string;
+}
+
+interface StockBatch {
+  readonly id: string;
+  readonly reference: string | null;
+  readonly quantity: number;
+  readonly remainingQuantity: number;
+  readonly costCentimes: number;
+  readonly expiresAt: string | null;
+  readonly receivedAt: string;
+  readonly note: string | null;
 }
 
 interface Reconciliation {
@@ -94,6 +107,16 @@ export default function StockPage() {
   const [note, setNote] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
+  // --- Suivi par lot ------------------------------------------------------
+  // `batchOpen` reste ouvert d'une reception a l'autre : une boutique qui suit
+  // ses couts les suit pour tout, et rouvrir la section a chaque saisie serait
+  // une friction quotidienne pour un choix fait une fois.
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchCost, setBatchCost] = useState('');
+  const [batchExpiry, setBatchExpiry] = useState('');
+  const [batchReference, setBatchReference] = useState('');
+  const [showExhausted, setShowExhausted] = useState(false);
+
   const canManage = can(PERMISSIONS.INVENTORY_MANAGE);
 
   const lowStockQuery = useQuery({
@@ -124,13 +147,36 @@ export default function StockPage() {
     enabled: Boolean(selected),
   });
 
+  const batchesQuery = useQuery({
+    queryKey: ['inventory', 'batches', selected?.variantId, showExhausted],
+    queryFn: () =>
+      api.get<StockBatch[]>(`/inventory/variants/${selected?.variantId}/batches`, {
+        query: { includeExhausted: showExhausted || undefined },
+      }),
+    enabled: Boolean(selected),
+  });
+
+  /** Horizon d'alerte de peremption : trente jours. */
+  const soon = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
   const stockMutation = useMutation({
     mutationFn: () => {
       const value = Number(quantity);
       if (mode === 'inbound') {
+        // Le cout est le SEUL declencheur de lot : sans lui, la reception reste
+        // un simple incrementement du compteur, comme avant.
+        const cost = batchCost.trim() ? dinarsToCentimes(batchCost) : null;
+
         return api.post(`/inventory/variants/${selected?.variantId}/inbound`, {
           quantity: value,
           note: note.trim() || undefined,
+          ...(cost !== null
+            ? {
+                costCentimes: cost,
+                ...(batchExpiry ? { expiresAt: new Date(batchExpiry).toISOString() } : {}),
+                ...(batchReference.trim() ? { batchReference: batchReference.trim() } : {}),
+              }
+            : {}),
         });
       }
       return api.post(`/inventory/variants/${selected?.variantId}/adjust`, {
@@ -141,6 +187,9 @@ export default function StockPage() {
     onSuccess: () => {
       setQuantity('');
       setNote('');
+      setBatchCost('');
+      setBatchExpiry('');
+      setBatchReference('');
       setFormError(null);
       void queryClient.invalidateQueries({ queryKey: ['inventory'] });
       void queryClient.invalidateQueries({ queryKey: ['products'] });
@@ -164,6 +213,14 @@ export default function StockPage() {
     if (mode === 'adjust' && !note.trim()) {
       setFormError(t('reasonRequired'));
       return;
+    }
+
+    if (mode === 'inbound' && batchCost.trim()) {
+      const cost = dinarsToCentimes(batchCost);
+      if (cost === null || cost < 0) {
+        setFormError(t('invalidBatchCost'));
+        return;
+      }
     }
 
     stockMutation.mutate();
@@ -371,6 +428,52 @@ export default function StockPage() {
                       }
                     />
 
+                    {/* --- Suivi par lot, replie par defaut ---------------
+                        Une reception ordinaire n'a aucune raison de payer le
+                        cout de trois champs supplementaires. Ceux qui suivent
+                        leurs couts d'achat reels, ou vendent du perissable,
+                        ouvrent la section une fois et la retrouvent ouverte
+                        pour les receptions suivantes. */}
+                    {mode === 'inbound' ? (
+                      <div className="rounded-md border border-slate-200 bg-slate-50/60 p-2">
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-between text-xs font-medium text-slate-600 hover:text-slate-900"
+                          onClick={() => setBatchOpen((value) => !value)}
+                        >
+                          <span>{t('batchSection')}</span>
+                          <span className="text-slate-400">{batchOpen ? '−' : '+'}</span>
+                        </button>
+
+                        {batchOpen ? (
+                          <div className="mt-2 space-y-2">
+                            <p className="text-xs text-slate-500">{t('batchSectionHint')}</p>
+                            <Input
+                              label={t('batchCost')}
+                              inputMode="decimal"
+                              value={batchCost}
+                              onChange={(event) => setBatchCost(event.target.value)}
+                              placeholder="2500"
+                              hint={t('batchCostHint')}
+                            />
+                            <Input
+                              label={t('batchExpiry')}
+                              type="date"
+                              value={batchExpiry}
+                              onChange={(event) => setBatchExpiry(event.target.value)}
+                              hint={t('batchExpiryHint')}
+                            />
+                            <Input
+                              label={t('batchReference')}
+                              value={batchReference}
+                              onChange={(event) => setBatchReference(event.target.value)}
+                              placeholder="BL-2026-0142"
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
                     <Button type="submit" className="w-full" loading={stockMutation.isPending}>
                       {mode === 'inbound' ? t('submitInbound') : t('submitAdjust')}
                     </Button>
@@ -381,6 +484,66 @@ export default function StockPage() {
                   </p>
                 )}
               </Card>
+
+              {/* --- Lots -------------------------------------------------
+                  Affiche seulement s'il y en a : une boutique qui ne suit pas
+                  ses lots ne doit pas voir une carte vide lui reprocher un
+                  usage qu'elle n'a pas choisi. */}
+              {(batchesQuery.data?.length ?? 0) > 0 ? (
+                <Card title={t('batchesTitle')} padded={false}>
+                  <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
+                    {batchesQuery.data?.map((batch) => {
+                      const exhausted = batch.remainingQuantity === 0;
+                      const expiring =
+                        batch.expiresAt !== null && new Date(batch.expiresAt) <= soon;
+
+                      return (
+                        <li key={batch.id} className="px-3 py-2 text-sm">
+                          <div className="flex items-center justify-between gap-2">
+                            <span
+                              className={
+                                exhausted ? 'text-slate-400' : 'font-medium text-slate-800'
+                              }
+                            >
+                              {t('batchRemaining', {
+                                remaining: batch.remainingQuantity,
+                                quantity: batch.quantity,
+                              })}
+                            </span>
+                            <Money centimes={batch.costCentimes} />
+                          </div>
+
+                          <p className="text-xs text-slate-500">
+                            {t('batchReceived', { date: formatDate(batch.receivedAt) })}
+                            {batch.reference ? ` · ${batch.reference}` : ''}
+                          </p>
+
+                          {batch.expiresAt ? (
+                            <p
+                              className={
+                                expiring ? 'text-xs font-medium text-warning' : 'text-xs text-slate-500'
+                              }
+                            >
+                              {t('batchExpires', { date: formatDate(batch.expiresAt) })}
+                            </p>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  <div className="border-t border-slate-100 px-3 py-2">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                      <input
+                        type="checkbox"
+                        checked={showExhausted}
+                        onChange={(event) => setShowExhausted(event.target.checked)}
+                      />
+                      {t('batchShowExhausted')}
+                    </label>
+                  </div>
+                </Card>
+              ) : null}
 
               <Card title={t('movementsTitle')} padded={false}>
                 {movementsQuery.isLoading ? (

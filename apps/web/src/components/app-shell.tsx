@@ -132,6 +132,12 @@ const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEntry[] }[
         icon: Truck,
         permission: PERMISSIONS.SHIPMENTS_READ,
       },
+      {
+        href: '/transporteurs',
+        labelKey: 'carriers',
+        icon: Truck,
+        permission: PERMISSIONS.SHIPMENTS_READ,
+      },
       { href: null, labelKey: 'tracking', icon: MapPin, permission: PERMISSIONS.SHIPMENTS_TRACK },
       {
         href: '/retours',

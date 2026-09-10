@@ -75,6 +75,47 @@ export function sumCentimes(values: readonly Centimes[]): Centimes {
   return values.reduce<Centimes>((total, value) => total + assertCentimes(value), 0);
 }
 
+/** Composantes du total d'une commande. */
+export interface OrderTotalParts {
+  readonly itemsTotalCentimes: Centimes;
+  /** Remise commerciale consentie sur l'ensemble de la commande. */
+  readonly discountCentimes?: Centimes;
+  readonly deliveryFeeCentimes?: Centimes;
+  /**
+   * Ajustement d'echange (SAV), signe : positif si le client complete,
+   * negatif si la boutique rembourse.
+   */
+  readonly exchangeAmountCentimes?: Centimes;
+}
+
+/**
+ * Total a encaisser pour une commande.
+ *
+ * POURQUOI CETTE FONCTION EXISTE
+ *   La formule etait ecrite en toutes lettres a deux endroits (creation de
+ *   commande, et recalcul depuis le centre de confirmation), et les deux
+ *   omettaient `discountCentimes` : la remise de commande etait lue par les
+ *   requetes, jamais soustraite. Le champ ne pouvait donc que rester a zero,
+ *   et l'aurait fausse le jour ou un ecran aurait commence a l'ecrire.
+ *
+ *   Une seule fonction rend desormais la formule verifiable en un endroit, et
+ *   l'ajout d'une composante — l'echange — impossible a oublier a l'un des
+ *   deux appels.
+ *
+ * ORDRE DES TERMES
+ *   Articles moins remise, plus livraison, plus echange. La remise porte sur la
+ *   marchandise et non sur le transport : appliquer l'une a l'autre reviendrait
+ *   a offrir un port que le transporteur facture quand meme.
+ */
+export function computeOrderTotal(parts: OrderTotalParts): Centimes {
+  const items = assertCentimes(parts.itemsTotalCentimes);
+  const discount = assertCentimes(parts.discountCentimes ?? 0);
+  const delivery = assertCentimes(parts.deliveryFeeCentimes ?? 0);
+  const exchange = assertCentimes(parts.exchangeAmountCentimes ?? 0);
+
+  return items - discount + delivery + exchange;
+}
+
 /**
  * Applique un pourcentage a un montant en centimes avec arrondi commercial
  * (arrondi au centime le plus proche, 0.5 arrondi vers le haut).

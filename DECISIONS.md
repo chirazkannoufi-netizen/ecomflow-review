@@ -1209,6 +1209,454 @@ question ne se rouvre pas.
 
 ---
 
+## D-044 — Le comportement de rupture se règle par variante, et hérite par défaut
+
+**Date** : 10/09/2026 · **Statut** : appliquée
+
+**Contexte** — L'audit fonctionnel Ecomanager relève deux réglages de rupture
+distincts : *refuser la commande* et *refuser la confirmation*. EcomFlow n'en
+avait qu'un, `TenantSettings.allowOversell`, valable pour **tout** le catalogue.
+
+**Problème** — Un réglage unique par boutique ne peut pas décrire un catalogue
+mixte. Une boutique qui accepte les précommandes sur ses articles d'appel doit
+pouvoir refuser net la vente d'un article périssable ; avec un seul
+interrupteur, elle choisit entre survendre le périssable et perdre les
+précommandes.
+
+Second problème, plus discret : le brouillon de spécification proposait
+`outOfStockBehavior @default(ALLOW)`. Appliqué tel quel, il aurait **autorisé la
+survente sur l'intégralité des catalogues existants** le jour du déploiement —
+exactement l'inverse du réglage de boutique par défaut (`allowOversell = false`).
+
+**Décision** — `ProductVariant.outOfStockBehavior`, à quatre valeurs dont
+`INHERIT`, **valeur par défaut**. La résolution `INHERIT` → décision applicable
+vit dans une fonction partagée unique, `resolveOutOfStockBehavior`
+(`packages/shared/src/enums.ts`), et reproduit **exactement** la condition qui
+prévalait avant : blocage si et seulement si la boutique refuse la survente
+*et* réserve son stock à la confirmation.
+
+`REFUSE_ORDER` a reçu le point d'application qui lui manquait : un contrôle à la
+**création** de la commande (`OrdersService.assertNoIntakeRefusal`). Sans lui, le
+seul contrôle de stock du produit se trouvant dans la garde de transition, une
+variante réglée sur « refuser la commande » aurait eu exactement le même effet
+que « refuser la confirmation » — le réglage aurait menti à qui l'a choisi.
+
+**Justification** — Trois écrans posent la même question de trois façons (« puis-je
+confirmer ? », « puis-je enregistrer ? », « que va faire ce réglage ? »). Une
+règle recopiée trois fois est une règle qui divergera ; une fonction partagée se
+teste une fois.
+
+**Alternatives écartées** —
+- *Un booléen `allowOversell` par variante* : ne distingue pas les deux refus,
+  et l'audit montre que la distinction a un sens opérationnel — refuser la
+  confirmation laisse la commande visible et rappelable, refuser la commande
+  non.
+- *Une colonne nullable au lieu de `INHERIT`* : « pas de valeur » et « suivre la
+  boutique » se ressemblent en base mais pas à l'écran, où le menu doit
+  nommer le comportement hérité pour être compréhensible.
+- *`@default(ALLOW)` comme le suggérait le brouillon* : change le comportement
+  de toutes les boutiques existantes à la migration.
+
+**Impact** — La garde `REQUIRE_STOCK_AVAILABLE` évalue désormais **ligne par
+ligne** au lieu de sortir tôt sur le réglage de boutique. Une ligne de feuille
+Google refusée à l'entrée est comptée en échec avec le code `STOCK_REFUSED`,
+distinct de `MAPPING_ERROR` et de `UNEXPECTED_ERROR` : une décision du
+commerçant ne doit pas se lire comme une panne de la synchronisation.
+
+---
+
+## D-045 — Les lots détaillent le compteur de stock, ils ne le remplacent pas
+
+**Date** : 10/09/2026 · **Statut** : appliquée
+
+**Contexte** — L'audit demande une stratégie de sortie (FIFO / LIFO / FEFO /
+Aléatoire) « exécutable via des lots réels (entrée, coût, péremption) ».
+
+**Problème** — `InventoryLevel` répond à « combien en ai-je ? » et à rien
+d'autre. Deux réceptions du même article à deux prix, ou à deux dates de
+péremption, étaient additionnées en un seul nombre : le détail — donc le coût
+d'achat réel et la péremption — était perdu **à l'entrée**. La marge calculée
+ailleurs dans le produit reposait dès lors sur un prix d'achat moyen implicite
+que personne n'avait décidé.
+
+**Décision** — `StockBatch` est une **projection de détail**, pas une source de
+vérité concurrente. Trois conséquences assumées :
+
+1. **Le compteur reste l'autorité.** `outboundConditionally` décide, sous
+   condition SQL, si la sortie est possible ; `consumeBatches` ne fait que
+   répartir une sortie **déjà acquise**.
+2. **La couverture est partielle par construction.** La somme des
+   `remainingQuantity` peut être *inférieure* à `onHand`, jamais supérieure : le
+   stock antérieur à l'adoption des lots, et les retours remis en vente, ne sont
+   rattachés à aucun lot. Une sortie qui dépasse ce qui est tracé consomme tout
+   ce qui existe et s'arrête là, **sans échouer**. Refuser l'expédition d'un
+   colis réel parce qu'un lot n'a pas été saisi ferait primer la comptabilité du
+   détail sur le fait physique.
+3. **L'adoption est progressive.** Le paramètre `batch` de
+   `InventoryService.inbound` est facultatif, et le **coût d'achat en est le
+   seul déclencheur**. Une réception sans coût reste un simple incrément du
+   compteur, comme avant.
+
+La migration **ne crée aucun lot rétroactif**. Un lot porte une date de réception
+et un coût réels ; les inventer produirait des chiffres de marge faux et
+crédibles, ce qui est pire que leur absence.
+
+**Justification** — Le choix se résume à : que se passe-t-il quand les deux
+sources divergent ? En faisant du lot un détail subordonné, la divergence n'a
+qu'une lecture possible — « une partie du stock n'est pas tracée » — au lieu de
+poser à chaque écart la question insoluble de savoir qui a raison.
+
+**Alternatives écartées** —
+- *Les lots comme source unique, `InventoryLevel` recalculé* : impose une reprise
+  de tout le stock existant avant de pouvoir expédier quoi que ce soit, et
+  transforme chaque lot manquant en blocage d'exploitation.
+- *Un `costCentimes` moyen pondéré sur la variante* : moins de tables, mais perd
+  la péremption, donc rend FEFO inapplicable.
+
+**Impact** — `remainingQuantity` est décrémenté par un `updateMany` **conditionnel**
+(`remainingQuantity >= take`), qui sert de verrou : deux sorties concurrentes ne
+peuvent pas vider le même lot deux fois. La base pose les garde-fous
+correspondants (`CHECK` reste ∈ [0, quantité], quantité > 0, coût ≥ 0) et un
+index partiel `WHERE remaining_quantity > 0` garde le balayage proportionnel au
+stock vivant, non à l'historique des réceptions.
+
+---
+
+## D-046 — La grille de frais de livraison appartient à la boutique ; le produit ne fait que la surcharger
+
+**Date** : 10/09/2026 · **Statut** : appliquée
+
+**Contexte** — L'audit demande une grille sur 58 wilayas plus une ligne
+« Toutes », avec surcharge par produit, et insiste : « jamais 58 lignes par
+fiche produit ».
+
+**Problème** — Les frais de livraison étaient saisis à la main, commande par
+commande (`Order.deliveryFeeCentimes`), ou hérités d'une valeur par défaut de
+configuration d'import. Aucune grille n'existait.
+
+**Décision** — Deux tables, dissymétriques à dessein :
+
+- `TenantDeliveryFee` — **dense**, jusqu'à 59 lignes par boutique, l'endroit
+  normal où l'on lit un tarif.
+- `ProductDeliveryFeeOverride` — **creuse**, on n'y écrit que l'exception
+  (volumineux, fragile, livraison offerte). Un `CHECK` interdit une ligne dont
+  les deux tarifs sont absents : une surcharge qui ne surcharge rien ferait
+  croire à un tarif particulier là où la grille s'applique.
+
+Le code wilaya `0` est un **sentinelle** porteur de la ligne « Toutes ». Une
+valeur nulle aurait été plus explicite mais ne peut pas entrer dans une clé
+primaire ; `0` est hors du découpage administratif (1..58), donc sans ambiguïté,
+et un `CHECK BETWEEN 0 AND 58` garantit qu'aucun autre code hors référentiel ne
+passe.
+
+Le vocabulaire suit `DeliveryType` : **`pickupPointFeeCentimes`**, et non
+« stopdesk » comme l'écrivait le brouillon. Le schéma nomme déjà ce mode
+`PICKUP_POINT` depuis la migration `20260909120000_order_delivery_type` ;
+introduire un second mot pour la même notion aurait obligé à traduire à chaque
+frontière entre la grille, la commande et le bordereau.
+
+**Justification** — Le coût de livraison dépend de la destination et du
+transporteur, pas de l'article. Le porter sur la fiche produit obligerait à
+saisir 58 lignes par produit et à les corriger 58 fois à chaque changement de
+tarif.
+
+**Alternatives écartées** —
+- *Une grille par transporteur uniquement* : le prix facturé au client n'est pas
+  le coût payé au transporteur ; la boutique fixe le premier, le second se
+  constate (voir `Order.carrierCostCentimes`).
+- *Un JSON `{ wilaya: tarif }` sur `TenantSettings`* : impossible à contraindre
+  (aucun `CHECK` sur un code de wilaya), impossible à interroger, et transforme
+  toute correction d'un tarif en réécriture de la ligne entière.
+
+**Impact** — `returnFeeCentimes` est ajouté au passage à la grille : en paiement
+à la livraison, les frais de retour sont rarement nuls et étaient jusqu'ici
+absents du calcul de rentabilité.
+
+---
+
+## D-047 — L'échange est une ligne de total, pas une remise — et la remise est enfin soustraite
+
+**Date** : 10/09/2026 · **Statut** : appliquée
+
+**Contexte** — L'audit signale une ligne « Échange » manquante dans les totaux
+de commande. Le document de liaison la portait en « à vérifier ».
+
+**Problème** — Vérification faite, le manque était double, et le second n'était
+pas dans l'audit.
+
+1. **L'échange n'existait pas.** Un client qui rapporte un article et en reprend
+   un autre produit une différence de prix qui n'était ni une remise ni un frais
+   de livraison — elle finissait donc dans l'un des deux, faussant au choix le
+   taux de remise accordé ou le coût de transport.
+2. **`Order.discountCentimes` était un champ mort.** Il figurait au schéma, était
+   *lu* par les requêtes (`confirmation.service.ts`, `dashboard.service.ts`), et
+   n'était **écrit nulle part ni soustrait nulle part** : les deux endroits qui
+   calculent un total écrivaient `itemsTotal + deliveryFee`. Le champ ne pouvait
+   donc que rester à zéro — et aurait faussé les totaux le jour où un écran
+   aurait commencé à l'écrire.
+
+**Décision** — Une fonction unique, `computeOrderTotal`
+(`packages/shared/src/money.ts`), remplace la formule recopiée aux deux endroits :
+
+> articles − remise + livraison + échange
+
+L'échange est **signé** : positif quand le client complète, négatif quand la
+boutique rembourse. La remise porte sur la marchandise et **non** sur le
+transport : l'appliquer au port reviendrait à offrir une livraison que le
+transporteur facture quand même.
+
+**Justification** — Ajouter `exchangeAmountCentimes` sans traiter la remise
+aurait produit un second champ décoratif à côté du premier. Le fait que la
+formule soit écrite deux fois est précisément ce qui a permis à l'oubli de
+survivre : une seule fonction rend la prochaine composante impossible à oublier
+à l'un des deux appels.
+
+Replier la remise dans la formule ne change **aucun total existant**, puisque le
+champ vaut zéro sur toutes les lignes — le défaut est corrigé sans reprise de
+données.
+
+**Alternatives écartées** —
+- *Un `OrderAdjustment` générique typé (remise / échange / geste commercial)* :
+  plus extensible, mais transforme la lecture d'un total en agrégation, alors
+  que trois des quatre termes sont déjà des colonnes. À reconsidérer si un
+  troisième type d'ajustement apparaît.
+- *Traiter l'échange comme une ligne de commande à prix négatif* : casse le
+  calcul de marge, qui suppose une quantité positive par ligne, et fait
+  apparaître un article fantôme sur le bordereau transporteur.
+
+**Impact** — `OrderAmountsResult` expose désormais les quatre composantes au
+centre de confirmation, et non plus trois : un total qu'on ne peut pas
+décomposer à l'écran est un total que l'agent au téléphone ne peut pas défendre.
+
+---
+
+## D-048 — Le contrat de classification multi-tenant devient exécutable
+
+**Date** : 10/09/2026 · **Statut** : appliquée
+
+**Contexte** — `tenant-scoped-models.ts` se déclare, en tête de fichier,
+« vérifié par un test unitaire (`tenant-guard.spec.ts`) qui compare son contenu
+au modèle Prisma réel », et en conclut qu'« il est donc impossible d'ajouter une
+table portant des données de boutique sans décider consciemment de son
+périmètre ».
+
+**Problème** — Ce test n'existait pas. La garantie annoncée n'était pas tenue :
+un modèle oublié dans la liste ne faisait échouer aucune suite. Et l'oubli est
+silencieux — le garde d'isolation ne connaît que trois familles ; un modèle
+absent des trois n'est pas refusé par défaut, il est **inconnu**, donc non
+filtré. C'est le mode de défaillance exact que D-004 dit vouloir rendre
+impossible.
+
+Le défaut a été trouvé en ajoutant les quatre modèles de D-044 à D-046, qui
+reposaient précisément sur ce filet.
+
+**Décision** — Le test est écrit. Il lit `schema.prisma` **comme un fichier
+texte**, et non via `Prisma.dmmf` : il doit pouvoir échouer sur une machine où
+`prisma generate` n'a pas encore tourné, c'est-à-dire précisément au moment où
+l'on vient d'ajouter un modèle. Sept assertions, dont la principale : tout modèle
+portant un `tenantId` **non nul** doit être classé scopé.
+
+**Justification** — Un commentaire qui décrit une garantie inexistante est pire
+qu'un commentaire absent : il dispense le relecteur suivant de vérifier.
+
+**Alternatives écartées** —
+- *Retirer la mention du test dans le commentaire* : rend le fichier honnête et
+  le code moins sûr.
+- *Dériver la classification du schéma au lieu de la maintenir à la main* :
+  supprimerait la décision consciente que D-004 cherche justement à imposer.
+
+**Impact** — Une exception documentée est apparue à l'écriture :
+`ProcessedWebhook` est global **tout en portant** un `tenantId` nullable, parce
+que la déduplication des webhooks a lieu avant la résolution du tenant. Elle est
+nommée dans le test ; en ajouter une autre passe par ce fichier.
+
+---
+
+## D-049 — La matrice de capacités transporteur : colonnes explicites, projetées depuis le code
+
+**Date** : 10/09/2026 · **Statut** : appliquée
+
+**Contexte** — L'audit fonctionnel Ecomanager qualifie la matrice de capacités
+de « trouvaille la plus utile de tout l'audit », avec une règle simple : *une
+action non supportée ne doit pas s'afficher*. Le document de liaison laissait
+explicitement le choix de modélisation à l'implémentation — colonnes booléennes
+sur un modèle dédié, ou JSON sur `Carrier`.
+
+**Problème** — EcomFlow ne distinguait les transporteurs que par deux drapeaux,
+`supportsWebhooks` et `supportsCancellation`, et proposait partout les mêmes
+actions. Le prix se paie à l'usage : un bouton cliqué qui échoue. « Annuler le
+colis » chez un transporteur qui ne sait pas annuler, « Imprimer l'étiquette »
+chez un transporteur qui n'en produit pas. À chaque fois l'agent croit avoir
+agi, le client n'est pas prévenu, et personne ne le découvre avant que le colis
+arrive quand même.
+
+**Décision** — Un modèle `CarrierCapability`, **dix-sept colonnes booléennes
+explicites**, une ligne par transporteur. Pas de JSON. Trois raisons ont
+tranché :
+
+1. **Ces booléens décrivent ce que le CODE sait faire.** La vérité vit dans les
+   adaptateurs (`CarrierAdapter`) ; la table en est la **projection**, alimentée
+   par le catalogue de seed. Un blob édité à la main dérive de l'implémentation
+   réelle, et l'interface se remet alors à proposer des actions impossibles —
+   le défaut même que la matrice doit supprimer.
+2. **« Quels transporteurs produisent un bordereau de ramassage ? »** est une
+   question de comparatif. Elle s'écrit en SQL sur une colonne ; sur un JSON
+   elle s'écrit mal et ne s'indexe pas.
+3. **Ajouter une capacité DOIT coûter une migration**, parce que cela veut dire
+   l'implémenter dans chaque adaptateur. Ici, le coût est un signal, pas une
+   friction.
+
+**Une seule source écrite à la main.** `Carrier.supportsWebhooks` et
+`supportsCancellation` existaient déjà et sont lus par plusieurs services. Plutôt
+que de les saisir une seconde fois, le seed les **dérive** de la matrice
+(`trackingWebhook` et `cancelShipment`). Il n'y a donc jamais deux vérités à
+maintenir d'accord — vérifié en base après amorçage : aucune dérive.
+
+**Alternatives écartées** —
+- *JSON sur `Carrier`* : plus souple, mais la souplesse n'est pas la qualité
+  recherchée — voir les trois raisons ci-dessus.
+- *Déduire les capacités des adaptateurs à chaud, sans table* : élégant, mais
+  rend les transporteurs `PLANNED` invisibles (ils n'ont pas d'adaptateur), et
+  interdit toute requête comparative.
+- *Supprimer les deux colonnes historiques* : refactorisation large de
+  `shipments.service`, du registre et du seed, pour un gain nul dès lors que la
+  dérivation supprime le risque de divergence.
+
+**Portée à connaître** — La liste des dix-sept capacités est dérivée du **contrat
+`CarrierAdapter` et des opérations réelles du produit**, non recopiée du document
+d'audit, qui vit dans le chantier Drizzle et n'était pas accessible ici. Elle est
+à réconcilier avec la liste de l'audit avant de la considérer figée.
+
+**Impact** — `CARRIER_CAPABILITY_KEYS` fixe l'ordre d'affichage, et un test
+unitaire (`carrier-capabilities.spec.ts`) vérifie qu'il correspond exactement aux
+colonnes du schéma. Sans lui, une colonne ajoutée sans clé serait **invisible** :
+la capacité existerait, serait renseignée, et n'apparaîtrait jamais à l'écran —
+personne ne cherche un bouton qu'on ne lui a jamais montré. Une contrainte
+`CHECK` interdit par ailleurs un annuaire de bureaux chez un transporteur qui ne
+livre pas au bureau.
+
+---
+
+## D-050 — L'absence de couverture veut dire « inconnue », jamais « non desservie »
+
+**Date** : 10/09/2026 · **Statut** : appliquée
+
+**Contexte** — L'audit demande une couverture domicile / bureau par wilaya,
+« par transporteur, pas seulement par boutique ».
+
+**Problème** — Rien ne décrivait où un transporteur livre. Et la question du
+défaut se pose immédiatement : que signifie une wilaya sans ligne ?
+
+**Décision** — `CarrierWilayaCoverage`, porté par le **transporteur** et non par
+la boutique : une wilaya desservie l'est pour tout le monde, c'est un fait du
+réseau. La grille tarifaire, elle, reste à la boutique (D-046) — les deux
+répondent à deux questions différentes : « peut-on livrer là ? » et « combien
+le facture-t-on au client ? ».
+
+Une wilaya sans ligne signifie **« couverture inconnue »**, pas « non
+desservie ». Trois conséquences suivies partout :
+
+- pas de valeur par défaut couvrant les 58 wilayas ;
+- une contrainte `CHECK` refuse une ligne qui ne couvre **aucun** des deux
+  modes : l'absence de ligne porte déjà ce sens, et deux façons d'écrire la même
+  chose finiraient par se contredire ;
+- côté service, décocher les deux modes **supprime** la ligne au lieu d'en
+  écrire une vide.
+
+Pas de sentinelle « toutes les wilayas » ici, contrairement à la grille
+tarifaire : une couverture s'établit wilaya par wilaya, et un « partout » global
+serait une affirmation que le réseau ne tient jamais tout à fait. Le `CHECK`
+porte donc sur `1..58`, sans le `0`.
+
+**Justification** — Le silence est la valeur la plus fréquente d'une table qu'on
+vient de créer. Lui donner le sens « non desservie » masquerait 58 wilayas d'un
+coup, et l'écran affirmerait avec aplomb quelque chose que personne n'a saisi.
+
+**Impact** — L'écran affiche « Couverture non renseignée » plutôt qu'un zéro, et
+la matrice d'un transporteur sans ligne montre un avertissement plutôt que
+dix-sept croix — la seconde forme ferait croire à une incapacité constatée là où
+il n'y a qu'une saisie manquante.
+
+---
+
+## D-051 — Trois réglages d'exploitation portés par le COMPTE, pas par le transporteur
+
+**Date** : 10/09/2026 · **Statut** : appliquée
+
+**Contexte** — L'audit relève trois manques : agent de livraison contre société
+de livraison, numéro de commande plutôt que référence, et stock détenu par le
+transporteur.
+
+**Problème** — Ces trois-là auraient pu se poser sur `Carrier`. Ce serait une
+erreur de niveau : ce ne sont pas des propriétés du **réseau**, mais des
+arrangements entre **une boutique** et son transporteur. Deux boutiques
+travaillant avec Yalidine peuvent parfaitement, l'une lui confier son stock et
+l'autre non.
+
+**Décision** — Les trois vivent sur `CarrierAccount`, déjà scopé au tenant :
+
+- `kind` (`DELIVERY_AGENT` / `DELIVERY_COMPANY`) — change le **reporting** : un
+  livreur indépendant payé à la course et une société sous contrat ne se
+  pilotent pas de la même façon, et les mélanger dans un même total rend le
+  chiffre inexploitable.
+- `sendOrderNumberInsteadOfReference` — au téléphone, le commerçant cite le
+  numéro qu'il a sous les yeux, celui de sa feuille. Si le transporteur a
+  enregistré « ORD-2026-000123 », personne ne retrouve le colis. **À défaut de
+  numéro externe** (commande saisie à la main), la référence EcomFlow reste
+  envoyée : mieux vaut une référence que rien.
+- `stockHeldByCourier` — change la logique de réservation : la marchandise est
+  déjà chez lui, il n'y a pas d'enlèvement à organiser.
+
+**Justification** — Le premier de ces réglages est le seul qui aurait pu se
+défendre au niveau du transporteur, et encore : c'est le **compte** que la
+boutique ouvre, pas le réseau, qui est tenu par un agent ou par une société.
+
+**Impact** — `sendOrderNumberInsteadOfReference` est **appliqué**, pas seulement
+stocké : `buildShipmentRequest` choisit la référence envoyée au connecteur. Un
+réglage qui ne change rien est pire qu'un réglage absent — il fait croire à
+l'utilisateur qu'il a agi.
+
+`stockHeldByCourier` est en revanche **déclaratif à ce stade** : la logique de
+réservation ne le consulte pas encore. Il est renseignable et visible ; le
+brancher demande de décider ce qu'un stock distant veut dire pour
+`InventoryLevel`, ce qui n'est pas tranché ici et ne doit pas l'être en passant.
+
+---
+
+## D-052 — L'écran Transporteurs n'existait pas ; il est créé, pas mis à jour
+
+**Date** : 10/09/2026 · **Statut** : appliquée
+
+**Contexte** — Le plan d'implémentation demandait de « mettre à jour l'écran
+transporteurs » en divulgation progressive.
+
+**Problème** — Cet écran n'existait pas. Le produit exposait bien
+`GET /carriers` et `GET /carrier-accounts`, mais aucune route web, aucune entrée
+de menu. Les transporteurs n'étaient visibles qu'indirectement, depuis
+`/expeditions`.
+
+**Décision** — Créer `/transporteurs`, et le placer dans le groupe OPERATIONS
+entre « Expéditions » et « Suivi » — là où la Design Suite laissait la place
+(D-043). Trois niveaux de divulgation :
+
+1. la liste : nom, état d'intégration, nombre de wilayas couvertes ;
+2. l'ouverture d'une ligne : la matrice des capacités, groupée en six familles
+   plutôt qu'en dix-sept cases à cocher alignées ;
+3. deux replis internes : la couverture wilaya par wilaya (58 lignes qu'on ne
+   consulte qu'en cas de doute) et les réglages du compte.
+
+**Une seconde vue du catalogue, assumée.** `GET /carriers` ne liste que les
+connecteurs **implémentés**, délibérément (« le produit ne promet que ce qu'il
+tient »). Le nouvel endpoint `GET /carrier-catalogue` montre aussi les
+transporteurs `PLANNED` : sans cela, le commerçant ne peut pas savoir que son
+transporteur habituel arrive, et le redemande. Les deux vues coexistent : l'une
+dit ce qui **existe**, l'autre ce qui est **utilisable aujourd'hui**.
+
+**Impact** — `api.put` est ajouté au client web pour la déclaration de
+couverture, qui est un remplacement idempotent et non une création.
+
+---
+
 ---
 
 *Ce journal est mis à jour à chaque décision structurante. Les entrées ne sont

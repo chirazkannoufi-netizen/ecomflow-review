@@ -294,6 +294,10 @@ export const api = {
   patch: <T>(path: string, body?: unknown, options: Omit<RequestOptions, 'method'> = {}) =>
     apiRequest<T>(path, { ...options, method: 'PATCH', body }),
 
+  /** Remplacement idempotent : rejouer l'appel doit laisser le meme etat. */
+  put: <T>(path: string, body?: unknown, options: Omit<RequestOptions, 'method'> = {}) =>
+    apiRequest<T>(path, { ...options, method: 'PUT', body }),
+
   delete: <T>(path: string, options: Omit<RequestOptions, 'method' | 'body'> = {}) =>
     apiRequest<T>(path, { ...options, method: 'DELETE' }),
 };

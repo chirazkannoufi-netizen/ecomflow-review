@@ -21,6 +21,7 @@ import {
   DEFAULT_DUPLICATE_POLICY,
   ERROR_CODES,
   buildPageMeta,
+  computeOrderTotal,
   findDuplicates,
   formatOrderReference,
   normalizeForComparison,
@@ -28,14 +29,17 @@ import {
   resolveWilaya,
   toSkipTake,
   type DuplicateCandidateInput,
+  type OutOfStockBehavior,
   type Paginated,
 } from '@ecomflow/shared';
 import {
   ConflictException,
+  InsufficientStockException,
   NotFoundException,
   ValidationException,
 } from '../../common/errors/business.exception';
 import { ClockService } from '../../infra/clock/clock.service';
+import { InventoryService } from '../inventory/inventory.service';
 import { InjectPrisma, type PrismaClientExtended } from '../../infra/prisma/prisma.service';
 import type { PrismaTransactionClient } from '../../infra/prisma/prisma.service';
 import { isUniqueConstraintError } from '../../infra/prisma/prisma.service';
@@ -116,6 +120,7 @@ export class OrdersService {
     private readonly customerStats: CustomerStatsService,
     private readonly outbox: OutboxService,
     private readonly clock: ClockService,
+    private readonly inventory: InventoryService,
   ) {}
 
   // ==========================================================================
@@ -212,9 +217,15 @@ export class OrdersService {
     // --- 3. Lignes : resolution des variantes et des prix ------------------
     const lines = await this.resolveLines(tx, input.tenantId, input.lines);
 
+    // --- 3 bis. Rupture de stock refusant l'ENREGISTREMENT meme -----------
+    await this.assertNoIntakeRefusal(tx, input.tenantId, lines);
+
     const itemsTotal = lines.reduce((total, line) => total + line.lineTotalCentimes, 0);
     const deliveryFee = input.deliveryFeeCentimes ?? 0;
-    const total = itemsTotal + deliveryFee;
+    const total = computeOrderTotal({
+      itemsTotalCentimes: itemsTotal,
+      deliveryFeeCentimes: deliveryFee,
+    });
 
     // Le total fourni par la source est un CONTROLE, pas une autorite : si la
     // feuille contient une erreur de calcul, EcomFlow fait foi et le signale.
@@ -526,10 +537,58 @@ export class OrdersService {
           variant.purchasePriceCentimes ?? variant.product.purchasePriceCentimes,
         discountCentimes: discount,
         lineTotalCentimes: lineTotal,
+        outOfStockBehavior: variant.outOfStockBehavior,
       });
     }
 
     return resolved;
+  }
+
+  /**
+   * Refuse la commande AVANT enregistrement lorsqu'une variante l'exige.
+   *
+   * POURQUOI UN CONTROLE ICI, ALORS QU'IL EN EXISTE DEJA UN A LA CONFIRMATION
+   *   Ce sont deux refus differents, et l'audit fonctionnel les distingue
+   *   explicitement. « Refuser la confirmation » laisse la commande entrer :
+   *   elle existe, elle est visible, un agent peut rappeler le client quand le
+   *   reapprovisionnement arrive. « Refuser la commande » veut dire qu'elle ne
+   *   doit pas entrer du tout — le cas d'un article qu'on ne veut surtout pas
+   *   promettre.
+   *
+   *   Le second n'avait aucun point d'application : le seul controle de stock
+   *   du produit se trouve dans la garde de transition, c'est-a-dire APRES la
+   *   creation. Une variante reglee sur `REFUSE_ORDER` aurait donc eu
+   *   exactement le meme effet que `REFUSE_CONFIRMATION`, et le reglage aurait
+   *   menti a celui qui l'a choisi.
+   *
+   * SUR LES IMPORTS
+   *   Une ligne de feuille refusee ici est comptee en echec et journalisee avec
+   *   son motif, jamais ignoree en silence : le commercant doit pouvoir voir ce
+   *   qui n'est pas entre, et pourquoi.
+   */
+  private async assertNoIntakeRefusal(
+    tx: PrismaTransactionClient,
+    tenantId: string,
+    lines: readonly ResolvedLine[],
+  ): Promise<void> {
+    const guarded = lines.filter((line) => line.outOfStockBehavior === 'REFUSE_ORDER');
+    if (guarded.length === 0) return;
+
+    const shortages = await this.inventory.findShortages(
+      tenantId,
+      guarded.map((line) => ({ variantId: line.variantId, quantity: line.quantity })),
+      tx,
+    );
+
+    if (shortages.length === 0) return;
+
+    throw new InsufficientStockException(
+      shortages.map((shortage) => ({
+        sku: shortage.sku,
+        requested: shortage.requested,
+        available: shortage.available,
+      })),
+    );
   }
 
   /**
@@ -927,6 +986,7 @@ const variantSelection = {
   label: true,
   salePriceCentimes: true,
   purchasePriceCentimes: true,
+  outOfStockBehavior: true,
   product: { select: { name: true, salePriceCentimes: true, purchasePriceCentimes: true } },
 } as const;
 
@@ -950,6 +1010,7 @@ interface ResolvedLine {
   readonly unitPurchasePriceCentimes: number | null;
   readonly discountCentimes: number;
   readonly lineTotalCentimes: number;
+  readonly outOfStockBehavior: OutOfStockBehavior;
 }
 
 export interface OrderListItem {

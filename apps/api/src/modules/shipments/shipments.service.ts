@@ -23,8 +23,13 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
-import { ACTIVE_SHIPMENT_STATUSES, ERROR_CODES, type ShipmentStatus } from '@ecomflow/shared';
+import type { CarrierAccountKind, Prisma } from '@prisma/client';
+import {
+  ACTIVE_SHIPMENT_STATUSES,
+  ERROR_CODES,
+  getWilayaByCode,
+  type ShipmentStatus,
+} from '@ecomflow/shared';
 import { createHash } from 'node:crypto';
 import { HttpStatus } from '@nestjs/common';
 import {
@@ -42,6 +47,56 @@ import { OutboxService, DOMAIN_EVENTS } from '../events/outbox.service';
 import { OrderWorkflowService } from '../orders/workflow/order-workflow.service';
 import { CarrierRegistry } from './carriers/carrier.registry';
 import type { CarrierContext, ShipmentRequest } from './carriers/carrier-adapter.interface';
+
+/**
+ * Cles de la matrice de capacites, dans l'ordre d'affichage.
+ *
+ * Cette liste est le CONTRAT entre le schema et l'interface : elle doit rester
+ * alignee sur les colonnes de `CarrierCapability`, ce qu'un test unitaire
+ * verifie (`carrier-capabilities.spec.ts`). Sans elle, l'ecran afficherait les
+ * capacites dans l'ordre alphabetique des colonnes Prisma, qui ne veut rien
+ * dire pour un exploitant.
+ */
+export const CARRIER_CAPABILITY_KEYS = [
+  'createShipment',
+  'cancelShipment',
+  'updateShipment',
+  'trackingPolling',
+  'trackingWebhook',
+  'proofOfDelivery',
+  'printableLabel',
+  'pickupManifest',
+  'pickupPointDelivery',
+  'pickupPointDirectory',
+  'cashOnDelivery',
+  'feeQuotation',
+  'packageOpening',
+  'exchangeOnDelivery',
+  'secondaryPhone',
+  'declaredWeight',
+  'wilayaCoverageQuery',
+] as const;
+
+export type CarrierCapabilityKey = (typeof CARRIER_CAPABILITY_KEYS)[number];
+
+export interface CarrierCatalogueEntry {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly isActive: boolean;
+  readonly implementationStatus: string;
+  /** `null` = capacites non renseignees, a distinguer de « tout a faux ». */
+  readonly capabilities: Record<string, boolean> | null;
+  readonly coveredWilayas: number;
+}
+
+export interface CarrierCoverageEntry {
+  readonly wilayaCode: number;
+  readonly wilayaName: string;
+  readonly homeDelivery: boolean;
+  readonly pickupPoint: boolean;
+  readonly leadTimeDays: number | null;
+}
 
 export interface CreateShipmentInput {
   readonly tenantId: string;
@@ -160,7 +215,9 @@ export class ShipmentsService {
 
     // --- Appel au transporteur (HORS transaction) -------------------------
     const context = this.buildCarrierContext(account, input.tenantId);
-    const request = this.buildShipmentRequest(order, idempotencyKey, input);
+    const request = this.buildShipmentRequest(order, idempotencyKey, input, {
+      sendOrderNumberInsteadOfReference: account.sendOrderNumberInsteadOfReference,
+    });
 
     const result = await adapter.createShipment(context, request);
 
@@ -465,6 +522,155 @@ export class ShipmentsService {
     });
   }
 
+  /**
+   * Catalogue des transporteurs avec leur matrice de capacites.
+   *
+   * POURQUOI CE N'EST PAS `registry.describeAll()`
+   *   Le registre ne connait que les connecteurs IMPLEMENTES, et volontairement
+   *   (« le produit ne promet que ce qu il tient »). L'ecran de gestion, lui,
+   *   doit montrer aussi les transporteurs planifies — sans quoi le commercant
+   *   ne peut pas savoir que son transporteur habituel arrive, et redemande.
+   *   Les deux vues coexistent : celle-ci dit ce qui EXISTE, l'autre ce qui est
+   *   UTILISABLE aujourd'hui.
+   */
+  async listCarrierCatalogue(): Promise<readonly CarrierCatalogueEntry[]> {
+    const carriers = await this.prisma.carrier.findMany({
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        isActive: true,
+        implementationStatus: true,
+        capability: true,
+        _count: { select: { wilayaCoverage: true } },
+      },
+    });
+
+    return carriers.map((carrier) => ({
+      id: carrier.id,
+      code: carrier.code,
+      name: carrier.name,
+      isActive: carrier.isActive,
+      implementationStatus: carrier.implementationStatus,
+      // `null` ne veut pas dire « rien ne marche » mais « on ne sait pas » :
+      // l'ecran doit le dire ainsi plutot que d'afficher dix-sept croix.
+      capabilities: carrier.capability
+        ? CARRIER_CAPABILITY_KEYS.reduce<Record<string, boolean>>((acc, key) => {
+            acc[key] = carrier.capability![key];
+            return acc;
+          }, {})
+        : null,
+      coveredWilayas: carrier._count.wilayaCoverage,
+    }));
+  }
+
+  /** Couverture declaree d'un transporteur, wilaya par wilaya. */
+  async listCarrierCoverage(carrierId: string): Promise<readonly CarrierCoverageEntry[]> {
+    const rows = await this.prisma.carrierWilayaCoverage.findMany({
+      where: { carrierId },
+      orderBy: { wilayaCode: 'asc' },
+      select: {
+        wilayaCode: true,
+        homeDelivery: true,
+        pickupPoint: true,
+        leadTimeDays: true,
+      },
+    });
+
+    return rows.map((row) => ({
+      wilayaCode: row.wilayaCode,
+      wilayaName: getWilayaByCode(row.wilayaCode)?.name ?? String(row.wilayaCode),
+      homeDelivery: row.homeDelivery,
+      pickupPoint: row.pickupPoint,
+      leadTimeDays: row.leadTimeDays,
+    }));
+  }
+
+  /**
+   * Declare la couverture d'une wilaya.
+   *
+   * Une ligne qui ne couvre NI le domicile NI le bureau est supprimee plutot
+   * qu'ecrite : la base la refuserait (CHECK), et surtout l'absence de ligne
+   * porte deja exactement ce sens — « couverture inconnue ». Deux facons
+   * d'ecrire la meme chose finiraient par se contredire.
+   */
+  async setCarrierCoverage(
+    carrierId: string,
+    input: {
+      wilayaCode: number;
+      homeDelivery: boolean;
+      pickupPoint: boolean;
+      leadTimeDays?: number | null;
+    },
+  ): Promise<void> {
+    const carrier = await this.prisma.carrier.findUnique({
+      where: { id: carrierId },
+      select: { id: true },
+    });
+
+    if (!carrier) {
+      throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Transporteur introuvable.');
+    }
+
+    if (!getWilayaByCode(input.wilayaCode)) {
+      throw new ValidationException(`Code wilaya inconnu : ${input.wilayaCode}.`, {
+        details: { field: 'wilayaCode', value: input.wilayaCode },
+      });
+    }
+
+    if (!input.homeDelivery && !input.pickupPoint) {
+      await this.prisma.carrierWilayaCoverage.deleteMany({
+        where: { carrierId, wilayaCode: input.wilayaCode },
+      });
+      return;
+    }
+
+    await this.prisma.carrierWilayaCoverage.upsert({
+      where: { carrierId_wilayaCode: { carrierId, wilayaCode: input.wilayaCode } },
+      create: {
+        carrierId,
+        wilayaCode: input.wilayaCode,
+        homeDelivery: input.homeDelivery,
+        pickupPoint: input.pickupPoint,
+        leadTimeDays: input.leadTimeDays ?? null,
+      },
+      update: {
+        homeDelivery: input.homeDelivery,
+        pickupPoint: input.pickupPoint,
+        leadTimeDays: input.leadTimeDays ?? null,
+      },
+    });
+  }
+
+  /** Reglages d'exploitation d'un compte transporteur. */
+  async updateCarrierAccountSettings(
+    tenantId: string,
+    carrierAccountId: string,
+    changes: {
+      kind?: CarrierAccountKind;
+      sendOrderNumberInsteadOfReference?: boolean;
+      stockHeldByCourier?: boolean;
+    },
+  ): Promise<void> {
+    const updated = await this.prisma.carrierAccount.updateMany({
+      where: { tenantId, id: carrierAccountId },
+      data: {
+        ...(changes.kind !== undefined ? { kind: changes.kind } : {}),
+        ...(changes.sendOrderNumberInsteadOfReference !== undefined
+          ? { sendOrderNumberInsteadOfReference: changes.sendOrderNumberInsteadOfReference }
+          : {}),
+        ...(changes.stockHeldByCourier !== undefined
+          ? { stockHeldByCourier: changes.stockHeldByCourier }
+          : {}),
+      },
+    });
+
+    if (updated.count === 0) {
+      throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Compte transporteur introuvable.');
+    }
+  }
+
   /** Comptes transporteur configures pour la boutique. */
   async listCarrierAccounts(tenantId: string) {
     return this.prisma.carrierAccount.findMany({
@@ -479,13 +685,18 @@ export class ShipmentsService {
         lastHealthCheckOk: true,
         lastErrorMessage: true,
         config: true,
+        kind: true,
+        sendOrderNumberInsteadOfReference: true,
+        stockHeldByCourier: true,
         carrier: {
           select: {
+            id: true,
             code: true,
             name: true,
             supportsWebhooks: true,
             supportsCancellation: true,
             implementationStatus: true,
+            capability: true,
           },
         },
       },
@@ -526,6 +737,7 @@ export class ShipmentsService {
       select: {
         id: true,
         reference: true,
+        externalOrderId: true,
         status: true,
         customerNameSnapshot: true,
         phoneSnapshot: true,
@@ -577,6 +789,7 @@ export class ShipmentsService {
         id: true,
         credentialsEncrypted: true,
         config: true,
+        sendOrderNumberInsteadOfReference: true,
         carrier: { select: { id: true, code: true, name: true, implementationStatus: true } },
       },
     });
@@ -608,6 +821,7 @@ export class ShipmentsService {
       carrierName: account.carrier.name,
       credentialsEncrypted: account.credentialsEncrypted,
       config: account.config as Record<string, unknown>,
+      sendOrderNumberInsteadOfReference: account.sendOrderNumberInsteadOfReference,
     };
   }
 
@@ -630,10 +844,24 @@ export class ShipmentsService {
     order: Awaited<ReturnType<ShipmentsService['loadShippableOrder']>>,
     idempotencyKey: string,
     input: CreateShipmentInput,
+    options: { sendOrderNumberInsteadOfReference: boolean },
   ): ShipmentRequest {
+    // CE QUE LE TRANSPORTEUR VOIT, ET CE QUE LE COMMERCANT DIT AU TELEPHONE
+    //   Par defaut, le colis part avec la reference EcomFlow. Certaines
+    //   boutiques preferent y voir le numero de commande de leur source —
+    //   celui qu'elles ont sous les yeux dans leur feuille quand elles
+    //   appellent le transporteur pour retrouver un colis.
+    //
+    //   A defaut de numero externe (commande saisie a la main), la reference
+    //   EcomFlow reste envoyee : mieux vaut une reference que rien du tout.
+    const reference =
+      options.sendOrderNumberInsteadOfReference && order.externalOrderId
+        ? order.externalOrderId
+        : order.reference;
+
     return {
       idempotencyKey,
-      orderReference: order.reference,
+      orderReference: reference,
       customerName: order.customerNameSnapshot,
       phoneE164: order.phoneSnapshot,
       secondaryPhone: order.customer.secondaryPhone,

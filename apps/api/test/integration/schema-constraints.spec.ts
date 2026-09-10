@@ -297,6 +297,370 @@ describe('contraintes d integrite du schema', () => {
   });
 
   // ==========================================================================
+  describe('lots de stock', () => {
+    it('refuse un lot de quantite nulle ou negative', async () => {
+      const boutique = await createTenant(prisma);
+      const produit = await createProduct(prisma, boutique.tenantId);
+
+      for (const quantity of [0, -3]) {
+        await expect(
+          prisma.stockBatch.create({
+            data: {
+              tenantId: boutique.tenantId,
+              variantId: produit.variantId,
+              quantity,
+              remainingQuantity: Math.max(quantity, 0),
+              costCentimes: 100_000,
+            },
+          }),
+        ).rejects.toThrow();
+      }
+    });
+
+    it('refuse qu un lot ait un reste superieur a ce qui est entre', async () => {
+      // Le defaut que cette contrainte rend impossible : une erreur de calcul
+      // de consommation qui « rendrait » du stock jamais recu.
+      const boutique = await createTenant(prisma);
+      const produit = await createProduct(prisma, boutique.tenantId);
+
+      await expect(
+        prisma.stockBatch.create({
+          data: {
+            tenantId: boutique.tenantId,
+            variantId: produit.variantId,
+            quantity: 10,
+            remainingQuantity: 11,
+            costCentimes: 100_000,
+          },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('refuse un reste negatif', async () => {
+      const boutique = await createTenant(prisma);
+      const produit = await createProduct(prisma, boutique.tenantId);
+
+      const lot = await prisma.stockBatch.create({
+        data: {
+          tenantId: boutique.tenantId,
+          variantId: produit.variantId,
+          quantity: 10,
+          remainingQuantity: 10,
+          costCentimes: 100_000,
+        },
+        select: { id: true },
+      });
+
+      await expect(
+        prisma.stockBatch.update({ where: { id: lot.id }, data: { remainingQuantity: -1 } }),
+      ).rejects.toThrow();
+    });
+
+    it('refuse un cout d achat negatif', async () => {
+      const boutique = await createTenant(prisma);
+      const produit = await createProduct(prisma, boutique.tenantId);
+
+      await expect(
+        prisma.stockBatch.create({
+          data: {
+            tenantId: boutique.tenantId,
+            variantId: produit.variantId,
+            quantity: 5,
+            remainingQuantity: 5,
+            costCentimes: -1,
+          },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('refuse un lot rattache a la variante d une autre boutique', async () => {
+      const boutiqueA = await createTenant(prisma);
+      const boutiqueB = await createTenant(prisma);
+      const produitDeB = await createProduct(prisma, boutiqueB.tenantId);
+
+      await expect(
+        prisma.stockBatch.create({
+          data: {
+            tenantId: boutiqueA.tenantId,
+            variantId: produitDeB.variantId,
+            quantity: 5,
+            remainingQuantity: 5,
+            costCentimes: 100_000,
+          },
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  // ==========================================================================
+  describe('ventes complementaires', () => {
+    it('refuse qu un produit se propose lui-meme', async () => {
+      const boutique = await createTenant(prisma);
+      const produit = await createProduct(prisma, boutique.tenantId);
+
+      await expect(
+        prisma.productCrossSell.create({
+          data: {
+            tenantId: boutique.tenantId,
+            productId: produit.productId,
+            crossSellProductId: produit.productId,
+          },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('refuse de proposer le produit d une autre boutique', async () => {
+      // Le cas qui compte : les DEUX cotes du lien doivent etre scopes, pas
+      // seulement celui qui porte la relation principale.
+      const boutiqueA = await createTenant(prisma);
+      const boutiqueB = await createTenant(prisma);
+      const produitDeA = await createProduct(prisma, boutiqueA.tenantId);
+      const produitDeB = await createProduct(prisma, boutiqueB.tenantId);
+
+      await expect(
+        prisma.productCrossSell.create({
+          data: {
+            tenantId: boutiqueA.tenantId,
+            productId: produitDeA.productId,
+            crossSellProductId: produitDeB.productId,
+          },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('accepte un lien entre deux produits de la meme boutique', async () => {
+      const boutique = await createTenant(prisma);
+      const principal = await createProduct(prisma, boutique.tenantId);
+      const accessoire = await createProduct(prisma, boutique.tenantId);
+
+      await expect(
+        prisma.productCrossSell.create({
+          data: {
+            tenantId: boutique.tenantId,
+            productId: principal.productId,
+            crossSellProductId: accessoire.productId,
+          },
+        }),
+      ).resolves.toBeDefined();
+    });
+  });
+
+  // ==========================================================================
+  describe('grille de frais de livraison', () => {
+    it('accepte le code 0, sentinelle de la ligne « Toutes les wilayas »', async () => {
+      const boutique = await createTenant(prisma);
+
+      await expect(
+        prisma.tenantDeliveryFee.create({
+          data: {
+            tenantId: boutique.tenantId,
+            wilayaCode: 0,
+            homeFeeCentimes: 60_000,
+            pickupPointFeeCentimes: 40_000,
+          },
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it('refuse un code de wilaya hors 0..58', async () => {
+      const boutique = await createTenant(prisma);
+
+      for (const wilayaCode of [-1, 59, 99]) {
+        await expect(
+          prisma.tenantDeliveryFee.create({
+            data: {
+              tenantId: boutique.tenantId,
+              wilayaCode,
+              homeFeeCentimes: 60_000,
+              pickupPointFeeCentimes: 40_000,
+            },
+          }),
+        ).rejects.toThrow();
+      }
+    });
+
+    it('refuse un tarif negatif', async () => {
+      const boutique = await createTenant(prisma);
+
+      await expect(
+        prisma.tenantDeliveryFee.create({
+          data: {
+            tenantId: boutique.tenantId,
+            wilayaCode: 16,
+            homeFeeCentimes: -1,
+            pickupPointFeeCentimes: 40_000,
+          },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('n admet qu une ligne par wilaya et par boutique', async () => {
+      const boutique = await createTenant(prisma);
+      const ligne = {
+        tenantId: boutique.tenantId,
+        wilayaCode: 16,
+        homeFeeCentimes: 60_000,
+        pickupPointFeeCentimes: 40_000,
+      };
+
+      await prisma.tenantDeliveryFee.create({ data: ligne });
+      await expect(prisma.tenantDeliveryFee.create({ data: ligne })).rejects.toThrow();
+    });
+
+    it('refuse une surcharge produit qui ne surcharge rien', async () => {
+      // Une ligne aux deux tarifs absents ferait croire a un tarif particulier
+      // la ou la grille de boutique s applique.
+      const boutique = await createTenant(prisma);
+      const produit = await createProduct(prisma, boutique.tenantId);
+
+      await expect(
+        prisma.productDeliveryFeeOverride.create({
+          data: {
+            tenantId: boutique.tenantId,
+            productId: produit.productId,
+            wilayaCode: 16,
+          },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('accepte une surcharge portant sur un seul mode de livraison', async () => {
+      // Le cas de la livraison offerte : 0 est une valeur, pas une absence.
+      const boutique = await createTenant(prisma);
+      const produit = await createProduct(prisma, boutique.tenantId);
+
+      await expect(
+        prisma.productDeliveryFeeOverride.create({
+          data: {
+            tenantId: boutique.tenantId,
+            productId: produit.productId,
+            wilayaCode: 16,
+            homeFeeCentimes: 0,
+          },
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it('refuse une surcharge sur le produit d une autre boutique', async () => {
+      const boutiqueA = await createTenant(prisma);
+      const boutiqueB = await createTenant(prisma);
+      const produitDeB = await createProduct(prisma, boutiqueB.tenantId);
+
+      await expect(
+        prisma.productDeliveryFeeOverride.create({
+          data: {
+            tenantId: boutiqueA.tenantId,
+            productId: produitDeB.productId,
+            wilayaCode: 16,
+            homeFeeCentimes: 10_000,
+          },
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  // ==========================================================================
+  describe('capacites et couverture des transporteurs', () => {
+    /** Transporteur de plateforme, hors perimetre tenant. */
+    async function createCarrier(): Promise<string> {
+      const carrier = await prisma.carrier.create({
+        data: {
+          code: `TEST_${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+          name: 'Transporteur de test',
+        },
+        select: { id: true },
+      });
+      return carrier.id;
+    }
+
+    it('refuse un annuaire de bureaux sans livraison au bureau', async () => {
+      // La seconde capacite presuppose la premiere : lister des bureaux chez un
+      // transporteur qui n y livre pas ne veut rien dire.
+      const carrierId = await createCarrier();
+
+      await expect(
+        prisma.carrierCapability.create({
+          data: { carrierId, pickupPointDelivery: false, pickupPointDirectory: true },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('accepte un annuaire quand la livraison au bureau existe', async () => {
+      const carrierId = await createCarrier();
+
+      await expect(
+        prisma.carrierCapability.create({
+          data: { carrierId, pickupPointDelivery: true, pickupPointDirectory: true },
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it('n admet qu une seule matrice par transporteur', async () => {
+      const carrierId = await createCarrier();
+
+      await prisma.carrierCapability.create({ data: { carrierId } });
+      await expect(prisma.carrierCapability.create({ data: { carrierId } })).rejects.toThrow();
+    });
+
+    it('refuse une couverture qui ne couvre aucun mode', async () => {
+      // L absence de ligne dit deja « couverture inconnue » : une ligne vide
+      // brouillerait la distinction avec « non desservie ».
+      const carrierId = await createCarrier();
+
+      await expect(
+        prisma.carrierWilayaCoverage.create({
+          data: { carrierId, wilayaCode: 16, homeDelivery: false, pickupPoint: false },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('refuse un code de wilaya hors du decoupage, sentinelle comprise', async () => {
+      // Contrairement a la grille tarifaire de la boutique, il n y a pas de
+      // ligne « toutes les wilayas » ici : 0 doit etre refuse.
+      const carrierId = await createCarrier();
+
+      for (const wilayaCode of [0, 59, -3]) {
+        await expect(
+          prisma.carrierWilayaCoverage.create({
+            data: { carrierId, wilayaCode, homeDelivery: true },
+          }),
+        ).rejects.toThrow();
+      }
+    });
+
+    it('refuse un delai indicatif negatif', async () => {
+      const carrierId = await createCarrier();
+
+      await expect(
+        prisma.carrierWilayaCoverage.create({
+          data: { carrierId, wilayaCode: 16, homeDelivery: true, leadTimeDays: -1 },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('n admet qu une ligne par couple transporteur / wilaya', async () => {
+      const carrierId = await createCarrier();
+      const ligne = { carrierId, wilayaCode: 16, homeDelivery: true };
+
+      await prisma.carrierWilayaCoverage.create({ data: ligne });
+      await expect(prisma.carrierWilayaCoverage.create({ data: ligne })).rejects.toThrow();
+    });
+
+    it('supprime capacites et couverture avec le transporteur', async () => {
+      const carrierId = await createCarrier();
+      await prisma.carrierCapability.create({ data: { carrierId } });
+      await prisma.carrierWilayaCoverage.create({
+        data: { carrierId, wilayaCode: 16, homeDelivery: true },
+      });
+
+      await prisma.carrier.delete({ where: { id: carrierId } });
+
+      expect(await prisma.carrierCapability.findUnique({ where: { carrierId } })).toBeNull();
+      expect(await prisma.carrierWilayaCoverage.count({ where: { carrierId } })).toBe(0);
+    });
+  });
+
+  // ==========================================================================
   describe('coherence des donnees metier', () => {
     it('refuse un code de wilaya hors du referentiel algerien', async () => {
       const boutique = await createTenant(prisma);
