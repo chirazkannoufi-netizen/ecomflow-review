@@ -412,7 +412,9 @@
     "dateShipped": "Expédition",
     "dateDelivered": "Livraison",
     "returns": "Retours",
-    "notFound": "Commande introuvable."
+    "notFound": "Commande introuvable.",
+    "noLabel": "Pas d'étiquette",
+    "noLabelHint": "Ce transporteur ne produit pas d'étiquette imprimable. Rien à attendre : le bordereau se remplit à la main."
   },
   "newOrder": {
     "title": "Nouvelle commande",
@@ -617,7 +619,9 @@
     "emptyTitle": "Aucun colis",
     "emptyFiltered": "Aucun colis ne correspond à ces critères.",
     "emptyFirst": "Les colis apparaissent ici dès que vous confiez une commande à un transporteur.",
-    "seePreparation": "Voir la préparation"
+    "seePreparation": "Voir la préparation",
+    "noLabel": "Pas d'étiquette",
+    "noLabelHint": "Ce transporteur ne produit pas d'étiquette imprimable. Rien à attendre : le bordereau se remplit à la main."
   },
   "returns": {
     "title": "Retours",
@@ -1439,7 +1443,8 @@
       "stopDesk": "Stop desk",
       "afterSalesExchange": "SAV échange",
       "afterSalesPickup": "SAV pick-up",
-      "stockAtCarrier": "Stock chez la société de livraison"
+      "stockAtCarrier": "Stock chez la société de livraison",
+      "printableLabel": "Étiquette imprimable"
     },
     "coverage": "Couverture par wilaya",
     "coverageOpen": "Voir la couverture par wilaya",

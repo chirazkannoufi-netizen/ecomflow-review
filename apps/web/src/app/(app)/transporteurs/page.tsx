@@ -19,7 +19,7 @@
  *      boutique.
  *
  * « NON RENSEIGNE » N'EST PAS « NON SUPPORTE »
- *   Un transporteur sans matrice affiche un avertissement, jamais dix-sept
+ *   Un transporteur sans matrice affiche un avertissement, jamais dix-huit
  *   croix. La difference compte : la seconde forme ferait croire a une
  *   incapacite constatee la ou il n'y a qu'une saisie manquante.
  */
@@ -57,7 +57,7 @@ import {
  * distingue deux transporteurs.
  */
 const CAPABILITY_GROUPS = [
-  { key: 'orders', items: ['addOrder', 'addOrderBulk', 'deleteOrder'] },
+  { key: 'orders', items: ['addOrder', 'addOrderBulk', 'deleteOrder', 'printableLabel'] },
   { key: 'sync', items: ['syncAttempted', 'syncDelivered', 'syncFailed'] },
   {
     key: 'realtime',

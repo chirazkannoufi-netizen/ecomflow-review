@@ -37,10 +37,14 @@ function capabilityColumns(source: string): string[] {
 describe('matrice de capacites transporteur', () => {
   const columns = capabilityColumns(schema);
 
-  it('declare bien dix-sept capacites en base', () => {
+  it('declare bien dix-huit capacites en base', () => {
     // Le nombre est fige volontairement : en ajouter une doit etre un acte
     // conscient, qui passe par ce test ET par chaque adaptateur.
-    expect(columns).toHaveLength(17);
+    //
+    // Dix-huit et non dix-sept : la matrice de l'audit en compte dix-sept, et
+    // `printableLabel` s'y ajoute parce que le PRINCIPE de l'audit — ne jamais
+    // afficher une action non supportee — prime sur son decompte (D-049).
+    expect(columns).toHaveLength(18);
   });
 
   it('expose exactement les colonnes du schema', () => {

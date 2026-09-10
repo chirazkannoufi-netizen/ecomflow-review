@@ -66,6 +66,7 @@ export const CARRIER_CAPABILITY_KEYS = [
   'addOrder',
   'addOrderBulk',
   'deleteOrder',
+  'printableLabel',
   // Synchronisation relevee
   'syncAttempted',
   'syncDelivered',
@@ -486,7 +487,18 @@ export class ShipmentsService {
           lastSyncedAt: true,
           createdAt: true,
           cancelledAt: true,
-          carrier: { select: { id: true, code: true, name: true } },
+          // La capacite voyage AVEC le colis : sans elle, l'ecran ne peut pas
+          // distinguer « ce transporteur ne produit pas d'etiquette » de
+          // « l'etiquette manque », deux situations qui appellent deux gestes
+          // opposes (D-049).
+          carrier: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              capability: { select: { printableLabel: true } },
+            },
+          },
           order: {
             select: {
               id: true,
@@ -525,7 +537,13 @@ export class ShipmentsService {
       where: { tenantId, orderId },
       orderBy: { createdAt: 'desc' },
       include: {
-        carrier: { select: { code: true, name: true } },
+        carrier: {
+          select: {
+            code: true,
+            name: true,
+            capability: { select: { printableLabel: true } },
+          },
+        },
         events: { orderBy: { occurredAt: 'desc' }, take: 20 },
       },
     });
@@ -563,7 +581,7 @@ export class ShipmentsService {
       isActive: carrier.isActive,
       implementationStatus: carrier.implementationStatus,
       // `null` ne veut pas dire « rien ne marche » mais « on ne sait pas » :
-      // l'ecran doit le dire ainsi plutot que d'afficher dix-sept croix.
+      // l'ecran doit le dire ainsi plutot que d'afficher dix-huit croix.
       capabilities: carrier.capability
         ? CARRIER_CAPABILITY_KEYS.reduce<Record<string, boolean>>((acc, key) => {
             acc[key] = carrier.capability![key];

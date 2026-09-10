@@ -105,7 +105,12 @@ interface OrderDetail {
     status: string;
     providerStatus: string | null;
     labelUrl: string | null;
-    carrier: { code: string; name: string };
+    carrier: {
+      code: string;
+      name: string;
+      /** `null` = capacites non renseignees : on n affirme rien. */
+      capability: { printableLabel: boolean } | null;
+    };
     events: readonly {
       id: string;
       providerStatus: string;
@@ -372,6 +377,8 @@ export default function OrderDetailPage() {
                         {t('providerStatus', { status: shipment.providerStatus })}
                       </span>
                     ) : null}
+                    {/* Voir /expeditions : l absence d etiquette a deux causes
+                        opposees, et le silence ne les distingue pas. */}
                     {shipment.labelUrl ? (
                       <a
                         href={shipment.labelUrl}
@@ -381,6 +388,10 @@ export default function OrderDetailPage() {
                       >
                         {t('label')}
                       </a>
+                    ) : shipment.carrier.capability?.printableLabel === false ? (
+                      <span className="text-xs text-slate-400" title={t('noLabelHint')}>
+                        {t('noLabel')}
+                      </span>
                     ) : null}
                   </div>
 

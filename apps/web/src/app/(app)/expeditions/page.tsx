@@ -39,6 +39,14 @@ import {
   useRelativeTime,
 } from '@/components/ui';
 
+interface ShipmentCarrier {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  /** `null` = capacites non renseignees : on n affirme rien. */
+  readonly capability: { readonly printableLabel: boolean } | null;
+}
+
 interface ShipmentRow {
   readonly id: string;
   readonly trackingNumber: string | null;
@@ -50,7 +58,7 @@ interface ShipmentRow {
   readonly lastSyncedAt: string | null;
   readonly createdAt: string;
   readonly cancelledAt: string | null;
-  readonly carrier: { id: string; code: string; name: string };
+  readonly carrier: ShipmentCarrier;
   readonly order: {
     id: string;
     reference: string;
@@ -321,6 +329,9 @@ export default function ShipmentsPage() {
                           >
                             {t('refresh')}
                           </Button>
+                          {/* Trois etats, pas deux. Un lien absent ne disait pas
+                              s il manquait ou s il n existerait jamais — donc
+                              pas s il fallait relancer ou recopier a la main. */}
                           {shipment.labelUrl ? (
                             <a
                               href={shipment.labelUrl}
@@ -330,6 +341,10 @@ export default function ShipmentsPage() {
                             >
                               {t('label')}
                             </a>
+                          ) : shipment.carrier.capability?.printableLabel === false ? (
+                            <span className="ms-2 text-xs text-slate-400" title={t('noLabelHint')}>
+                              {t('noLabel')}
+                            </span>
                           ) : null}
                         </td>
                       </tr>

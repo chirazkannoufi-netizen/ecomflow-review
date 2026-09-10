@@ -1461,6 +1461,15 @@ model CarrierCapability {
   /// contrat `CarrierAdapter` nomme `cancelShipment` : meme geste, deux
   /// vocabulaires (voir D-049).
   deleteOrder   Boolean @default(false) @map("delete_order")
+  /// Le transporteur rend-il une etiquette imprimable ?
+  ///
+  /// DIX-HUITIEME COLONNE, HORS LISTE DE L'AUDIT — et c'est assume : le
+  /// PRINCIPE de l'audit (« ne jamais afficher une action non supportee »)
+  /// prime sur le chiffre. `Shipment.labelUrl` commande un lien visible dans
+  /// deux ecrans ; sans cette colonne, son absence est muette et l'exploitant
+  /// ne peut pas distinguer « ce transporteur n'en produit pas » de « la
+  /// creation a echoue ». Voir D-049.
+  printableLabel Boolean @default(false) @map("printable_label")
 
   // --- Synchronisation (relevé periodique) ---------------------------------
   //

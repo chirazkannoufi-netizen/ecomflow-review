@@ -1472,7 +1472,7 @@ nommée dans le test ; en ajouter une autre passe par ce fichier.
 
 ---
 
-## D-049 — La matrice de capacités transporteur : les dix-sept de l'audit, en colonnes explicites
+## D-049 — La matrice de capacités transporteur : les dix-sept de l'audit, plus l'étiquette
 
 **Date** : 10/09/2026 · **Statut** : appliquée
 
@@ -1490,8 +1490,9 @@ chez un transporteur qui ne l'accepte pas après dépôt. À chaque fois l'agent
 croit avoir agi, le client n'est pas prévenu, et personne ne le découvre avant
 que le colis arrive quand même.
 
-**Décision** — Un modèle `CarrierCapability`, **dix-sept colonnes booléennes
-explicites**, une ligne par transporteur. Pas de JSON. Trois raisons ont
+**Décision** — Un modèle `CarrierCapability`, **dix-huit colonnes booléennes
+explicites** — les dix-sept de l'audit plus l'étiquette imprimable, voir plus
+bas —, une ligne par transporteur. Pas de JSON. Trois raisons ont
 tranché :
 
 1. **Ces booléens décrivent ce que le CODE sait faire.** La vérité vit dans les
@@ -1550,32 +1551,64 @@ publiée, et le détour fait partie de l'histoire du schéma.
 
 **Écarts restants — assumés, pas effacés**
 
-1. **Six capacités retirées de la matrice correspondent à des champs réels du
-   code.** Elles n'ont pas d'équivalent dans la liste de l'audit, et la matrice
-   tient les dix-sept :
+1. **Dix-huit colonnes, pas dix-sept — le principe prime sur le chiffre.**
+   `printableLabel` a d'abord été retiré pour tenir le décompte de l'audit.
+   C'était respecter le nombre au détriment de la trouvaille : *ne jamais
+   afficher une action que le transporteur ne sait pas faire*. Il est
+   réintroduit comme dix-huitième.
 
-   | Retiré | Champ correspondant, toujours transmis |
-   |---|---|
-   | `printableLabel` | `ShipmentCreated.labelUrl` |
-   | `pickupPointDirectory` | `ShipmentRequest.pickupPointId` |
-   | `cashOnDelivery` | `ShipmentRequest.codAmountCentimes` |
-   | `packageOpening` | `ShipmentRequest.allowOpening` |
-   | `secondaryPhone` | `ShipmentRequest.secondaryPhone` |
-   | `declaredWeight` | `ShipmentRequest.weightGrams` |
+   La raison est vérifiable à l'écran. `Shipment.labelUrl` commande un lien
+   visible dans `/expeditions` et sur la fiche commande, rendu « si l'URL
+   existe » — donc absent en silence. L'exploitant ne pouvait pas distinguer
+   deux situations qui appellent des gestes **opposés** :
 
-   Elles sortent de la **matrice**, pas du produit : les champs existent
-   toujours et continuent d'être envoyés aux connecteurs. Ce qui disparaît est
-   la capacité de **masquer une action** en fonction d'eux. Si l'un devient
-   discriminant — le plus probable étant l'étiquette imprimable, qui commande un
-   bouton visible — il faudra soit l'ajouter comme dix-huitième, soit constater
-   que la liste de l'audit n'était pas exhaustive. La question est ouverte, pas
-   tranchée.
+   - le transporteur n'en produit pas → rien à attendre, le bordereau se
+     remplit à la main ;
+   - il en produit une mais la création a échoué → il faut relancer, ou
+     appeler.
 
-   Trois autres colonnes retirées (`proofOfDelivery`, `pickupManifest`,
-   `feeQuotation`) n'avaient **aucun ancrage dans le code** : elles étaient de
-   pures suppositions, et leur disparition ne coûte rien.
+   Un champ absent ne dit pas laquelle. La capacité, si : l'écran affiche
+   désormais « Pas d'étiquette » avec son explication quand la capacité est
+   déclarée fausse, et ne dit rien quand elle est simplement non renseignée —
+   les trois états restent distincts. La capacité voyage avec le colis dans les
+   projections de `list` et `listByOrder`, sans quoi la colonne n'aurait rien
+   gardé.
 
-2. **« Stop desk » contre `PICKUP_POINT` : deux registres, assumés.** La
+   **Le décompte n'est donc plus un invariant de la liste d'audit**, et le test
+   qui le fige (`carrier-capabilities.spec.ts`) le dit explicitement.
+
+2. **Les cinq autres champs restent sans *gating*.** Le critère appliqué à
+   chacun : *ce champ commande-t-il une affordance visible que son absence
+   rendrait trompeuse ?*
+
+   | Champ | Affordance aujourd'hui | Verdict |
+   |---|---|---|
+   | `ShipmentRequest.pickupPointId` | Aucune. L'action d'expédition envoie un corps vide. | Pas de gating |
+   | `codAmountCentimes` | Aucune. Le paiement à la livraison est l'hypothèse universelle du produit, pas une option. | Pas de gating |
+   | `allowOpening` | Aucune. Valeur par défaut `true`, jamais exposée. | Pas de gating |
+   | `secondaryPhone` | Affiché sur la fiche **client**, comme donnée du client — pas comme fonction du transporteur. | Pas de gating |
+   | `weightGrams` | Aucune. | Pas de gating |
+
+   Aucun ne crée de fausse promesse, parce qu'aucun n'est montré. Gater
+   l'invisible ajouterait cinq colonnes à maintenir sans rien empêcher.
+
+3. **Deux redeviendraient candidats le jour où la boîte d'expédition gagnerait
+   des options** — c'est la condition à surveiller, pas une échéance :
+
+   - **`allowOpening`.** Une case « colis ouvert avant paiement » chez un
+     transporteur qui ne le pratique pas est le pire des cas : l'agent la
+     coche, le promet au client au téléphone, et le livreur refuse à la porte.
+     La fausse promesse est faite *au client final*, pas seulement à
+     l'exploitant.
+   - **`pickupPointId`.** Un sélecteur de bureau que l'API ne sait pas peupler
+     laisse l'agent devant une liste vide, sans lui dire qu'il doit saisir
+     l'identifiant à la main. C'est un blocage, pas une gêne.
+
+   Les trois autres (`codAmountCentimes`, `secondaryPhone`, `weightGrams`) sont
+   des données transmises, jamais des actions : même exposés un jour, ils
+   n'appelleraient qu'une mention, pas un masquage.
+
+4. **« Stop desk » contre `PICKUP_POINT` : deux registres, assumés.** La
    capacité s'appelle `stopDesk`, comme dans l'audit et comme le dit le métier ;
    la commande porte `DeliveryType.PICKUP_POINT`, et la grille tarifaire
    `pickupPointFeeCentimes` (D-046). C'est la seule entorse au principe « une
@@ -1584,13 +1617,13 @@ publiée, et le détour fait partie de l'histoire du schéma.
    commande nomme ce que le **colis fait**. Le commentaire du modèle établit le
    pont dans les deux sens.
 
-3. **`stockAtCarrier` (capacité) et `CarrierAccount.stockHeldByCourier`
+5. **`stockAtCarrier` (capacité) et `CarrierAccount.stockHeldByCourier`
    (réglage) coexistent volontairement.** L'un dit que le réseau *sait* détenir
    du stock, l'autre que *cette boutique* s'en sert. L'audit ne liste que le
    premier ; le second reste nécessaire, et reste déclaratif à ce stade
    (D-051).
 
-4. **`supportsWebhooks` est désormais dérivé de sept drapeaux, pas d'un.** Il
+6. **`supportsWebhooks` est désormais dérivé de sept drapeaux, pas d'un.** Il
    vaut vrai dès qu'une capacité temps réel quelconque est déclarée : c'est la
    question à laquelle il répond réellement — « ce connecteur pousse-t-il quoi
    que ce soit, donc faut-il lui ouvrir un point d'entrée webhook ? ».
@@ -1643,7 +1676,7 @@ coup, et l'écran affirmerait avec aplomb quelque chose que personne n'a saisi.
 
 **Impact** — L'écran affiche « Couverture non renseignée » plutôt qu'un zéro, et
 la matrice d'un transporteur sans ligne montre un avertissement plutôt que
-dix-sept croix — la seconde forme ferait croire à une incapacité constatée là où
+dix-huit croix — la seconde forme ferait croire à une incapacité constatée là où
 il n'y a qu'une saisie manquante.
 
 ---
@@ -1710,7 +1743,7 @@ entre « Expéditions » et « Suivi » — là où la Design Suite laissait la 
 
 1. la liste : nom, état d'intégration, nombre de wilayas couvertes ;
 2. l'ouverture d'une ligne : la matrice des capacités, groupée en six familles
-   plutôt qu'en dix-sept cases à cocher alignées ;
+   plutôt qu'en dix-huit cases à cocher alignées ;
 3. deux replis internes : la couverture wilaya par wilaya (58 lignes qu'on ne
    consulte qu'en cas de doute) et les réglages du compte.
 
