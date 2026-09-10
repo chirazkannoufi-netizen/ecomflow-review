@@ -1416,31 +1416,30 @@
     "capabilities": "Capacités",
     "capabilitiesUnknown": "Les capacités de ce transporteur ne sont pas renseignées. Tant qu'elles ne le sont pas, aucune action n'est masquée ni promise.",
     "capabilityGroups": {
-      "lifecycle": "Cycle de vie du colis",
-      "tracking": "Suivi",
-      "documents": "Documents",
-      "delivery": "Modes de livraison",
-      "money": "Argent",
-      "market": "Usages du marché"
+      "orders": "Commandes",
+      "sync": "Synchronisation",
+      "realtime": "Synchronisation temps réel",
+      "delivery": "Livraison et SAV",
+      "logistics": "Logistique"
     },
     "capabilityNames": {
-      "createShipment": "Créer un colis",
-      "cancelShipment": "Annuler un colis",
-      "updateShipment": "Corriger un colis créé",
-      "trackingPolling": "Interroger le statut",
-      "trackingWebhook": "Recevoir les événements",
-      "proofOfDelivery": "Preuve de livraison",
-      "printableLabel": "Étiquette imprimable",
-      "pickupManifest": "Bordereau de ramassage",
-      "pickupPointDelivery": "Livraison au bureau",
-      "pickupPointDirectory": "Annuaire des bureaux",
-      "cashOnDelivery": "Paiement à la livraison",
-      "feeQuotation": "Calcul des frais",
-      "packageOpening": "Colis ouvert avant paiement",
-      "exchangeOnDelivery": "Échange à la livraison",
-      "secondaryPhone": "Second numéro",
-      "declaredWeight": "Poids déclaré",
-      "wilayaCoverageQuery": "Couverture interrogeable"
+      "addOrder": "Ajout commande",
+      "addOrderBulk": "Ajout en masse",
+      "deleteOrder": "Suppression",
+      "syncAttempted": "Tentatives",
+      "syncDelivered": "Livrées",
+      "syncFailed": "Échouées",
+      "realtimeUndeliverableWilayas": "Wilayas non livrables",
+      "realtimeAttempted": "Tentatives",
+      "realtimeDelivered": "Livrées",
+      "realtimeFailed": "Échouées",
+      "realtimeCollectionVouchers": "Bons d'encaissement",
+      "realtimeAddressChange": "Modification adresse",
+      "realtimePriceChange": "Modification prix",
+      "stopDesk": "Stop desk",
+      "afterSalesExchange": "SAV échange",
+      "afterSalesPickup": "SAV pick-up",
+      "stockAtCarrier": "Stock chez la société de livraison"
     },
     "coverage": "Couverture par wilaya",
     "coverageOpen": "Voir la couverture par wilaya",
@@ -1459,6 +1458,7 @@
     "sendOrderNumberHint": "Plutôt que la référence EcomFlow, pour retrouver un colis au téléphone avec le transporteur. Sans numéro externe, la référence reste envoyée.",
     "stockHeldByCourier": "Le transporteur détient le stock",
     "stockHeldByCourierHint": "La marchandise est déjà chez lui : il n'y a pas d'enlèvement à organiser.",
-    "lastCheck": "Dernière vérification : {date}"
+    "lastCheck": "Dernière vérification : {date}",
+    "capabilityHint": "Une action que le transporteur ne sait pas faire n'est pas proposée ailleurs dans le produit."
   }
 }

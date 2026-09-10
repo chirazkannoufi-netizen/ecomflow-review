@@ -376,14 +376,14 @@ async function seedSuperAdmin(
  * Aucun transporteur n'est presente comme fonctionnel sans l'etre.
  */
 /**
- * Capacites de chaque connecteur.
+ * Capacites de chaque connecteur — matrice de l'audit fonctionnel Ecomanager.
  *
  * UNE SEULE SOURCE ECRITE A LA MAIN
  *   `supportsWebhooks` et `supportsCancellation` existaient deja sur `Carrier`
  *   et sont lus par plusieurs services. Plutot que de les saisir une seconde
- *   fois dans la matrice, ils en sont DERIVES ci-dessous : la capacite est
- *   ecrite ici, la colonne historique la recopie. Il n'y a donc jamais deux
- *   verites a maintenir d'accord.
+ *   fois, ils en sont DERIVES ci-dessous : la capacite est ecrite ici, la
+ *   colonne historique la recopie. Il n'y a donc jamais deux verites a
+ *   maintenir d'accord.
  *
  * CE QUI EST DECLARE ICI DOIT EXISTER DANS L'ADAPTATEUR
  *   Ces booleens pilotent l'affichage des actions : une capacite declaree que
@@ -391,83 +391,88 @@ async function seedSuperAdmin(
  *   matrice doit supprimer. Pour les connecteurs `PLANNED`, la ligne decrit la
  *   CIBLE d'integration ; ils sont de toute facon refuses a l'expedition par
  *   `implementationStatus`.
+ *
+ *   `MOCK_CARRIER` declare tout : c'est un connecteur de test, dont l'interet
+ *   est justement de laisser toutes les actions accessibles en developpement.
  */
 const CARRIER_CAPABILITIES = {
   MOCK_CARRIER: {
-    createShipment: true,
-    cancelShipment: true,
-    updateShipment: true,
-    trackingPolling: true,
-    trackingWebhook: true,
-    proofOfDelivery: true,
-    printableLabel: true,
-    pickupManifest: true,
-    pickupPointDelivery: true,
-    pickupPointDirectory: true,
-    cashOnDelivery: true,
-    feeQuotation: true,
-    packageOpening: true,
-    exchangeOnDelivery: true,
-    secondaryPhone: true,
-    declaredWeight: true,
-    wilayaCoverageQuery: true,
+    addOrder: true,
+    addOrderBulk: true,
+    deleteOrder: true,
+    syncAttempted: true,
+    syncDelivered: true,
+    syncFailed: true,
+    realtimeUndeliverableWilayas: true,
+    realtimeAttempted: true,
+    realtimeDelivered: true,
+    realtimeFailed: true,
+    realtimeCollectionVouchers: true,
+    realtimeAddressChange: true,
+    realtimePriceChange: true,
+    stopDesk: true,
+    afterSalesExchange: true,
+    afterSalesPickup: true,
+    stockAtCarrier: true,
   },
   YALIDINE: {
-    createShipment: true,
-    cancelShipment: true,
-    updateShipment: false,
-    trackingPolling: true,
-    trackingWebhook: false,
-    proofOfDelivery: false,
-    printableLabel: true,
-    pickupManifest: false,
-    pickupPointDelivery: true,
-    pickupPointDirectory: true,
-    cashOnDelivery: true,
-    feeQuotation: true,
-    packageOpening: true,
-    exchangeOnDelivery: false,
-    secondaryPhone: true,
-    declaredWeight: true,
-    wilayaCoverageQuery: true,
+    addOrder: true,
+    addOrderBulk: true,
+    deleteOrder: true,
+    syncAttempted: true,
+    syncDelivered: true,
+    syncFailed: true,
+    // Pas de push : l'adaptateur declare `supportsWebhooks = false`, et tout
+    // le suivi passe par le sondage.
+    realtimeUndeliverableWilayas: false,
+    realtimeAttempted: false,
+    realtimeDelivered: false,
+    realtimeFailed: false,
+    realtimeCollectionVouchers: false,
+    realtimeAddressChange: false,
+    realtimePriceChange: false,
+    stopDesk: true,
+    afterSalesExchange: false,
+    afterSalesPickup: false,
+    stockAtCarrier: false,
   },
   ZR_EXPRESS: {
-    createShipment: true,
-    cancelShipment: true,
-    updateShipment: false,
-    trackingPolling: true,
-    trackingWebhook: false,
-    proofOfDelivery: false,
-    printableLabel: true,
-    pickupManifest: false,
-    pickupPointDelivery: true,
-    pickupPointDirectory: false,
-    cashOnDelivery: true,
-    feeQuotation: false,
-    packageOpening: true,
-    exchangeOnDelivery: false,
-    secondaryPhone: true,
-    declaredWeight: false,
-    wilayaCoverageQuery: false,
+    addOrder: true,
+    addOrderBulk: false,
+    deleteOrder: true,
+    syncAttempted: false,
+    syncDelivered: true,
+    syncFailed: true,
+    realtimeUndeliverableWilayas: false,
+    realtimeAttempted: false,
+    realtimeDelivered: false,
+    realtimeFailed: false,
+    realtimeCollectionVouchers: false,
+    realtimeAddressChange: false,
+    realtimePriceChange: false,
+    stopDesk: true,
+    afterSalesExchange: false,
+    afterSalesPickup: false,
+    stockAtCarrier: false,
   },
   ECOTRACK: {
-    createShipment: true,
-    cancelShipment: true,
-    updateShipment: false,
-    trackingPolling: true,
-    trackingWebhook: true,
-    proofOfDelivery: false,
-    printableLabel: true,
-    pickupManifest: true,
-    pickupPointDelivery: true,
-    pickupPointDirectory: false,
-    cashOnDelivery: true,
-    feeQuotation: false,
-    packageOpening: true,
-    exchangeOnDelivery: false,
-    secondaryPhone: false,
-    declaredWeight: false,
-    wilayaCoverageQuery: false,
+    addOrder: true,
+    addOrderBulk: true,
+    deleteOrder: true,
+    syncAttempted: true,
+    syncDelivered: true,
+    syncFailed: true,
+    realtimeUndeliverableWilayas: false,
+    realtimeAttempted: true,
+    realtimeDelivered: true,
+    realtimeFailed: true,
+    realtimeCollectionVouchers: false,
+    realtimeAddressChange: false,
+    realtimePriceChange: false,
+    stopDesk: true,
+    afterSalesExchange: false,
+    afterSalesPickup: false,
+    stockAtCarrier: false,
   },
 } as const;
 
@@ -506,9 +511,20 @@ async function seedCarriers(prisma: PrismaClient): Promise<number> {
 
     // Les deux colonnes historiques de `Carrier` sont DERIVEES de la matrice :
     // une seule ligne a maintenir, deux projections.
+    //
+    // `supportsWebhooks` repond a « ce connecteur pousse-t-il quoi que ce
+    // soit ? » : n'importe laquelle des capacites temps reel suffit a rendre un
+    // point d'entree webhook necessaire.
     const legacyFlags = {
-      supportsWebhooks: capabilities.trackingWebhook,
-      supportsCancellation: capabilities.cancelShipment,
+      supportsWebhooks:
+        capabilities.realtimeUndeliverableWilayas ||
+        capabilities.realtimeAttempted ||
+        capabilities.realtimeDelivered ||
+        capabilities.realtimeFailed ||
+        capabilities.realtimeCollectionVouchers ||
+        capabilities.realtimeAddressChange ||
+        capabilities.realtimePriceChange,
+      supportsCancellation: capabilities.deleteOrder,
     };
 
     const row = await prisma.carrier.upsert({

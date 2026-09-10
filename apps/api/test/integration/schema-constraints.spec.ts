@@ -573,24 +573,24 @@ describe('contraintes d integrite du schema', () => {
       return carrier.id;
     }
 
-    it('refuse un annuaire de bureaux sans livraison au bureau', async () => {
-      // La seconde capacite presuppose la premiere : lister des bureaux chez un
-      // transporteur qui n y livre pas ne veut rien dire.
+    it('refuse l ajout en masse sans ajout unitaire', async () => {
+      // On ne depose pas cent commandes d un coup chez un transporteur qui ne
+      // sait pas en deposer une.
       const carrierId = await createCarrier();
 
       await expect(
         prisma.carrierCapability.create({
-          data: { carrierId, pickupPointDelivery: false, pickupPointDirectory: true },
+          data: { carrierId, addOrder: false, addOrderBulk: true },
         }),
       ).rejects.toThrow();
     });
 
-    it('accepte un annuaire quand la livraison au bureau existe', async () => {
+    it('accepte l ajout en masse quand l ajout unitaire existe', async () => {
       const carrierId = await createCarrier();
 
       await expect(
         prisma.carrierCapability.create({
-          data: { carrierId, pickupPointDelivery: true, pickupPointDirectory: true },
+          data: { carrierId, addOrder: true, addOrderBulk: true },
         }),
       ).resolves.toBeDefined();
     });

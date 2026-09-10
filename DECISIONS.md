@@ -1472,7 +1472,7 @@ nommée dans le test ; en ajouter une autre passe par ce fichier.
 
 ---
 
-## D-049 — La matrice de capacités transporteur : colonnes explicites, projetées depuis le code
+## D-049 — La matrice de capacités transporteur : les dix-sept de l'audit, en colonnes explicites
 
 **Date** : 10/09/2026 · **Statut** : appliquée
 
@@ -1484,11 +1484,11 @@ sur un modèle dédié, ou JSON sur `Carrier`.
 
 **Problème** — EcomFlow ne distinguait les transporteurs que par deux drapeaux,
 `supportsWebhooks` et `supportsCancellation`, et proposait partout les mêmes
-actions. Le prix se paie à l'usage : un bouton cliqué qui échoue. « Annuler le
-colis » chez un transporteur qui ne sait pas annuler, « Imprimer l'étiquette »
-chez un transporteur qui n'en produit pas. À chaque fois l'agent croit avoir
-agi, le client n'est pas prévenu, et personne ne le découvre avant que le colis
-arrive quand même.
+actions. Le prix se paie à l'usage : un bouton cliqué qui échoue. « Supprimer la
+commande » chez un transporteur qui ne sait pas supprimer, « Modifier l'adresse »
+chez un transporteur qui ne l'accepte pas après dépôt. À chaque fois l'agent
+croit avoir agi, le client n'est pas prévenu, et personne ne le découvre avant
+que le colis arrive quand même.
 
 **Décision** — Un modèle `CarrierCapability`, **dix-sept colonnes booléennes
 explicites**, une ligne par transporteur. Pas de JSON. Trois raisons ont
@@ -1499,9 +1499,10 @@ tranché :
    par le catalogue de seed. Un blob édité à la main dérive de l'implémentation
    réelle, et l'interface se remet alors à proposer des actions impossibles —
    le défaut même que la matrice doit supprimer.
-2. **« Quels transporteurs produisent un bordereau de ramassage ? »** est une
-   question de comparatif. Elle s'écrit en SQL sur une colonne ; sur un JSON
-   elle s'écrit mal et ne s'indexe pas.
+2. **« Quels transporteurs poussent les bons d'encaissement en temps réel ? »**
+   est une question de comparatif, et celle qui décide d'un changement de
+   transporteur. Elle s'écrit en SQL sur une colonne ; sur un JSON elle s'écrit
+   mal et ne s'indexe pas.
 3. **Ajouter une capacité DOIT coûter une migration**, parce que cela veut dire
    l'implémenter dans chaque adaptateur. Ici, le coût est un signal, pas une
    friction.
@@ -1522,18 +1523,86 @@ maintenir d'accord — vérifié en base après amorçage : aucune dérive.
   `shipments.service`, du registre et du seed, pour un gain nul dès lors que la
   dérivation supprime le risque de divergence.
 
-**Portée à connaître** — La liste des dix-sept capacités est dérivée du **contrat
-`CarrierAdapter` et des opérations réelles du produit**, non recopiée du document
-d'audit, qui vit dans le chantier Drizzle et n'était pas accessible ici. Elle est
-à réconcilier avec la liste de l'audit avant de la considérer figée.
+**Portée — révisée le 10/09/2026.** La première version de cette matrice était
+**dérivée** du contrat `CarrierAdapter` et des opérations du produit, faute
+d'accès au document d'audit, qui vit dans le chantier de réécriture séparé. La
+liste de l'audit a depuis été fournie. Elle ne recoupait la version dérivée
+qu'à moitié, et **là où elle diverge, c'est elle qui fait foi** : elle décrit ce
+qu'un transporteur *algérien* propose à un commerçant, là où la version dérivée
+décrivait comment notre code lui parle. Ce sont deux découpages différents, et
+les confondre reviendrait à faire dépendre le vocabulaire produit de nos choix
+d'implémentation.
+
+La migration `20260910140000_carrier_capabilities_audit_alignment` réaligne
+colonnes et intitulés. La première migration n'est pas réécrite : elle est
+publiée, et le détour fait partie de l'histoire du schéma.
+
+**Ce que l'audit voyait et que la version dérivée manquait**
+
+| Manque | Pourquoi il compte |
+|---|---|
+| **Ajout en masse** | Une journée de cent commandes se poussait cent fois. |
+| **Trois états de synchronisation** au lieu d'un drapeau `trackingPolling` | Beaucoup de transporteurs renvoient « livré » sans jamais détailler les tentatives — or c'est la **tentative** qui déclenche le rappel du client. |
+| **Le temps réel comme axe, pas comme case** | `trackingWebhook` était un seul booléen. L'audit croise deux dimensions : *quoi* est synchronisé, et si c'est **poussé** ou **relevé**. Un statut relevé toutes les heures ne permet pas de rappeler un client dans la demi-heure qui suit un échec. |
+| **Bons d'encaissement** | Le manque le plus coûteux. En paiement à la livraison, c'est la seule source qui dit si **l'argent est rentré** : un colis « livré » n'est pas un colis payé. |
+| **SAV en deux gestes** (échange / pick-up) | Un transporteur peut savoir reprendre un article sans savoir l'échanger. |
+| **Modification dédoublée** (adresse / prix) | `updateShipment` global n'aurait rien permis de décider : accepter un changement d'adresse et accepter un changement du montant à encaisser n'engagent pas le même risque côté transporteur. |
+
+**Écarts restants — assumés, pas effacés**
+
+1. **Six capacités retirées de la matrice correspondent à des champs réels du
+   code.** Elles n'ont pas d'équivalent dans la liste de l'audit, et la matrice
+   tient les dix-sept :
+
+   | Retiré | Champ correspondant, toujours transmis |
+   |---|---|
+   | `printableLabel` | `ShipmentCreated.labelUrl` |
+   | `pickupPointDirectory` | `ShipmentRequest.pickupPointId` |
+   | `cashOnDelivery` | `ShipmentRequest.codAmountCentimes` |
+   | `packageOpening` | `ShipmentRequest.allowOpening` |
+   | `secondaryPhone` | `ShipmentRequest.secondaryPhone` |
+   | `declaredWeight` | `ShipmentRequest.weightGrams` |
+
+   Elles sortent de la **matrice**, pas du produit : les champs existent
+   toujours et continuent d'être envoyés aux connecteurs. Ce qui disparaît est
+   la capacité de **masquer une action** en fonction d'eux. Si l'un devient
+   discriminant — le plus probable étant l'étiquette imprimable, qui commande un
+   bouton visible — il faudra soit l'ajouter comme dix-huitième, soit constater
+   que la liste de l'audit n'était pas exhaustive. La question est ouverte, pas
+   tranchée.
+
+   Trois autres colonnes retirées (`proofOfDelivery`, `pickupManifest`,
+   `feeQuotation`) n'avaient **aucun ancrage dans le code** : elles étaient de
+   pures suppositions, et leur disparition ne coûte rien.
+
+2. **« Stop desk » contre `PICKUP_POINT` : deux registres, assumés.** La
+   capacité s'appelle `stopDesk`, comme dans l'audit et comme le dit le métier ;
+   la commande porte `DeliveryType.PICKUP_POINT`, et la grille tarifaire
+   `pickupPointFeeCentimes` (D-046). C'est la seule entorse au principe « une
+   notion, un mot ». Elle est délibérée : la matrice nomme ce que le
+   **transporteur vend**, dans les mots de son catalogue commercial ; la
+   commande nomme ce que le **colis fait**. Le commentaire du modèle établit le
+   pont dans les deux sens.
+
+3. **`stockAtCarrier` (capacité) et `CarrierAccount.stockHeldByCourier`
+   (réglage) coexistent volontairement.** L'un dit que le réseau *sait* détenir
+   du stock, l'autre que *cette boutique* s'en sert. L'audit ne liste que le
+   premier ; le second reste nécessaire, et reste déclaratif à ce stade
+   (D-051).
+
+4. **`supportsWebhooks` est désormais dérivé de sept drapeaux, pas d'un.** Il
+   vaut vrai dès qu'une capacité temps réel quelconque est déclarée : c'est la
+   question à laquelle il répond réellement — « ce connecteur pousse-t-il quoi
+   que ce soit, donc faut-il lui ouvrir un point d'entrée webhook ? ».
+   `supportsCancellation` est dérivé de `deleteOrder`.
 
 **Impact** — `CARRIER_CAPABILITY_KEYS` fixe l'ordre d'affichage, et un test
 unitaire (`carrier-capabilities.spec.ts`) vérifie qu'il correspond exactement aux
 colonnes du schéma. Sans lui, une colonne ajoutée sans clé serait **invisible** :
 la capacité existerait, serait renseignée, et n'apparaîtrait jamais à l'écran —
 personne ne cherche un bouton qu'on ne lui a jamais montré. Une contrainte
-`CHECK` interdit par ailleurs un annuaire de bureaux chez un transporteur qui ne
-livre pas au bureau.
+`CHECK` interdit par ailleurs l'ajout en masse chez un transporteur qui ne sait
+pas déposer une commande à l'unité.
 
 ---
 

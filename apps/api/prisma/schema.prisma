@@ -1419,69 +1419,94 @@ model CarrierAccount {
 ///
 /// A QUOI CA SERT, CONCRETEMENT
 ///   A ne pas afficher une action que le transporteur ne sait pas faire. Un
-///   bouton « Annuler le colis » grise apres coup, ou pire, qui echoue une fois
-///   clique, coute un appel client et une perte de confiance. La matrice permet
-///   a l'interface de ne PAS dessiner ce qui n'existe pas.
+///   bouton « Supprimer la commande » grise apres coup, ou pire, qui echoue
+///   une fois clique, coute un appel client et une perte de confiance. La
+///   matrice permet a l'interface de ne PAS dessiner ce qui n'existe pas.
+///
+/// LES DIX-SEPT VIENNENT DE L'AUDIT
+///   Cette liste et ses intitules suivent la matrice de l'audit fonctionnel
+///   Ecomanager, et non le contrat `CarrierAdapter`. C'est deliberé : la
+///   matrice decrit ce qu'un transporteur ALGERIEN propose a un commercant,
+///   dans les mots de ce metier. Le contrat d'adaptateur, lui, decrit comment
+///   notre code lui parle — ce sont deux decoupages differents, et les
+///   confondre reviendrait a faire dependre le vocabulaire produit de nos
+///   choix d'implementation. Les ecarts subsistants sont journalises en D-049.
 ///
 /// POURQUOI DES COLONNES EXPLICITES ET NON UN JSON
 ///   Un JSON serait plus souple a etendre, mais la souplesse n'est pas la
 ///   qualite recherchee ici. Trois raisons ont tranche :
 ///
-///     1. Ces booleens decrivent ce que le CODE sait faire. La verite vit dans
-///        les adaptateurs (`CarrierAdapter`) ; cette table en est la
-///        PROJECTION, alimentee par le catalogue de seed. Un blob editable a la
-///        main derive de l'implementation reelle, et l'interface se remet alors
-///        a proposer des actions impossibles — le defaut meme que la matrice
-///        doit supprimer.
-///     2. « Quels transporteurs savent produire un bordereau de ramassage ? »
-///        est une question qu'on pose au comparatif. Elle s'ecrit en SQL sur
-///        une colonne ; sur un JSON, elle s'ecrit mal et ne s'indexe pas.
+///     1. Ces booleens pilotent l'affichage d'actions reelles. Ils sont
+///        alimentes par le catalogue de seed, en regard de ce que chaque
+///        adaptateur sait honorer. Un blob editable a la main derive de
+///        l'implementation, et l'interface se remet alors a proposer des
+///        actions impossibles — le defaut meme que la matrice doit supprimer.
+///     2. « Quels transporteurs poussent les bons d'encaissement en temps
+///        reel ? » est une question qu'on pose au comparatif. Elle s'ecrit en
+///        SQL sur une colonne ; sur un JSON, elle s'ecrit mal et ne s'indexe
+///        pas.
 ///     3. Ajouter une capacite DOIT couter une migration, parce que cela veut
 ///        dire l'implementer dans chaque adaptateur. Le cout est ici un
 ///        signal, pas une friction.
 model CarrierCapability {
   carrierId String @id @map("carrier_id") @db.Uuid
 
-  // --- Cycle de vie du colis ------------------------------------------------
-  createShipment      Boolean @default(true)  @map("create_shipment")
-  cancelShipment      Boolean @default(false) @map("cancel_shipment")
-  /// Corriger un colis deja cree (adresse, telephone) sans l'annuler.
-  updateShipment      Boolean @default(false) @map("update_shipment")
+  // --- Commandes ------------------------------------------------------------
+  /// Ajout d'une commande chez le transporteur.
+  addOrder      Boolean @default(true)  @map("add_order")
+  /// Ajout en masse : depose un lot de commandes en un appel. Sans lui, une
+  /// journee de cent commandes se pousse cent fois.
+  addOrderBulk  Boolean @default(false) @map("add_order_bulk")
+  /// Suppression d'une commande deja deposee. C'est l'operation que le
+  /// contrat `CarrierAdapter` nomme `cancelShipment` : meme geste, deux
+  /// vocabulaires (voir D-049).
+  deleteOrder   Boolean @default(false) @map("delete_order")
 
-  // --- Suivi ----------------------------------------------------------------
-  trackingPolling     Boolean @default(true)  @map("tracking_polling")
-  trackingWebhook     Boolean @default(false) @map("tracking_webhook")
-  /// Signature ou photo de remise, recuperable par l'API.
-  proofOfDelivery     Boolean @default(false) @map("proof_of_delivery")
+  // --- Synchronisation (relevé periodique) ---------------------------------
+  //
+  // Le transporteur est INTERROGE. Les trois etats sont distincts parce qu'ils
+  // le sont chez les transporteurs : beaucoup renvoient « livre » sans jamais
+  // detailler les tentatives, et c'est precisement la tentative qui declenche
+  // le rappel du client.
+  syncAttempted Boolean @default(false) @map("sync_attempted")
+  syncDelivered Boolean @default(true)  @map("sync_delivered")
+  syncFailed    Boolean @default(false) @map("sync_failed")
 
-  // --- Documents ------------------------------------------------------------
-  printableLabel      Boolean @default(false) @map("printable_label")
-  /// Bordereau recapitulatif remis au livreur lors de l'enlevement.
-  pickupManifest      Boolean @default(false) @map("pickup_manifest")
+  // --- Synchronisation temps reel (le transporteur POUSSE) -----------------
+  //
+  // Meme information, mode d'acheminement different — et la difference
+  // opperationnelle est reelle : un statut releve toutes les heures ne permet
+  // pas de rappeler un client dans la demi-heure qui suit un echec.
+  /// Wilayas devenues non livrables (greve, meteo, fermeture d'agence).
+  realtimeUndeliverableWilayas Boolean @default(false) @map("realtime_undeliverable_wilayas")
+  realtimeAttempted            Boolean @default(false) @map("realtime_attempted")
+  realtimeDelivered            Boolean @default(false) @map("realtime_delivered")
+  realtimeFailed               Boolean @default(false) @map("realtime_failed")
+  /// Bons d'encaissement : ce que le transporteur a REELLEMENT reverse. En
+  /// paiement a la livraison, c'est la seule source qui dit si l'argent est
+  /// rentre — un colis « livre » n'est pas un colis paye.
+  realtimeCollectionVouchers   Boolean @default(false) @map("realtime_collection_vouchers")
+  /// Changement d'adresse accepte apres depot, et repercute.
+  realtimeAddressChange        Boolean @default(false) @map("realtime_address_change")
+  /// Changement du montant a encaisser apres depot.
+  realtimePriceChange          Boolean @default(false) @map("realtime_price_change")
 
-  // --- Modes de livraison ---------------------------------------------------
-  /// Retrait au bureau du transporteur. Le vocabulaire suit `DeliveryType`.
-  pickupPointDelivery Boolean @default(false) @map("pickup_point_delivery")
-  /// L'API sait-elle LISTER les bureaux ? Sans cela, l'identifiant du point
-  /// doit etre saisi a la main, et l'ecran doit le dire.
-  pickupPointDirectory Boolean @default(false) @map("pickup_point_directory")
+  // --- Livraison et service apres-vente ------------------------------------
+  /// Retrait au bureau du transporteur. Le metier dit « stop desk » ; la
+  /// commande, elle, porte `DeliveryType.PICKUP_POINT`. Meme notion, deux
+  /// registres assumes (D-049).
+  stopDesk           Boolean @default(false) @map("stop_desk")
+  /// SAV : echange d'un article contre un autre a la livraison.
+  afterSalesExchange Boolean @default(false) @map("after_sales_exchange")
+  /// SAV : reprise d'un article chez le client, sans echange.
+  afterSalesPickup   Boolean @default(false) @map("after_sales_pickup")
 
-  // --- Argent ---------------------------------------------------------------
-  cashOnDelivery      Boolean @default(true)  @map("cash_on_delivery")
-  /// L'API chiffre-t-elle la course avant expedition ?
-  feeQuotation        Boolean @default(false) @map("fee_quotation")
-
-  // --- Usages du marche algerien -------------------------------------------
-  /// Le client peut ouvrir le colis avant de payer.
-  packageOpening      Boolean @default(false) @map("package_opening")
-  /// Echange d'un article a la livraison, contre reprise de l'ancien.
-  exchangeOnDelivery  Boolean @default(false) @map("exchange_on_delivery")
-  /// Second numero de telephone transmis au livreur.
-  secondaryPhone      Boolean @default(false) @map("secondary_phone")
-  declaredWeight      Boolean @default(false) @map("declared_weight")
-  /// La couverture par wilaya est-elle interrogeable par l'API ? Si non,
-  /// `CarrierWilayaCoverage` doit etre renseigne a la main.
-  wilayaCoverageQuery Boolean @default(false) @map("wilaya_coverage_query")
+  // --- Logistique -----------------------------------------------------------
+  /// Le transporteur SAIT detenir du stock pour le compte d'une boutique.
+  /// Distinct de `CarrierAccount.stockHeldByCourier`, qui dit si CETTE
+  /// boutique s'en sert : l'un est une aptitude du reseau, l'autre un
+  /// arrangement commercial (D-051).
+  stockAtCarrier Boolean @default(false) @map("stock_at_carrier")
 
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 

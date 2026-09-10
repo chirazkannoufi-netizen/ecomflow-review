@@ -56,25 +56,34 @@ import type { CarrierContext, ShipmentRequest } from './carriers/carrier-adapter
  * verifie (`carrier-capabilities.spec.ts`). Sans elle, l'ecran afficherait les
  * capacites dans l'ordre alphabetique des colonnes Prisma, qui ne veut rien
  * dire pour un exploitant.
+ *
+ * L'ORDRE SUIT CELUI DE L'AUDIT, qui va du geste le plus courant (deposer une
+ * commande) au plus rare (confier son stock). Les intitules aussi : voir le
+ * commentaire du modele et D-049.
  */
 export const CARRIER_CAPABILITY_KEYS = [
-  'createShipment',
-  'cancelShipment',
-  'updateShipment',
-  'trackingPolling',
-  'trackingWebhook',
-  'proofOfDelivery',
-  'printableLabel',
-  'pickupManifest',
-  'pickupPointDelivery',
-  'pickupPointDirectory',
-  'cashOnDelivery',
-  'feeQuotation',
-  'packageOpening',
-  'exchangeOnDelivery',
-  'secondaryPhone',
-  'declaredWeight',
-  'wilayaCoverageQuery',
+  // Commandes
+  'addOrder',
+  'addOrderBulk',
+  'deleteOrder',
+  // Synchronisation relevee
+  'syncAttempted',
+  'syncDelivered',
+  'syncFailed',
+  // Synchronisation poussee
+  'realtimeUndeliverableWilayas',
+  'realtimeAttempted',
+  'realtimeDelivered',
+  'realtimeFailed',
+  'realtimeCollectionVouchers',
+  'realtimeAddressChange',
+  'realtimePriceChange',
+  // Livraison et SAV
+  'stopDesk',
+  'afterSalesExchange',
+  'afterSalesPickup',
+  // Logistique
+  'stockAtCarrier',
 ] as const;
 
 export type CarrierCapabilityKey = (typeof CARRIER_CAPABILITY_KEYS)[number];

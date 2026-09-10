@@ -1416,31 +1416,30 @@
     "capabilities": "القدرات",
     "capabilitiesUnknown": "قدرات شركة التوصيل هذه غير مُدخلة. وما دامت كذلك، لا يُخفى أي إجراء ولا يُوعد بأي منها.",
     "capabilityGroups": {
-      "lifecycle": "دورة حياة الطرد",
-      "tracking": "التتبّع",
-      "documents": "الوثائق",
-      "delivery": "أنماط التوصيل",
-      "money": "المال",
-      "market": "أعراف السوق"
+      "orders": "الطلبات",
+      "sync": "المزامنة",
+      "realtime": "المزامنة الآنية",
+      "delivery": "التوصيل وخدمة ما بعد البيع",
+      "logistics": "اللوجستيك"
     },
     "capabilityNames": {
-      "createShipment": "إنشاء طرد",
-      "cancelShipment": "إلغاء طرد",
-      "updateShipment": "تعديل طرد مُنشأ",
-      "trackingPolling": "الاستعلام عن الحالة",
-      "trackingWebhook": "استقبال الأحداث",
-      "proofOfDelivery": "إثبات التسليم",
-      "printableLabel": "ملصق قابل للطباعة",
-      "pickupManifest": "وصل الاستلام",
-      "pickupPointDelivery": "التسليم في المكتب",
-      "pickupPointDirectory": "دليل المكاتب",
-      "cashOnDelivery": "الدفع عند الاستلام",
-      "feeQuotation": "حساب الرسوم",
-      "packageOpening": "فتح الطرد قبل الدفع",
-      "exchangeOnDelivery": "الاستبدال عند التسليم",
-      "secondaryPhone": "رقم هاتف ثانٍ",
-      "declaredWeight": "الوزن المُصرَّح",
-      "wilayaCoverageQuery": "التغطية قابلة للاستعلام"
+      "addOrder": "إضافة طلب",
+      "addOrderBulk": "إضافة بالجملة",
+      "deleteOrder": "الحذف",
+      "syncAttempted": "المحاولات",
+      "syncDelivered": "المُسلَّمة",
+      "syncFailed": "الفاشلة",
+      "realtimeUndeliverableWilayas": "ولايات غير قابلة للتوصيل",
+      "realtimeAttempted": "المحاولات",
+      "realtimeDelivered": "المُسلَّمة",
+      "realtimeFailed": "الفاشلة",
+      "realtimeCollectionVouchers": "وصولات التحصيل",
+      "realtimeAddressChange": "تعديل العنوان",
+      "realtimePriceChange": "تعديل السعر",
+      "stopDesk": "التسليم في المكتب",
+      "afterSalesExchange": "استبدال بعد البيع",
+      "afterSalesPickup": "استرجاع بعد البيع",
+      "stockAtCarrier": "المخزون لدى شركة التوصيل"
     },
     "coverage": "التغطية حسب الولاية",
     "coverageOpen": "عرض التغطية حسب الولاية",
@@ -1459,6 +1458,7 @@
     "sendOrderNumberHint": "بدل مرجع EcomFlow، للعثور على الطرد هاتفياً مع شركة التوصيل. بدون رقم خارجي، يبقى المرجع هو المُرسَل.",
     "stockHeldByCourier": "شركة التوصيل تحتفظ بالمخزون",
     "stockHeldByCourierHint": "البضاعة عندها أصلاً: لا حاجة لتنظيم استلام.",
-    "lastCheck": "آخر تحقّق: {date}"
+    "lastCheck": "آخر تحقّق: {date}",
+    "capabilityHint": "الإجراء الذي لا تستطيع شركة التوصيل تنفيذه لا يُقترح في بقية المنتج."
   }
 }

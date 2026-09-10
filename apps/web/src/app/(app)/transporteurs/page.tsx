@@ -47,23 +47,32 @@ import {
   formatDateTime,
 } from '@/components/ui';
 
-/** Ordre d'affichage de la matrice, aligne sur `CARRIER_CAPABILITY_KEYS`. */
+/**
+ * Ordre d'affichage de la matrice, aligne sur `CARRIER_CAPABILITY_KEYS`.
+ *
+ * Les deux familles de synchronisation sont separees a l'ecran comme elles le
+ * sont dans l'audit : la meme information — tentatives, livrees, echouees —
+ * n'a pas la meme valeur selon qu'elle est RELEVEE toutes les heures ou POUSSEE
+ * a l'instant. Les fondre en une seule colonne masquerait exactement ce qui
+ * distingue deux transporteurs.
+ */
 const CAPABILITY_GROUPS = [
-  { key: 'lifecycle', items: ['createShipment', 'cancelShipment', 'updateShipment'] },
-  { key: 'tracking', items: ['trackingPolling', 'trackingWebhook', 'proofOfDelivery'] },
-  { key: 'documents', items: ['printableLabel', 'pickupManifest'] },
-  { key: 'delivery', items: ['pickupPointDelivery', 'pickupPointDirectory'] },
-  { key: 'money', items: ['cashOnDelivery', 'feeQuotation'] },
+  { key: 'orders', items: ['addOrder', 'addOrderBulk', 'deleteOrder'] },
+  { key: 'sync', items: ['syncAttempted', 'syncDelivered', 'syncFailed'] },
   {
-    key: 'market',
+    key: 'realtime',
     items: [
-      'packageOpening',
-      'exchangeOnDelivery',
-      'secondaryPhone',
-      'declaredWeight',
-      'wilayaCoverageQuery',
+      'realtimeUndeliverableWilayas',
+      'realtimeAttempted',
+      'realtimeDelivered',
+      'realtimeFailed',
+      'realtimeCollectionVouchers',
+      'realtimeAddressChange',
+      'realtimePriceChange',
     ],
   },
+  { key: 'delivery', items: ['stopDesk', 'afterSalesExchange', 'afterSalesPickup'] },
+  { key: 'logistics', items: ['stockAtCarrier'] },
 ] as const;
 
 interface CarrierEntry {
@@ -207,9 +216,10 @@ function CapabilityMatrix({ capabilities }: { capabilities: Record<string, boole
 
   return (
     <section>
-      <h4 className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">
+      <h4 className="text-xs font-medium uppercase tracking-wide text-slate-500">
         {t('capabilities')}
       </h4>
+      <p className="mb-1.5 text-xs text-slate-500">{t('capabilityHint')}</p>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {CAPABILITY_GROUPS.map((group) => (
