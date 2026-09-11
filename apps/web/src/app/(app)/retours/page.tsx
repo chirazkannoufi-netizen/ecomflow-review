@@ -30,6 +30,7 @@ import {
 import { api, ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 import { PageHeader } from '@/components/app-shell';
+import { GroupTabs } from '@/components/group-tabs';
 import {
   Alert,
   Badge,
@@ -170,6 +171,8 @@ export default function ReturnsPage() {
         title={t('title')}
         description={t('subtitle')}
       />
+
+      <GroupTabs />
 
       {feedback ? (
         <div className="mb-3">

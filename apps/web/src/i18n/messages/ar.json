@@ -459,9 +459,7 @@
     "failed": "تعذّر الإنشاء.",
     "customerNamePlaceholder": "سارة بن علي",
     "communePlaceholder": "باب الزوار",
-    "addressPlaceholder": "حي 1200 مسكن، عمارة ب4، الطابق الثالث",
-    "communePickWilayaFirst": "اختر الولاية أولاً",
-    "communeCount": "{count, plural, zero {لا بلدية مقترحة} one {بلدية واحدة مقترحة} two {بلديتان مقترحتان} few {# بلديات مقترحة} many {# بلدية مقترحة} other {# بلدية مقترحة}}"
+    "addressPlaceholder": "حي 1200 مسكن، عمارة ب4، الطابق الثالث"
   },
   "confirmation": {
     "title": "مركز التأكيد",
@@ -531,12 +529,6 @@
     },
     "outcomeLabel": "حالة التأكيد",
     "outcomeHint": "نفس قائمة الأزرار أدناه.",
-    "stages": {
-      "pendingConfirmation": "قيد التأكيد",
-      "inPreparation": "قيد التحضير",
-      "inDelivery": "قيد التوصيل",
-      "inReturn": "قيد الإرجاع"
-    },
     "columns": {
       "reference": "المرجع",
       "attempts": "المحاولات"
@@ -1505,5 +1497,10 @@
       "lightfunnels": "عبر Lightfunnels",
       "googleSheet": "عبر Google Sheet"
     }
+  },
+  "geo": {
+    "communePickWilayaFirst": "اختر الولاية أولاً",
+    "communeCount": "{count, plural, zero {لا بلدية مقترحة} one {بلدية واحدة مقترحة} two {بلديتان مقترحتان} few {# بلديات مقترحة} many {# بلدية مقترحة} other {# بلدية مقترحة}}",
+    "communePlaceholder": "بلدية التسليم"
   }
 }

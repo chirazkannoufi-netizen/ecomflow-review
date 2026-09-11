@@ -26,42 +26,21 @@ import {
 import { useTranslations } from 'next-intl';
 import {
   ArrowRight,
-  BarChart3,
-  Bell,
-  Boxes,
   Check,
   ChevronDown,
-  ClipboardList,
-  CreditCard,
-  FileText,
-  LayoutDashboard,
   LogOut,
-  MapPin,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  Package,
-  PackageCheck,
-  Phone,
-  Plug,
-  ScrollText,
   Search,
-  Settings,
   ShieldCheck,
   Store,
-  TrendingUp,
-  Truck,
-  Undo2,
-  UserCog,
-  Users,
-  Warehouse,
-  Workflow,
-  type LucideIcon,
 } from 'lucide-react';
 import { PERMISSIONS } from '@ecomflow/shared';
 import { api } from '@/lib/api-client';
 import { useSession, type SessionTenant } from '@/lib/session';
 import { subscriptionReasonKey } from '@/lib/subscription-reason';
+import { NAVIGATION, type NavEntry } from './navigation';
 import { LanguageSwitcher } from './language-switcher';
 import { NewOrderMenu } from './new-order-menu';
 import { Badge, Button, LoadingState } from './ui';
@@ -69,189 +48,7 @@ import { Badge, Button, LoadingState } from './ui';
 /** Cle de preference locale du repli de la barre laterale. */
 const SIDEBAR_COLLAPSED_KEY = 'ecomflow.sidebar.collapsed';
 
-interface NavEntry {
-  /**
-   * Route de l'entree, ou `null` tant que l'ecran n'existe pas.
-   *
-   * Une entree sans route est affichee, mais INERTE : elle tient sa place dans
-   * la structure du menu sans conduire a un 404. Voir `NAVIGATION`.
-   */
-  readonly href: string | null;
-  readonly labelKey: string;
-  readonly icon: LucideIcon;
-  /** Permission requise pour afficher l'entree. */
-  readonly permission?: string;
-  /** Cle du compteur d'alerte a afficher en pastille. */
-  readonly alertKey?: AlertKey;
-  /**
-   * Sous-entrees, pour les regroupements par etape de flux.
-   *
-   * Chaque enfant garde SA permission : le parent n'en impose aucune et
-   * s'affiche des qu'un enfant au moins est autorise. C'est ce qui permet de
-   * regrouper des ecrans sans retirer l'acces a un role qui n'en voit qu'un.
-   */
-  readonly children?: readonly NavEntry[];
-}
 
-type AlertKey =
-  | 'pendingConfirmation'
-  | 'lowStock'
-  | 'failedImports'
-  | 'pendingDuplicates'
-  | 'inPreparation'
-  | 'inReturn';
-
-/**
- * Navigation, dans les quatre groupes du systeme de design (Suite UI/UX v1.0,
- * ecrans 07 a 26) : MAIN, OPERATIONS, ANALYTICS, SYSTEM.
- *
- * Les entrees portent une CLE de traduction (`nav.orders`) et non un libelle :
- * c'est ce qui permet a la barre laterale de basculer en arabe sans dupliquer
- * la structure du menu.
- *
- * DES ENTREES A DEUX NIVEAUX, ET POURQUOI PAS DES ONGLETS
- *   « Traitement » et « Suivi » regroupent des ecrans par ETAPE DU FLUX, ce que
- *   la liste plate ne disait pas. Mais le regroupement est une affaire
- *   d'AFFICHAGE : chaque enfant garde sa route et SA PERMISSION.
- *
- *   Les fondre en onglets d'un seul ecran aurait coute l'acces a un role
- *   entier. Un preparateur a `PREPARATION_MANAGE` sans `CONFIRMATION_MANAGE` :
- *   des onglets sous un parent « Centre de confirmation » lui auraient fait
- *   disparaitre le seul ecran ou il travaille. Ici, le parent s'affiche des
- *   qu'UN enfant est autorise, et ne montre que ceux-la.
- *
- *   C'est aussi pourquoi les parents ne s'appellent pas « Centre de
- *   confirmation » : un intitule qui nomme l'etape d'un seul enfant ment aux
- *   autres.
- *
- * LES ECRANS NON CONSTRUITS RESTENT LISTES — `href: null`.
- *   Suivi, Livre, Statistiques, Notifications et Journal d'audit figurent au
- *   systeme de design sans avoir encore de route. Ils sont listes ICI plutot
- *   qu'omis : la place qu'ils occupent dans la hierarchie fait partie de la
- *   maquette, et un menu qui se reorganise a chaque ecran livre desoriente plus
- *   qu'il n'aide. Ils s'affichent estompes et non cliquables.
- */
-const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEntry[] }[] = [
-  {
-    sectionKey: 'main',
-    entries: [
-      { href: '/', labelKey: 'dashboard', icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD_VIEW },
-      { href: '/commandes', labelKey: 'orders', icon: ClipboardList, permission: PERMISSIONS.ORDERS_READ },
-      { href: '/clients', labelKey: 'customers', icon: Users, permission: PERMISSIONS.CUSTOMERS_READ },
-    ],
-  },
-  {
-    sectionKey: 'operations',
-    entries: [
-      { href: '/produits', labelKey: 'products', icon: Boxes, permission: PERMISSIONS.PRODUCTS_READ },
-      {
-        href: '/stock',
-        labelKey: 'stock',
-        icon: Warehouse,
-        permission: PERMISSIONS.INVENTORY_READ,
-        alertKey: 'lowStock',
-      },
-      {
-        // Parent SANS permission propre : il apparait des qu'un enfant est
-        // autorise. Un preparateur y verra « Preparation » et « Expeditions »,
-        // un agent de confirmation y verra « Confirmation », et ni l'un ni
-        // l'autre ne perd son ecran.
-        href: null,
-        labelKey: 'processing',
-        icon: Workflow,
-        children: [
-          {
-            href: '/confirmation',
-            labelKey: 'confirmation',
-            icon: Phone,
-            permission: PERMISSIONS.CONFIRMATION_MANAGE,
-            alertKey: 'pendingConfirmation',
-          },
-          {
-            href: '/preparation',
-            labelKey: 'preparation',
-            icon: Package,
-            permission: PERMISSIONS.PREPARATION_MANAGE,
-            alertKey: 'inPreparation',
-          },
-          {
-            href: '/expeditions',
-            labelKey: 'shipments',
-            icon: Truck,
-            permission: PERMISSIONS.SHIPMENTS_READ,
-          },
-        ],
-      },
-      {
-        href: null,
-        labelKey: 'followUp',
-        icon: MapPin,
-        children: [
-          {
-            href: null,
-            labelKey: 'inDelivery',
-            icon: MapPin,
-            permission: PERMISSIONS.SHIPMENTS_TRACK,
-          },
-          {
-            href: null,
-            labelKey: 'delivered',
-            icon: PackageCheck,
-            permission: PERMISSIONS.SHIPMENTS_TRACK,
-          },
-          {
-            href: '/retours',
-            labelKey: 'returns',
-            icon: Undo2,
-            permission: PERMISSIONS.RETURNS_READ,
-            alertKey: 'inReturn',
-          },
-        ],
-      },
-      {
-        href: '/transporteurs',
-        labelKey: 'carriers',
-        icon: Truck,
-        permission: PERMISSIONS.SHIPMENTS_READ,
-      },
-    ],
-  },
-  {
-    sectionKey: 'analytics',
-    entries: [
-      { href: null, labelKey: 'statistics', icon: BarChart3, permission: PERMISSIONS.REPORTS_VIEW },
-      {
-        href: '/rentabilite',
-        labelKey: 'profitability',
-        icon: TrendingUp,
-        permission: PERMISSIONS.PROFITABILITY_VIEW,
-      },
-      { href: null, labelKey: 'reports', icon: FileText, permission: PERMISSIONS.REPORTS_VIEW },
-    ],
-  },
-  {
-    sectionKey: 'system',
-    entries: [
-      {
-        href: '/integrations',
-        labelKey: 'integrations',
-        icon: Plug,
-        permission: PERMISSIONS.INTEGRATIONS_READ,
-        alertKey: 'failedImports',
-      },
-      { href: '/utilisateurs', labelKey: 'users', icon: UserCog, permission: PERMISSIONS.USERS_READ },
-      { href: '/abonnement', labelKey: 'subscription', icon: CreditCard, permission: PERMISSIONS.BILLING_VIEW },
-      {
-        href: null,
-        labelKey: 'notifications',
-        icon: Bell,
-        permission: PERMISSIONS.NOTIFICATIONS_MANAGE,
-      },
-      { href: null, labelKey: 'auditLogs', icon: ScrollText, permission: PERMISSIONS.AUDIT_VIEW },
-      { href: '/parametres', labelKey: 'settings', icon: Settings, permission: PERMISSIONS.SETTINGS_MANAGE },
-    ],
-  },
-];
 
 interface SubscriptionState {
   readonly status: string;
@@ -412,42 +209,71 @@ function NavItem({
   const Icon = entry.icon;
   const label = tNav(entry.labelKey);
 
-  // Un parent replie n'a plus de role : ses enfants deviennent des entrees de
-  // premier rang, et lui-meme disparait pour ne pas occuper une ligne muette.
   if (entry.children) {
     const childAlerts = entry.children.reduce(
       (total, child) => total + (child.alertKey ? (alerts?.[child.alertKey] ?? 0) : 0),
       0,
     );
 
-    return (
-      <>
-        <li className={collapsed ? 'lg:hidden' : undefined}>
-          <div className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-ink-2">
-            <Icon className="h-4 w-4 shrink-0 text-muted" strokeWidth={1.6} aria-hidden="true" />
-            <span className="flex-1 truncate">{label}</span>
-            {/* Le parent porte la SOMME des alertes de ses enfants : replie ou
-                non, il doit dire qu'il y a quelque chose a voir dessous. */}
-            {childAlerts > 0 ? (
-              <span className="tabular rounded-full bg-peach px-1.5 py-0.5 text-[11px] font-bold text-peach-deep">
-                {childAlerts > 99 ? '99+' : childAlerts}
-              </span>
-            ) : null}
-          </div>
-        </li>
+    // REPLIEE, LA HIERARCHIE S'APLATIT.
+    //   A 4 rem, un parent inerte occuperait une ligne muette et le retrait ne
+    //   voudrait plus rien dire. Les enfants remontent donc au premier rang :
+    //   ce qui compte alors est d'atteindre l'ecran, pas de lire
+    //   l'organigramme.
+    if (collapsed) {
+      return (
+        <>
+          {entry.children.map((child) => (
+            <NavItem
+              key={child.labelKey}
+              entry={child}
+              depth={0}
+              pathname={pathname}
+              alerts={alerts}
+              collapsed={collapsed}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </>
+      );
+    }
 
-        {entry.children.map((child) => (
-          <NavItem
-            key={child.labelKey}
-            entry={child}
-            depth={depth + 1}
-            pathname={pathname}
-            alerts={alerts}
-            collapsed={collapsed}
-            onNavigate={onNavigate}
-          />
-        ))}
-      </>
+    // DEPLIEE, L'IMBRICATION EST STRUCTURELLE, PAS SEULEMENT VISUELLE.
+    //   Les enfants vivaient dans le MEME <ul> que leur parent, decales d'un
+    //   simple `ps-7`. Rien, ni dans le balisage ni a l'oeil, ne les rattachait
+    //   a lui : un retrait seul se lit mal des que les icones different, et pas
+    //   du tout pour un lecteur d'ecran, qui annoncait une liste plate.
+    //
+    //   Une <ul> imbriquee porte le rattachement dans le DOM, et le filet
+    //   vertical le rend visible d'un coup d'oeil.
+    return (
+      <li>
+        <div className="flex items-center gap-2.5 px-2.5 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-muted">
+          <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} aria-hidden="true" />
+          <span className="flex-1 truncate">{label}</span>
+          {/* Le parent porte la SOMME des alertes de ses enfants : il doit dire
+              qu'il y a quelque chose a voir dessous. */}
+          {childAlerts > 0 ? (
+            <span className="tabular rounded-full bg-peach px-1.5 py-0.5 text-[11px] font-bold text-peach-deep">
+              {childAlerts > 99 ? '99+' : childAlerts}
+            </span>
+          ) : null}
+        </div>
+
+        <ul className="ms-[1.1rem] space-y-0.5 border-s border-line ps-1.5">
+          {entry.children.map((child) => (
+            <NavItem
+              key={child.labelKey}
+              entry={child}
+              depth={depth + 1}
+              pathname={pathname}
+              alerts={alerts}
+              collapsed={collapsed}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </ul>
+      </li>
     );
   }
 
@@ -505,10 +331,6 @@ function NavItem({
         ? `${label} (${count})`
         : label;
 
-  // Le retrait des enfants disparait au repli : `ps-*` n'aurait plus de sens
-  // sur une colonne de 4 rem, ou les icones sont centrees.
-  const indent = depth > 0 && !collapsed ? 'ps-7' : undefined;
-
   return (
     <li>
       {entry.href === null ? (
@@ -519,7 +341,6 @@ function NavItem({
         <span
           className={clsx(
             'flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-muted opacity-60',
-            indent,
             collapsed && 'lg:justify-center lg:px-0',
           )}
           title={collapsed ? collapsedTitle : tNav('soonHint')}
@@ -534,7 +355,6 @@ function NavItem({
           className={clsx(
             'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors',
             active ? 'bg-ink text-white' : 'text-ink-2 hover:bg-canvas',
-            indent,
             collapsed && 'lg:justify-center lg:px-0',
           )}
         >

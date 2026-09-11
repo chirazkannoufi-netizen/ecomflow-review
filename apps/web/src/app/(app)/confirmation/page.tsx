@@ -45,6 +45,8 @@ import {
 } from '@ecomflow/shared';
 import { api, ApiError } from '@/lib/api-client';
 import { PageHeader } from '@/components/app-shell';
+import { CommuneField } from '@/components/commune-field';
+import { GroupTabs } from '@/components/group-tabs';
 import {
   Alert,
   Badge,
@@ -120,13 +122,6 @@ interface QueueStats {
   readonly maxCallAttempts: number;
 }
 
-/** Compteurs d'etape, affiches en onglets au-dessus de la file. */
-interface StageCounts {
-  readonly pendingConfirmation: number;
-  readonly inPreparation: number;
-  readonly inDelivery: number;
-  readonly inReturn: number;
-}
 
 /** Coordonnees de livraison en cours de saisie. */
 interface DeliveryDraft {
@@ -243,13 +238,6 @@ function sameQuantities(entry: QueueItem, draft: Record<string, number>): boolea
   return entry.items.every((item) => (draft[item.id] ?? item.quantity) === item.quantity);
 }
 
-/** Etapes du cycle, dans l'ordre ou une commande les traverse. */
-const STAGES = [
-  { key: 'pendingConfirmation', href: '/confirmation', current: true },
-  { key: 'inPreparation', href: '/preparation', current: false },
-  { key: 'inDelivery', href: '/expeditions', current: false },
-  { key: 'inReturn', href: '/retours', current: false },
-] as const;
 
 export default function ConfirmationPage() {
   const t = useTranslations('confirmation');
@@ -327,12 +315,6 @@ export default function ConfirmationPage() {
     queryKey: ['confirmation', 'stats'],
     queryFn: () => api.get<QueueStats>('/confirmation/queue/stats'),
     refetchInterval: 30_000,
-  });
-
-  const stagesQuery = useQuery({
-    queryKey: ['dashboard', 'alerts'],
-    queryFn: () => api.get<StageCounts>('/dashboard/alerts'),
-    refetchInterval: 60_000,
   });
 
   // Catalogue, uniquement pour le filtre « produit ». Il change rarement.
@@ -653,8 +635,6 @@ export default function ConfirmationPage() {
     );
   }
 
-  const stages = stagesQuery.data;
-
   return (
     <>
       <PageHeader
@@ -672,39 +652,7 @@ export default function ConfirmationPage() {
         }
       />
 
-      {/* --- Onglets d'etape -------------------------------------------------
-          Ils donnent la position de la file dans le cycle complet : combien
-          attendent un appel, combien sont deja au depot, en route, ou revenus.
-          Ce sont des LIENS vers les ecrans concernes, pas des filtres de cette
-          page — chaque etape a son propre outil. */}
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        {STAGES.map((stage) => {
-          const count = stages?.[stage.key] ?? 0;
-          return (
-            <a
-              key={stage.key}
-              href={stage.href}
-              aria-current={stage.current ? 'page' : undefined}
-              className={clsx(
-                'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors',
-                stage.current
-                  ? 'bg-ink text-white'
-                  : 'bg-surface text-ink-2 hover:bg-canvas border border-line',
-              )}
-            >
-              {t(`stages.${stage.key}`)}
-              <span
-                className={clsx(
-                  'tabular rounded-full px-1.5 text-xs font-bold',
-                  stage.current ? 'bg-lime text-ink' : 'bg-canvas text-muted',
-                )}
-              >
-                {count}
-              </span>
-            </a>
-          );
-        })}
-      </div>
+      <GroupTabs />
 
       {feedback ? (
         <div className="mb-3">
@@ -1135,7 +1083,14 @@ function EditDrawer({
             label={tCommon('wilaya')}
             value={draftDetails.wilayaCode}
             onChange={(event) =>
-              setDraftDetails({ ...draftDetails, wilayaCode: event.target.value })
+              setDraftDetails({
+                ...draftDetails,
+                wilayaCode: event.target.value,
+                // « Ce n'est pas Setif, c'est Bordj » corrige les DEUX champs :
+                // garder la commune precedente produirait une adresse
+                // impossible, que rien ne signalerait avant le depart du colis.
+                commune: '',
+              })
             }
           >
             <option value="">{tCommon('select')}</option>
@@ -1146,10 +1101,10 @@ function EditDrawer({
               </option>
             ))}
           </Select>
-          <Input
-            label={tCommon('commune')}
+          <CommuneField
+            wilayaCode={draftDetails.wilayaCode}
             value={draftDetails.commune}
-            onChange={(event) => setDraftDetails({ ...draftDetails, commune: event.target.value })}
+            onChange={(value) => setDraftDetails({ ...draftDetails, commune: value })}
           />
         </div>
 

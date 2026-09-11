@@ -33,6 +33,7 @@ import {
   parseAlgerianPhone,
 } from '@ecomflow/shared';
 import { api, ApiError } from '@/lib/api-client';
+import { CommuneField } from '@/components/commune-field';
 import { PageHeader } from '@/components/app-shell';
 import {
   Alert,
@@ -136,14 +137,6 @@ export default function NewOrderPage() {
   }, [knownCustomer, customerName]);
 
   /**
-   * Communes de la wilaya choisie.
-   *
-   * Chargee A LA DEMANDE, jamais d'avance : les 1541 communes representent une
-   * cinquantaine de kilo-octets, que la quasi-totalite des pages du produit
-   * n'ouvrira jamais. `staleTime` a l'infini parce qu'un decoupage
-   * administratif ne change pas pendant une session de travail.
-   */
-  /**
    * Provenance declaree par le menu « Nouvelle commande ».
    *
    * Validee contre la liste partagee plutot que transmise telle quelle : un
@@ -155,14 +148,6 @@ export default function NewOrderPage() {
   const declaredSource = MANUAL_ORDER_SOURCES.includes(sourceParam as never)
     ? sourceParam
     : null;
-
-  const communesQuery = useQuery({
-    queryKey: ['geo', 'communes', wilaya],
-    queryFn: () =>
-      api.get<{ id: string; name: string }[]>(`/geo/wilayas/${wilaya}/communes`),
-    enabled: Boolean(wilaya),
-    staleTime: Infinity,
-  });
 
   const createMutation = useMutation({
     mutationFn: (payload: Record<string, unknown>) =>
@@ -347,40 +332,12 @@ export default function NewOrderPage() {
                   </option>
                 ))}
               </Select>
-              {/* --- Commune, filtree par la wilaya choisie ----------------
-                  LISTE + SAISIE LIBRE, PAS L'UN OU L'AUTRE.
-                    Le referentiel compte 1541 communes : les proposer toutes
-                    serait aussi inutilisable que de n'en proposer aucune.
-                    Filtrer par wilaya ramene le choix a une cinquantaine.
-
-                    Mais le champ reste une saisie libre avec suggestions
-                    (`datalist`) et non un `select` ferme : D-018 refuse de
-                    bloquer une commande parce que sa commune ne figure pas
-                    dans une liste — les translitterations varient trop d'un
-                    transporteur a l'autre. On AIDE la saisie, on ne
-                    l'emprisonne pas. */}
-              <div>
-                <Input
-                  label={tCommon('commune')}
-                  required
-                  list="communes-wilaya"
-                  value={commune}
-                  onChange={(event) => setCommune(event.target.value)}
-                  placeholder={
-                    wilaya ? t('communePlaceholder') : t('communePickWilayaFirst')
-                  }
-                  hint={
-                    wilaya && communesQuery.data
-                      ? t('communeCount', { count: communesQuery.data.length })
-                      : undefined
-                  }
-                />
-                <datalist id="communes-wilaya">
-                  {(communesQuery.data ?? []).map((entry) => (
-                    <option key={entry.id} value={entry.name} />
-                  ))}
-                </datalist>
-              </div>
+              <CommuneField
+                wilayaCode={wilaya}
+                value={commune}
+                onChange={setCommune}
+                required
+              />
             </div>
             <div className="mt-3">
               <Textarea

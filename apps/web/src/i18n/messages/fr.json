@@ -459,9 +459,7 @@
     "failed": "Création impossible.",
     "customerNamePlaceholder": "Sara Benali",
     "communePlaceholder": "Bab Ezzouar",
-    "addressPlaceholder": "Cite 1200 Logements, Bat B4, 3e étage",
-    "communePickWilayaFirst": "Choisissez d'abord la wilaya",
-    "communeCount": "{count, plural, one {# commune proposée} other {# communes proposées}}"
+    "addressPlaceholder": "Cite 1200 Logements, Bat B4, 3e étage"
   },
   "confirmation": {
     "title": "Centre de confirmation",
@@ -531,12 +529,6 @@
     },
     "outcomeLabel": "Statut de confirmation",
     "outcomeHint": "Même liste que les boutons ci-dessous.",
-    "stages": {
-      "pendingConfirmation": "En confirmation",
-      "inPreparation": "En préparation",
-      "inDelivery": "En livraison",
-      "inReturn": "En retour"
-    },
     "columns": {
       "reference": "Référence",
       "attempts": "Tent."
@@ -1505,5 +1497,10 @@
       "lightfunnels": "Par Lightfunnels",
       "googleSheet": "Par Google Sheet"
     }
+  },
+  "geo": {
+    "communePickWilayaFirst": "Choisissez d'abord la wilaya",
+    "communeCount": "{count, plural, one {# commune proposée} other {# communes proposées}}",
+    "communePlaceholder": "Commune de livraison"
   }
 }

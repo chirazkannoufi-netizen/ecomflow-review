@@ -23,6 +23,7 @@ import { useTranslations } from 'next-intl';
 import { SHIPMENT_STATUSES, getWilayaByCode, type ShipmentStatus } from '@ecomflow/shared';
 import { api, ApiError } from '@/lib/api-client';
 import { PageHeader } from '@/components/app-shell';
+import { GroupTabs } from '@/components/group-tabs';
 import {
   Alert,
   Badge,
@@ -158,6 +159,8 @@ export default function ShipmentsPage() {
         title={t('title')}
         description={t('subtitle')}
       />
+
+      <GroupTabs />
 
       {feedback ? (
         <div className="mb-3">
