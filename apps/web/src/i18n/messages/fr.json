@@ -90,7 +90,9 @@
     "openMenu": "Ouvrir la navigation",
     "searchPlaceholder": "Rechercher une commande, un client, un SKU...",
     "newOrder": "Nouvelle commande",
-    "carriers": "Transporteurs"
+    "carriers": "Transporteurs",
+    "collapseSidebar": "Replier le menu",
+    "expandSidebar": "Déplier le menu"
   },
   "orderStatus": {
     "NEW": "Nouvelle",
@@ -414,7 +416,9 @@
     "returns": "Retours",
     "notFound": "Commande introuvable.",
     "noLabel": "Pas d'étiquette",
-    "noLabelHint": "Ce transporteur ne produit pas d'étiquette imprimable. Rien à attendre : le bordereau se remplit à la main."
+    "noLabelHint": "Ce transporteur ne produit pas d'étiquette imprimable. Rien à attendre : le bordereau se remplit à la main.",
+    "createdTitle": "Commande créée",
+    "createdBody": "La commande {reference} est enregistrée. Elle part en file de confirmation."
   },
   "newOrder": {
     "title": "Nouvelle commande",
@@ -1465,5 +1469,19 @@
     "stockHeldByCourierHint": "La marchandise est déjà chez lui : il n'y a pas d'enlèvement à organiser.",
     "lastCheck": "Dernière vérification : {date}",
     "capabilityHint": "Une action que le transporteur ne sait pas faire n'est pas proposée ailleurs dans le produit."
+  },
+  "bulk": {
+    "selectAll": "Tout sélectionner sur cette page",
+    "selectRow": "Sélectionner {label}",
+    "selectedCount": "{count, plural, one {# ligne sélectionnée} other {# lignes sélectionnées}}",
+    "clearSelection": "Annuler la sélection",
+    "archiveSelection": "Archiver la sélection",
+    "confirmTitle": "{count, plural, one {Archiver # ligne ?} other {Archiver # lignes ?}}",
+    "confirmBody": "L'archivage retire les lignes des listes sans rien effacer. L'historique reste consultable.",
+    "confirmAction": "{count, plural, one {Archiver # ligne} other {Archiver # lignes}}",
+    "doneTitle": "{count, plural, one {# ligne archivée} other {# lignes archivées}}",
+    "doneAll": "Toute la sélection a été archivée.",
+    "doneSkipped": "{count, plural, one {# ligne n'a pas pu être archivée :} other {# lignes n'ont pas pu être archivées :}}",
+    "failed": "L'archivage a échoué."
   }
 }

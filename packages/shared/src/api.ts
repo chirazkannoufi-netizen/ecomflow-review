@@ -85,3 +85,22 @@ export const CORRELATION_HEADER = 'x-correlation-id';
 
 /** En-tete portant le tenant courant lorsque l'utilisateur est multi-boutique. */
 export const TENANT_HEADER = 'x-tenant-id';
+
+/** Ligne refusee par un archivage en masse, avec son motif. */
+export interface BulkArchiveSkip {
+  readonly id: string;
+  readonly code: string;
+  readonly message: string;
+}
+
+/**
+ * Resultat d'un archivage de selection.
+ *
+ * `archived` compte ce qui est passe ; `skipped` detaille ce qui ne l'est pas
+ * et POURQUOI. Une selection partiellement traitee est le cas normal, pas une
+ * anomalie : l'interface doit pouvoir le dire ligne par ligne.
+ */
+export interface BulkArchiveResult {
+  readonly archived: number;
+  readonly skipped: readonly BulkArchiveSkip[];
+}

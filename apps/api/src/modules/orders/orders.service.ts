@@ -28,11 +28,14 @@ import {
   parseAlgerianPhone,
   resolveWilaya,
   toSkipTake,
+  type BulkArchiveResult,
+  type BulkArchiveSkip,
   type DuplicateCandidateInput,
   type OutOfStockBehavior,
   type Paginated,
 } from '@ecomflow/shared';
 import {
+  BusinessException,
   ConflictException,
   InsufficientStockException,
   NotFoundException,
@@ -589,6 +592,51 @@ export class OrdersService {
         available: shortage.available,
       })),
     );
+  }
+
+  /**
+   * Archive une SELECTION de commandes.
+   *
+   * POURQUOI UN RESULTAT DETAILLE PLUTOT QU'UN SUCCES GLOBAL
+   *   Certaines commandes refusent l'archivage pour une raison metier — leur
+   *   stock est encore reserve. Sur une selection de douze lignes, deux issues
+   *   naives sont egalement mauvaises :
+   *
+   *     - tout annuler parce qu'une ligne resiste : l'agent recommence sans
+   *       savoir laquelle ;
+   *     - tout accepter en silence : l'agent croit avoir archive douze lignes,
+   *       il en reste deux, et il ne s'en apercevra que plus tard.
+   *
+   *   On archive donc ce qui peut l'etre, et on REND COMPTE du reste, ligne par
+   *   ligne, avec son motif. C'est la seule forme qui laisse l'agent decider de
+   *   la suite.
+   *
+   * L'ORDRE N'IMPORTE PAS
+   *   Chaque archivage est independant : aucune transaction englobante, donc
+   *   aucun verrou tenu sur douze lignes pendant que la premiere se debat.
+   */
+  async archiveMany(
+    tenantId: string,
+    orderIds: readonly string[],
+    membershipId: string,
+  ): Promise<BulkArchiveResult> {
+    const archived: string[] = [];
+    const skipped: BulkArchiveSkip[] = [];
+
+    for (const orderId of orderIds) {
+      try {
+        await this.archive(tenantId, orderId, membershipId);
+        archived.push(orderId);
+      } catch (error) {
+        if (error instanceof BusinessException) {
+          skipped.push({ id: orderId, code: error.code, message: error.message });
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return { archived: archived.length, skipped };
   }
 
   /**

@@ -19,11 +19,14 @@ import {
   ERROR_CODES,
   buildPageMeta,
   toSkipTake,
+  type BulkArchiveResult,
+  type BulkArchiveSkip,
   type OutOfStockBehavior,
   type Paginated,
   type StockExitStrategy,
 } from '@ecomflow/shared';
 import {
+  BusinessException,
   ConflictException,
   NotFoundException,
   ValidationException,
@@ -411,6 +414,37 @@ export class CatalogService {
     }
 
     return product;
+  }
+
+  /**
+   * Archive une SELECTION de produits.
+   *
+   * Voir `OrdersService.archiveMany` pour le raisonnement : un produit dont le
+   * stock est encore reserve refuse l'archivage, et une selection partiellement
+   * traitee est le cas NORMAL. On rend donc compte ligne par ligne plutot que
+   * d'annuler tout le lot ou d'accepter en silence.
+   */
+  async archiveMany(
+    tenantId: string,
+    productIds: readonly string[],
+  ): Promise<BulkArchiveResult> {
+    const archived: string[] = [];
+    const skipped: BulkArchiveSkip[] = [];
+
+    for (const productId of productIds) {
+      try {
+        await this.archiveProduct(tenantId, productId);
+        archived.push(productId);
+      } catch (error) {
+        if (error instanceof BusinessException) {
+          skipped.push({ id: productId, code: error.code, message: error.message });
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return { archived: archived.length, skipped };
   }
 
   /**

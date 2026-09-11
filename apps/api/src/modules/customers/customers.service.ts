@@ -22,9 +22,15 @@ import {
   buildPageMeta,
   parseAlgerianPhone,
   toSkipTake,
+  type BulkArchiveResult,
+  type BulkArchiveSkip,
   type Paginated,
 } from '@ecomflow/shared';
-import { NotFoundException, ValidationException } from '../../common/errors/business.exception';
+import {
+  BusinessException,
+  NotFoundException,
+  ValidationException,
+} from '../../common/errors/business.exception';
 import { ClockService } from '../../infra/clock/clock.service';
 import { InjectPrisma, type PrismaClientExtended } from '../../infra/prisma/prisma.service';
 import { CustomerStatsService } from './customer-stats.service';
@@ -62,13 +68,25 @@ export class CustomersService {
    */
   async list(
     tenantId: string,
-    filters: { search?: string; reliabilityTier?: string; tag?: string } = {},
+    filters: {
+      search?: string;
+      reliabilityTier?: string;
+      tag?: string;
+      includeArchived?: boolean;
+    } = {},
     options: { page?: number; pageSize?: number } = {},
   ): Promise<Paginated<CustomerListItem>> {
     const { skip, take } = toSkipTake(options);
     const page = Math.max(1, Math.trunc(options.page ?? 1));
 
-    const where: Prisma.CustomerWhereInput = { tenantId, anonymizedAt: null };
+    // Les fiches archivees sortent de la liste : c'est tout l'effet attendu de
+    // l'archivage. Elles restent accessibles par leur identifiant, et par le
+    // filtre explicite ci-dessous.
+    const where: Prisma.CustomerWhereInput = {
+      tenantId,
+      anonymizedAt: null,
+      ...(filters.includeArchived ? {} : { archivedAt: null }),
+    };
 
     if (filters.reliabilityTier) {
       where.reliabilityTier = filters.reliabilityTier as Prisma.CustomerWhereInput['reliabilityTier'];
@@ -225,6 +243,80 @@ export class CustomersService {
    * raisonnable du droit a l'effacement — il ne s'etend pas aux obligations
    * comptables du commercant.
    */
+  /**
+   * Archive un client : le retire des listes, sans rien effacer.
+   *
+   * A NE PAS CONFONDRE AVEC `anonymize`, juste en dessous. Les deux gestes
+   * repondent a des demandes differentes :
+   *   - archiver  : « je ne veux plus voir cette fiche » — REVERSIBLE ;
+   *   - anonymiser: « ce client demande l'effacement de ses donnees » —
+   *                 definitif.
+   *
+   * L'historique de commandes est CONSERVE dans les deux cas : la cle etrangere
+   * est en RESTRICT, et une commande sans client fausserait tout calcul de
+   * fiabilite et de rentabilite.
+   */
+  async archive(tenantId: string, customerId: string): Promise<void> {
+    const updated = await this.prisma.customer.updateMany({
+      where: { tenantId, id: customerId, archivedAt: null },
+      data: { archivedAt: this.clock.now() },
+    });
+
+    if (updated.count === 0) {
+      // Deja archive, ou inexistant. On distingue les deux : re-archiver n'est
+      // pas une erreur, mais viser un client inconnu en est une.
+      const exists = await this.prisma.customer.findFirst({
+        where: { tenantId, id: customerId },
+        select: { id: true },
+      });
+
+      if (!exists) {
+        throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Client introuvable.');
+      }
+    }
+  }
+
+  /** Remet un client archive dans les listes. */
+  async unarchive(tenantId: string, customerId: string): Promise<void> {
+    const updated = await this.prisma.customer.updateMany({
+      where: { tenantId, id: customerId },
+      data: { archivedAt: null },
+    });
+
+    if (updated.count === 0) {
+      throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Client introuvable.');
+    }
+  }
+
+  /**
+   * Archive une SELECTION de clients.
+   *
+   * Voir `OrdersService.archiveMany` : on rend compte ligne par ligne plutot
+   * que d'annuler tout le lot ou d'accepter en silence.
+   */
+  async archiveMany(
+    tenantId: string,
+    customerIds: readonly string[],
+  ): Promise<BulkArchiveResult> {
+    const archived: string[] = [];
+    const skipped: BulkArchiveSkip[] = [];
+
+    for (const customerId of customerIds) {
+      try {
+        await this.archive(tenantId, customerId);
+        archived.push(customerId);
+      } catch (error) {
+        if (error instanceof BusinessException) {
+          skipped.push({ id: customerId, code: error.code, message: error.message });
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return { archived: archived.length, skipped };
+  }
+
   async anonymize(tenantId: string, customerId: string, reason: string): Promise<void> {
     const customer = await this.prisma.customer.findFirst({
       where: { tenantId, id: customerId },

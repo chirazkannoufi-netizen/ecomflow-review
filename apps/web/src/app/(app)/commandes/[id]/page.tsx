@@ -10,9 +10,9 @@
  */
 
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { getWilayaByCode, type OrderStatus } from '@ecomflow/shared';
 import { api, ApiError } from '@/lib/api-client';
@@ -149,6 +149,25 @@ export default function OrderDetailPage() {
   const [reason, setReason] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
 
+  /**
+   * Accuse de reception de la creation.
+   *
+   * La reference est lue UNE FOIS puis retiree de l'URL : sans cela, un
+   * rafraichissement ou un partage de lien rejouerait indefiniment un message
+   * qui ne decrit plus rien. L'etat local survit au nettoyage de l'URL, le
+   * bandeau reste donc affiche jusqu'a ce que l'agent le ferme.
+   */
+  const searchParams = useSearchParams();
+  const [createdReference, setCreatedReference] = useState<string | null>(null);
+
+  useEffect(() => {
+    const reference = searchParams.get('cree');
+    if (!reference) return;
+
+    setCreatedReference(reference);
+    router.replace(`/commandes/${orderId}`, { scroll: false });
+  }, [searchParams, router, orderId]);
+
   const orderQuery = useQuery({
     queryKey: ['order', orderId],
     queryFn: () => api.get<OrderDetail>(`/orders/${orderId}`),
@@ -230,6 +249,25 @@ export default function OrderDetailPage() {
           </>
         }
       />
+
+      {createdReference ? (
+        <div className="mb-3">
+          <Alert
+            tone="success"
+            title={t('createdTitle')}
+            action={
+              <button
+                className="text-xs font-semibold underline underline-offset-2"
+                onClick={() => setCreatedReference(null)}
+              >
+                {tCommon('close')}
+              </button>
+            }
+          >
+            {t('createdBody', { reference: createdReference })}
+          </Alert>
+        </div>
+      ) : null}
 
       {feedback ? (
         <div className="mb-3">

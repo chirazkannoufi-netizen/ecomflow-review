@@ -36,6 +36,13 @@ import {
   Pagination,
   Textarea,
 } from '@/components/ui';
+import {
+  BulkActionBar,
+  RowCheckbox,
+  SelectAllCheckbox,
+  useRowSelection,
+  type BulkArchiveResult,
+} from '@/components/bulk-selection';
 import { ProductSettingsPanel } from './product-settings-panel';
 
 interface Variant {
@@ -84,6 +91,7 @@ const EMPTY_FORM = {
 export default function ProductsPage() {
   const t = useTranslations('products');
   const tCommon = useTranslations('common');
+  const tBulk = useTranslations('bulk');
   const { can } = useSession();
   const queryClient = useQueryClient();
 
@@ -123,6 +131,25 @@ export default function ProductsPage() {
     },
     onError: (caught) => {
       setFormError(caught instanceof ApiError ? caught.userMessage : t('createFailed'));
+    },
+  });
+
+  // --- Selection multiple --------------------------------------------------
+  const visibleIds = (data?.data ?? []).map((product) => product.id);
+  const selection = useRowSelection(visibleIds);
+  const [bulkResult, setBulkResult] = useState<BulkArchiveResult | null>(null);
+
+  const bulkArchiveMutation = useMutation({
+    mutationFn: (ids: string[]) =>
+      api.post<BulkArchiveResult>('/products/bulk-archive', { ids }),
+    onSuccess: (result) => {
+      setBulkResult(result);
+      selection.clear();
+      void queryClient.invalidateQueries({ queryKey: ['products'] });
+      void queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    },
+    onError: (caught) => {
+      setFormError(caught instanceof ApiError ? caught.userMessage : tBulk('failed'));
     },
   });
 
@@ -259,6 +286,16 @@ export default function ProductsPage() {
         />
       </Card>
 
+      {canManage ? (
+        <BulkActionBar
+          selection={selection}
+          pending={bulkArchiveMutation.isPending}
+          result={bulkResult}
+          onArchive={() => bulkArchiveMutation.mutate([...selection.selected])}
+          onDismissResult={() => setBulkResult(null)}
+        />
+      ) : null}
+
       <Card padded={false}>
         {isLoading ? (
           <LoadingState />
@@ -283,6 +320,11 @@ export default function ProductsPage() {
               <table className="data-table">
                 <thead>
                   <tr>
+                    {canManage ? (
+                      <th className="w-8">
+                        <SelectAllCheckbox selection={selection} />
+                      </th>
+                    ) : null}
                     <th>{t('columns.product')}</th>
                     <th>{t('columns.sku')}</th>
                     <th>{t('columns.category')}</th>
@@ -303,6 +345,15 @@ export default function ProductsPage() {
                     return (
                       <Fragment key={product.id}>
                         <tr>
+                          {canManage ? (
+                            <td>
+                              <RowCheckbox
+                                id={product.id}
+                                selection={selection}
+                                label={product.name}
+                              />
+                            </td>
+                          ) : null}
                           <td>
                             <button
                               className="text-start font-medium text-slate-800 hover:text-brand-700"
@@ -383,6 +434,7 @@ export default function ProductsPage() {
                         {expanded === product.id
                           ? product.variants.map((variant) => (
                               <tr key={variant.id} className="bg-slate-50/60">
+                                {canManage ? <td /> : null}
                                 <td className="ps-8 text-sm text-slate-600">
                                   {variant.label ?? t('standardVariant')}
                                 </td>
@@ -412,7 +464,7 @@ export default function ProductsPage() {
 
                         {expanded === product.id ? (
                           <tr className="bg-slate-50/60">
-                            <td colSpan={8} className="ps-8 pb-3">
+                            <td colSpan={canManage ? 9 : 8} className="ps-8 pb-3">
                               <ProductSettingsPanel product={product} canManage={canManage} />
                             </td>
                           </tr>

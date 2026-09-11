@@ -48,7 +48,7 @@ import {
   RequiresOperationalSubscription,
   TenantId,
 } from '../../common/decorators';
-import { PaginationQueryDto } from '../../common/dto/query.dto';
+import { BulkArchiveDto, PaginationQueryDto } from '../../common/dto/query.dto';
 import { InventoryService } from '../inventory/inventory.service';
 import { InjectPrisma, type PrismaClientExtended } from '../../infra/prisma/prisma.service';
 import type { PrismaTransactionClient } from '../../infra/prisma/prisma.service';
@@ -456,6 +456,20 @@ export class CatalogController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     await this.catalog.archiveProduct(tenantId, id);
+  }
+
+  @Post('products/bulk-archive')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  @ApiOperation({
+    summary: 'Archiver une selection de produits',
+    description:
+      'Suppression LOGIQUE, ligne par ligne. Le resultat detaille ce qui n a ' +
+      'PAS ete archive et pourquoi — typiquement un produit dont le stock est ' +
+      'encore reserve sur des commandes en cours.',
+  })
+  async bulkArchiveProducts(@TenantId() tenantId: string, @Body() dto: BulkArchiveDto) {
+    return this.catalog.archiveMany(tenantId, dto.ids);
   }
 
   @Post('products/:id/variants')

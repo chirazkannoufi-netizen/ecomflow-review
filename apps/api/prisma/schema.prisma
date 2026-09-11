@@ -793,6 +793,14 @@ model Customer {
 
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  /// Retire des listes, sans rien effacer. REVERSIBLE.
+  ///
+  /// A NE PAS CONFONDRE AVEC `anonymizedAt`, juste en dessous, et c'est toute
+  /// la raison d'etre de ce champ : « retirer un client de ma liste » et
+  /// « effacer les donnees personnelles d'un client » sont deux gestes que
+  /// seul le second rend irreversible. Les confondre ferait d'un menage de
+  /// liste une suppression definitive.
+  archivedAt   DateTime? @map("archived_at") @db.Timestamptz(3)
   anonymizedAt DateTime? @map("anonymized_at") @db.Timestamptz(3)
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)

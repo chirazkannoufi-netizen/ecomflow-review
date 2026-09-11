@@ -2,13 +2,22 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Suspense, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { ORDER_STATUSES, WILAYAS } from '@ecomflow/shared';
+import { ORDER_STATUSES, PERMISSIONS, WILAYAS } from '@ecomflow/shared';
 import { api, ApiError } from '@/lib/api-client';
 import { PageHeader } from '@/components/app-shell';
+import { useSession } from '@/lib/session';
 import {
+  BulkActionBar,
+  RowCheckbox,
+  SelectAllCheckbox,
+  useRowSelection,
+  type BulkArchiveResult,
+} from '@/components/bulk-selection';
+import {
+  Alert,
   Badge,
   Card,
   EmptyState,
@@ -56,7 +65,11 @@ function OrdersContent() {
   const t = useTranslations('orders');
   const tStatus = useTranslations('orderStatus');
   const tCommon = useTranslations('common');
+  const tBulk = useTranslations('bulk');
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+  const { can } = useSession();
+  const canDelete = can(PERMISSIONS.ORDERS_DELETE);
 
   const [page, setPage] = useState(1);
   // Pre-rempli depuis la barre de recherche globale de la coque applicative
@@ -77,6 +90,9 @@ function OrdersContent() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  const [bulkResult, setBulkResult] = useState<BulkArchiveResult | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['orders', { page, debouncedSearch, status, wilayaCode }],
     queryFn: () =>
@@ -92,6 +108,23 @@ function OrdersContent() {
     // Conserve l'affichage precedent pendant le chargement de la page
     // suivante : la liste ne disparait pas sous les yeux de l'utilisateur.
     placeholderData: (previous) => previous,
+  });
+
+  const visibleIds = (data?.data ?? []).map((order) => order.id);
+  const selection = useRowSelection(visibleIds);
+
+  const bulkArchiveMutation = useMutation({
+    mutationFn: (ids: string[]) => api.post<BulkArchiveResult>('/orders/bulk-archive', { ids }),
+    onSuccess: (result) => {
+      setBulkResult(result);
+      setBulkError(null);
+      selection.clear();
+      void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (caught) => {
+      setBulkError(caught instanceof ApiError ? caught.userMessage : tBulk('failed'));
+    },
   });
 
   return (
@@ -169,6 +202,22 @@ function OrdersContent() {
       </Card>
 
       {/* --- Liste --------------------------------------------------------- */}
+      {bulkError ? (
+        <div className="mb-3">
+          <Alert tone="danger">{bulkError}</Alert>
+        </div>
+      ) : null}
+
+      {canDelete ? (
+        <BulkActionBar
+          selection={selection}
+          pending={bulkArchiveMutation.isPending}
+          result={bulkResult}
+          onArchive={() => bulkArchiveMutation.mutate([...selection.selected])}
+          onDismissResult={() => setBulkResult(null)}
+        />
+      ) : null}
+
       <Card padded={false}>
         {isLoading ? (
           <LoadingState />
@@ -200,6 +249,11 @@ function OrdersContent() {
               <table className="data-table">
                 <thead>
                   <tr>
+                    {canDelete ? (
+                      <th className="w-8">
+                        <SelectAllCheckbox selection={selection} />
+                      </th>
+                    ) : null}
                     <th>{t('columns.reference')}</th>
                     <th>{t('columns.customer')}</th>
                     <th>{t('columns.wilaya')}</th>
@@ -213,6 +267,15 @@ function OrdersContent() {
                 <tbody className={isFetching ? 'opacity-60 transition-opacity' : undefined}>
                   {data.data.map((order) => (
                     <tr key={order.id}>
+                      {canDelete ? (
+                        <td>
+                          <RowCheckbox
+                            id={order.id}
+                            selection={selection}
+                            label={order.reference}
+                          />
+                        </td>
+                      ) : null}
                       <td>
                         <Link
                           href={`/commandes/${order.id}`}

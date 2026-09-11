@@ -14,7 +14,15 @@ import clsx from 'clsx';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { useTranslations } from 'next-intl';
 import {
   ArrowRight,
@@ -30,6 +38,8 @@ import {
   LogOut,
   MapPin,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Package,
   Phone,
   Plug,
@@ -53,6 +63,9 @@ import { useSession, type SessionTenant } from '@/lib/session';
 import { subscriptionReasonKey } from '@/lib/subscription-reason';
 import { LanguageSwitcher } from './language-switcher';
 import { Badge, Button, LoadingState } from './ui';
+
+/** Cle de preference locale du repli de la barre laterale. */
+const SIDEBAR_COLLAPSED_KEY = 'ecomflow.sidebar.collapsed';
 
 interface NavEntry {
   /**
@@ -302,6 +315,43 @@ function StoreSwitcher({ tenant }: { tenant: SessionTenant | null }) {
   );
 }
 
+/**
+ * Mot-symbole EcomFlow, en deux tons.
+ *
+ * POURQUOI DEUX SPANS ET NON UNE CHAINE
+ *   « Ecom » et « Flow » se distinguent par la couleur ET la graisse : le
+ *   premier en retrait, le second appuye. Un seul noeud de texte ne peut pas
+ *   porter deux styles ; la coupure doit donc exister dans le balisage.
+ *
+ * POURQUOI LA COUPURE EST CALCULEE, ET NON ECRITE EN DUR
+ *   Le libelle vient du catalogue de traduction, ou il vaut « EcomFlow » dans
+ *   les deux langues — c'est un nom propre, il ne se traduit pas. Le couper a
+ *   un indice fixe marcherait aujourd'hui et casserait silencieusement le jour
+ *   ou la marque changerait de casse ou de longueur. On cherche donc le
+ *   suffixe ; s'il est absent, le mot s'affiche d'un seul tenant plutot que
+ *   tronque n'importe ou.
+ *
+ * ACCESSIBILITE
+ *   Les deux fragments restent dans le meme element : un lecteur d'ecran lit
+ *   « EcomFlow », sans pause, comme un mot unique.
+ */
+const WORDMARK_SUFFIX = 'Flow';
+
+function Wordmark({ label }: { label: string }) {
+  const cut = label.lastIndexOf(WORDMARK_SUFFIX);
+
+  if (cut <= 0) {
+    return <p className="truncate text-sm font-extrabold text-ink">{label}</p>;
+  }
+
+  return (
+    <p className="truncate text-sm">
+      <span className="font-semibold text-ink-2">{label.slice(0, cut)}</span>
+      <span className="font-extrabold text-ink">{label.slice(cut)}</span>
+    </p>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -311,6 +361,40 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, tenant, role, can, loading, logout } = useSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchValue, setSearchValue] = useState('');
+
+  /**
+   * Barre laterale repliee — confort de lecture, propre a chaque poste.
+   *
+   * L'etat part TOUJOURS de `false` au premier rendu, et n'est relu qu'apres
+   * montage : lire `localStorage` pendant le rendu produirait un serveur et un
+   * client divergents, donc une erreur d'hydratation sur l'ecran le plus
+   * partage du produit. Le prix est un bref deploiement au chargement, que le
+   * `transition-[width]` rend lisible plutot que brutal.
+   *
+   * Les acces sont gardes : un navigateur en navigation privee, ou configure
+   * pour refuser le stockage, leve a la simple LECTURE.
+   */
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      setCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1');
+    } catch {
+      // Stockage indisponible : on reste deplie, ce qui est le defaut utile.
+    }
+  }, []);
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((value) => {
+      const next = !value;
+      try {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+      } catch {
+        // Le repli vaut pour la session en cours, meme s'il ne survit pas.
+      }
+      return next;
+    });
+  }, []);
 
   // Redirection vers la connexion des que la session est connue comme absente.
   useEffect(() => {
@@ -363,8 +447,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           // mobile) : la navigation reste ancree et visible pendant que le
           // contenu defile, comme sur chaque maquette du systeme de design.
           // Le contenu principal compense avec un `lg:ms-64` (ci-dessous).
-          'fixed inset-y-0 start-0 z-40 flex w-64 shrink-0 flex-col overflow-y-auto border-e border-line bg-surface',
-          'transition-transform',
+          'fixed inset-y-0 start-0 z-40 flex shrink-0 flex-col overflow-y-auto border-e border-line bg-surface',
+          'transition-transform lg:transition-[width]',
+          // Le repli ne vaut QU'A PARTIR DE `lg`. En dessous, la barre est un
+          // tiroir qui se ferme entierement : la replier a 4 rem y volerait de
+          // la place a un contenu deja etroit, sans rien rendre en echange.
+          collapsed ? 'w-64 lg:w-16' : 'w-64',
           // `translate` n'a pas d'equivalent logique dans Tailwind : le tiroir
           // se cache VERS LA GAUCHE en francais et VERS LA DROITE en arabe,
           // ou la barre laterale est ancree a droite. La variante `rtl:`
@@ -402,12 +490,21 @@ export function AppShell({ children }: { children: ReactNode }) {
             annoncait « Boutique Demo » — un utilisateur ne pouvait plus dire
             quel logiciel il avait sous les yeux, et les deux identites
             (plateforme, boutique) se disputaient le meme emplacement. */}
-        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line px-4">
+        <div
+          className={clsx(
+            'flex h-14 shrink-0 items-center gap-2.5 border-b border-line',
+            collapsed ? 'px-4 lg:justify-center lg:px-0' : 'px-4',
+          )}
+        >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink text-sm font-extrabold text-lime">
             E
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-extrabold text-ink">{t('appName')}</p>
+
+          {/* Repliee, la barre ne garde que le carre : le mot-symbole n'a pas
+              la place de s'y lire, et un texte tronque a « Eco… » abimerait la
+              marque plus surement que son absence. */}
+          <div className={clsx('min-w-0', collapsed && 'lg:hidden')}>
+            <Wordmark label={t('appName')} />
             {role ? <p className="truncate text-xs text-muted">{role}</p> : null}
           </div>
         </div>
@@ -415,7 +512,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="flex-1 p-3">
           {sections.map((section) => (
             <div key={section.sectionKey} className="mb-4">
-              <p className="eyebrow px-2.5 pb-1.5">{tNav(`sections.${section.sectionKey}`)}</p>
+              {/* Repliee, l'intitule de section ne tient pas. Un filet le
+                  remplace : le regroupement reste lisible, le mot disparait. */}
+              <p className={clsx('eyebrow px-2.5 pb-1.5', collapsed && 'lg:hidden')}>
+                {tNav(`sections.${section.sectionKey}`)}
+              </p>
+              {collapsed ? (
+                <div className="mx-auto mb-2 hidden h-px w-6 bg-line lg:block" aria-hidden="true" />
+              ) : null}
               <ul className="space-y-0.5">
                 {section.entries.map((entry) => {
                   const active =
@@ -427,16 +531,40 @@ export function AppShell({ children }: { children: ReactNode }) {
                   const count = entry.alertKey ? (alerts?.[entry.alertKey] ?? 0) : 0;
                   const Icon = entry.icon;
 
+                  const label = tNav(entry.labelKey);
+
                   const inner = (
                     <>
-                      <Icon
-                        className={clsx('h-4 w-4 shrink-0', active ? 'text-lime' : 'text-muted')}
-                        strokeWidth={1.6}
-                        aria-hidden="true"
-                      />
-                      <span className="flex-1 truncate">{tNav(entry.labelKey)}</span>
+                      <span className="relative shrink-0">
+                        <Icon
+                          className={clsx('h-4 w-4', active ? 'text-lime' : 'text-muted')}
+                          strokeWidth={1.6}
+                          aria-hidden="true"
+                        />
+                        {/* Repliee, la pastille chiffree n'a plus de place a
+                            cote du libelle : elle devient un point pose sur
+                            l'icone. Le NOMBRE se perd, mais l'existence d'une
+                            alerte se voit — et c'est elle qui decide si l'on
+                            deplie. Le compte exact reste dans le titre. */}
+                        {collapsed && count > 0 ? (
+                          <span
+                            className="absolute -end-1 -top-1 hidden h-2 w-2 rounded-full bg-peach ring-2 ring-surface lg:block"
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                      </span>
+
+                      <span className={clsx('flex-1 truncate', collapsed && 'lg:hidden')}>
+                        {label}
+                      </span>
+
                       {entry.href === null ? (
-                        <span className="rounded-full bg-canvas px-1.5 py-0.5 text-[10px] font-bold text-muted">
+                        <span
+                          className={clsx(
+                            'rounded-full bg-canvas px-1.5 py-0.5 text-[10px] font-bold text-muted',
+                            collapsed && 'lg:hidden',
+                          )}
+                        >
                           {tNav('soon')}
                         </span>
                       ) : count > 0 ? (
@@ -444,6 +572,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                           className={clsx(
                             'tabular rounded-full px-1.5 py-0.5 text-[11px] font-bold',
                             active ? 'bg-lime text-ink' : 'bg-peach text-peach-deep',
+                            collapsed && 'lg:hidden',
                           )}
                         >
                           {count > 99 ? '99+' : count}
@@ -451,6 +580,15 @@ export function AppShell({ children }: { children: ReactNode }) {
                       ) : null}
                     </>
                   );
+
+                  // Repliee, l'icone seule ne dit pas ou elle mene : l'infobulle
+                  // native porte le libelle, et le compte quand il y en a un.
+                  const collapsedTitle =
+                    entry.href === null
+                      ? `${label} — ${tNav('soon')}`
+                      : count > 0
+                        ? `${label} (${count})`
+                        : label;
 
                   return (
                     <li key={entry.labelKey}>
@@ -460,8 +598,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                         // au clavier et annonce « lien » aux lecteurs d'ecran,
                         // promettant une navigation qui n'existe pas.
                         <span
-                          className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-muted opacity-60"
-                          title={tNav('soonHint')}
+                          className={clsx(
+                            'flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-muted opacity-60',
+                            collapsed && 'lg:justify-center lg:px-0',
+                          )}
+                          title={collapsed ? collapsedTitle : tNav('soonHint')}
                         >
                           {inner}
                         </span>
@@ -469,9 +610,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                         <Link
                           href={entry.href}
                           onClick={() => setSidebarOpen(false)}
+                          title={collapsed ? collapsedTitle : undefined}
                           className={clsx(
                             'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors',
                             active ? 'bg-ink text-white' : 'text-ink-2 hover:bg-canvas',
+                            collapsed && 'lg:justify-center lg:px-0',
                           )}
                         >
                           {inner}
@@ -487,7 +630,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {/* --- Bandeau d'essai, non bloquant --- */}
         {subscription?.operational && subscription.status === 'TRIAL_ENDING' ? (
-          <div className="m-3 mt-0 shrink-0 rounded-xl bg-lime-wash p-3">
+          <div
+            className={clsx(
+              'm-3 mt-0 shrink-0 rounded-xl bg-lime-wash p-3',
+              // Un bloc de texte et une barre de progression dans 4 rem ne se
+              // lisent pas : replie, le bandeau s'efface plutot que de se
+              // tronquer. L'echeance reste portee par l'ecran Abonnement.
+              collapsed && 'lg:hidden',
+            )}
+          >
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-bold text-ink">{tBanner('trialEnding', { days: subscription.trialDaysRemaining ?? 0 })}</p>
             </div>
@@ -520,7 +671,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       ) : null}
 
       {/* --- Contenu --- */}
-      <div className="flex min-w-0 flex-1 flex-col lg:ms-64">
+      <div
+        className={clsx(
+          'flex min-w-0 flex-1 flex-col transition-[margin]',
+          collapsed ? 'lg:ms-16' : 'lg:ms-64',
+        )}
+      >
         <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-surface px-4">
           <button
             className="rounded-md p-1.5 text-ink-2 hover:bg-canvas lg:hidden"
@@ -528,6 +684,24 @@ export function AppShell({ children }: { children: ReactNode }) {
             aria-label={tNav('openMenu')}
           >
             <Menu className="h-5 w-5" strokeWidth={1.8} aria-hidden="true" />
+          </button>
+
+          {/* Le repli vit dans la barre du HAUT, pas dans la barre laterale :
+              son emplacement ne bouge donc pas selon l'etat. Un bouton qui se
+              deplace en meme temps qu'il agit oblige a le rechercher a chaque
+              aller-retour. L'icone est retournee en arabe, ou la barre est
+              ancree a droite et ou « replier » pointe dans l'autre sens. */}
+          <button
+            className="hidden rounded-md p-1.5 text-ink-2 hover:bg-canvas lg:block"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? tNav('expandSidebar') : tNav('collapseSidebar')}
+            title={collapsed ? tNav('expandSidebar') : tNav('collapseSidebar')}
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-5 w-5 rtl:-scale-x-100" strokeWidth={1.8} aria-hidden="true" />
+            ) : (
+              <PanelLeftClose className="h-5 w-5 rtl:-scale-x-100" strokeWidth={1.8} aria-hidden="true" />
+            )}
           </button>
 
           {/* Identite de la BOUTIQUE : ici, et non dans la barre laterale,

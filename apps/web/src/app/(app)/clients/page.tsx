@@ -10,13 +10,22 @@
  */
 
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { RELIABILITY_TIERS } from '@ecomflow/shared';
+import { PERMISSIONS, RELIABILITY_TIERS } from '@ecomflow/shared';
 import { api, ApiError } from '@/lib/api-client';
 import { PageHeader } from '@/components/app-shell';
+import { useSession } from '@/lib/session';
 import {
+  BulkActionBar,
+  RowCheckbox,
+  SelectAllCheckbox,
+  useRowSelection,
+  type BulkArchiveResult,
+} from '@/components/bulk-selection';
+import {
+  Alert,
   Badge,
   Card,
   EmptyState,
@@ -52,6 +61,12 @@ interface Paginated {
 export default function CustomersPage() {
   const t = useTranslations('customers');
   const tTier = useTranslations('reliability');
+  const tBulk = useTranslations('bulk');
+  const queryClient = useQueryClient();
+  const { can } = useSession();
+  const canManage = can(PERMISSIONS.CUSTOMERS_MANAGE);
+  const [bulkResult, setBulkResult] = useState<BulkArchiveResult | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -77,6 +92,23 @@ export default function CustomersPage() {
         },
       }),
     placeholderData: (previous) => previous,
+  });
+
+  const visibleIds = (data?.data ?? []).map((customer) => customer.id);
+  const selection = useRowSelection(visibleIds);
+
+  const bulkArchiveMutation = useMutation({
+    mutationFn: (ids: string[]) =>
+      api.post<BulkArchiveResult>('/customers/bulk-archive', { ids }),
+    onSuccess: (result) => {
+      setBulkResult(result);
+      setBulkError(null);
+      selection.clear();
+      void queryClient.invalidateQueries({ queryKey: ['customers'] });
+    },
+    onError: (caught) => {
+      setBulkError(caught instanceof ApiError ? caught.userMessage : tBulk('failed'));
+    },
   });
 
   return (
@@ -112,6 +144,22 @@ export default function CustomersPage() {
         </div>
       </Card>
 
+      {bulkError ? (
+        <div className="mb-3">
+          <Alert tone="danger">{bulkError}</Alert>
+        </div>
+      ) : null}
+
+      {canManage ? (
+        <BulkActionBar
+          selection={selection}
+          pending={bulkArchiveMutation.isPending}
+          result={bulkResult}
+          onArchive={() => bulkArchiveMutation.mutate([...selection.selected])}
+          onDismissResult={() => setBulkResult(null)}
+        />
+      ) : null}
+
       <Card padded={false}>
         {isLoading ? (
           <LoadingState />
@@ -131,6 +179,11 @@ export default function CustomersPage() {
               <table className="data-table">
                 <thead>
                   <tr>
+                    {canManage ? (
+                      <th className="w-8">
+                        <SelectAllCheckbox selection={selection} />
+                      </th>
+                    ) : null}
                     <th>{t('columns.customer')}</th>
                     <th>{t('columns.phone')}</th>
                     <th>{t('columns.reliability')}</th>
@@ -143,6 +196,15 @@ export default function CustomersPage() {
                 <tbody>
                   {data.data.map((customer) => (
                     <tr key={customer.id}>
+                      {canManage ? (
+                        <td>
+                          <RowCheckbox
+                            id={customer.id}
+                            selection={selection}
+                            label={customer.fullName}
+                          />
+                        </td>
+                      ) : null}
                       <td>
                         <Link
                           href={`/clients/${customer.id}`}

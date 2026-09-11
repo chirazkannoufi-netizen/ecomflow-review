@@ -51,6 +51,7 @@ import {
   ListOrdersQueryDto,
   ResolveDuplicateDto,
 } from './dto/orders.dto';
+import { BulkArchiveDto } from '../../common/dto/query.dto';
 
 @ApiTags('Commandes')
 @ApiBearerAuth()
@@ -225,6 +226,26 @@ export class OrdersController {
     @CurrentMembershipId() membershipId: string,
   ): Promise<void> {
     await this.orders.archive(tenantId, id, membershipId);
+  }
+
+  @Post('bulk-archive')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.ORDERS_DELETE)
+  @Audited({ action: 'ORDER_ARCHIVED', entityType: 'Order' })
+  @ApiOperation({
+    summary: 'Archiver une selection de commandes',
+    description:
+      'Suppression LOGIQUE, ligne par ligne. Le resultat detaille ce qui n a ' +
+      'PAS ete archive et pourquoi — typiquement une commande dont le stock ' +
+      'est encore reserve. Une selection partiellement traitee est le cas ' +
+      'normal, pas une anomalie.',
+  })
+  async bulkArchive(
+    @TenantId() tenantId: string,
+    @Body() dto: BulkArchiveDto,
+    @CurrentMembershipId() membershipId: string,
+  ) {
+    return this.orders.archiveMany(tenantId, dto.ids, membershipId);
   }
 
   // -------------------------------------------------------------------------

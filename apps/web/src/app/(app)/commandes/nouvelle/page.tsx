@@ -140,7 +140,15 @@ export default function NewOrderPage() {
         payload,
       ),
     onSuccess: (result) => {
-      router.push(`/commandes/${result.orderId}`);
+      // LA REFERENCE VOYAGE AVEC LA REDIRECTION.
+      //   Jusqu'ici la creation basculait sur la fiche sans un mot : l'agent
+      //   arrivait sur une commande et devait DEDUIRE qu'elle venait d'etre
+      //   creee. En cas de double clic, ou de doute apres une latence, rien ne
+      //   distinguait « c'est enregistre » de « je regarde une autre fiche ».
+      //
+      //   Un toast serait detruit par le changement de route ; l'information
+      //   passe donc par l'URL, et la fiche l'affiche a l'arrivee.
+      router.push(`/commandes/${result.orderId}?cree=${encodeURIComponent(result.reference)}`);
     },
     onError: (caught) => {
       setFormError(caught instanceof ApiError ? caught.userMessage : t('failed'));

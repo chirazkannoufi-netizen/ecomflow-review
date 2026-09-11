@@ -28,7 +28,7 @@ import {
 } from 'class-validator';
 import { PERMISSIONS, RELIABILITY_TIERS } from '@ecomflow/shared';
 import { Audited, RequirePermissions, TenantId } from '../../common/decorators';
-import { PaginationQueryDto } from '../../common/dto/query.dto';
+import { BulkArchiveDto, PaginationQueryDto } from '../../common/dto/query.dto';
 import { CustomersService } from './customers.service';
 
 const trim = ({ value }: { value: unknown }): unknown =>
@@ -173,6 +173,32 @@ export class CustomersController {
   })
   async recompute(@TenantId() tenantId: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.customers.recomputeReliability(tenantId, id);
+  }
+
+  @Post('bulk-archive')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.CUSTOMERS_MANAGE)
+  @Audited({ action: 'CUSTOMER_UPDATED', entityType: 'Customer' })
+  @ApiOperation({
+    summary: 'Archiver une selection de clients',
+    description:
+      'Retire les fiches des listes, sans rien effacer, et de facon ' +
+      'REVERSIBLE. A ne pas confondre avec l anonymisation (droit a ' +
+      'l effacement), qui est definitive et reste un geste par fiche.',
+  })
+  async bulkArchive(@TenantId() tenantId: string, @Body() dto: BulkArchiveDto) {
+    return this.customers.archiveMany(tenantId, dto.ids);
+  }
+
+  @Post(':id/unarchive')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions(PERMISSIONS.CUSTOMERS_MANAGE)
+  @ApiOperation({ summary: 'Remettre un client archive dans les listes' })
+  async unarchive(
+    @TenantId() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    await this.customers.unarchive(tenantId, id);
   }
 
   @Post(':id/anonymize')

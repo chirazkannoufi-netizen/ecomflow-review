@@ -6,9 +6,22 @@
  * involontaire.
  */
 
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsDate, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsDate,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@ecomflow/shared';
 import { asPrimitiveString } from '../utils/text';
 
@@ -111,4 +124,27 @@ export class SearchQueryDto {
   @IsString()
   @MaxLength(120)
   search?: string;
+}
+
+/**
+ * Selection de lignes a archiver, commune aux ecrans de liste.
+ *
+ * Le meme geste — cocher des lignes, archiver la selection — existe sur les
+ * commandes, les clients et les produits. Un DTO unique evite que la borne
+ * haute et le message d'erreur divergent d'un ecran a l'autre.
+ */
+export class BulkArchiveDto {
+  @ApiProperty({
+    type: [String],
+    description:
+      'Identifiants des lignes a archiver. Le lot est plafonne : au-dela, ' +
+      'la selection releve d un filtre, pas d un clic.',
+  })
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Selectionnez au moins une ligne.' })
+  @ArrayMaxSize(200, {
+    message: 'Selection trop large : archivez par lots de 200 au maximum.',
+  })
+  @IsUUID('7', { each: true })
+  ids!: string[];
 }
