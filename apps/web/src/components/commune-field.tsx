@@ -1,41 +1,48 @@
 'use client';
 
 /**
- * Champ Commune, suggestions filtrees par la wilaya choisie.
+ * Champ Commune : liste fermee filtree par wilaya, avec une porte de sortie.
  *
  * POURQUOI UN COMPOSANT, ET NON DEUX FOIS LA MEME REQUETE
  *   Le couple wilaya + commune se saisit a plusieurs endroits — creation de
  *   commande, correction des coordonnees pendant l'appel de confirmation, et
- *   partout ou une adresse se corrige ensuite. Recopier la requete, le
- *   `datalist` et le comportement au changement de wilaya les ferait diverger,
- *   et la divergence serait silencieuse : un ecran filtrerait, l'autre non.
+ *   partout ou une adresse se corrige ensuite. Recopier la requete et le
+ *   comportement au changement de wilaya les ferait diverger, et la divergence
+ *   serait silencieuse : un ecran filtrerait, l'autre non.
  *
- * UNE SAISIE LIBRE AVEC SUGGESTIONS, PAS UNE LISTE FERMEE
- *   Le referentiel compte 1541 communes : les proposer toutes serait aussi
- *   inutilisable que de n'en proposer aucune. Filtrer par wilaya ramene le
- *   choix a une cinquantaine.
+ * UNE LISTE FERMEE, PLUS « AUTRE »
+ *   Le rendu est celui d'un `select` : on clique, on choisit, on ne tape pas.
+ *   C'est ce que l'agent attend d'un referentiel de 1541 entrees ramene a une
+ *   cinquantaine par la wilaya — et une saisie libre par defaut invite aux
+ *   fautes d'orthographe que le referentiel existe justement pour eviter.
  *
- *   Mais c'est un `input` avec `datalist`, jamais un `select`. D-018 refuse de
- *   bloquer une commande parce que sa commune ne figure pas dans une liste :
- *   les translitterations varient trop d'un transporteur a l'autre pour qu'une
- *   absence signifie une erreur. On AIDE la saisie, on ne l'emprisonne pas.
+ *   La DERNIERE entree, « Autre / commune non listee », revele un champ texte.
+ *   Ce n'est pas un ornement : c'est D-018 rendu utilisable. Le referentiel
+ *   assiste la saisie, il ne la ferme pas, et aucune commune absente ne doit
+ *   empecher la creation d'une commande. Sans cette porte, un `select` seul
+ *   transformerait une aide en blocage — et le blocage tomberait sur les cas
+ *   les plus rares, donc les moins bien couverts par le referentiel.
  *
- * L'IDENTIFIANT DU `datalist` EST UNIQUE PAR INSTANCE
- *   Deux champs Commune sur une meme page — le cas du tiroir de confirmation
- *   ouvert au-dessus d'une liste — partageraient sinon la meme liste, et le
- *   second afficherait les suggestions du premier.
+ * UNE VALEUR HORS LISTE OUVRE « AUTRE » TOUTE SEULE
+ *   A l'ouverture d'une commande dont la commune ne figure pas au referentiel
+ *   — import, saisie anterieure, translitteration d'un transporteur — le champ
+ *   s'affiche en mode libre avec sa valeur. La faire disparaitre dans un
+ *   `select` qui ne la contient pas l'effacerait au premier enregistrement.
  */
 
-import { useId } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { api } from '@/lib/api-client';
-import { Input } from './ui';
+import { Input, Select } from './ui';
 
 interface CommuneOption {
   readonly id: string;
   readonly name: string;
 }
+
+/** Valeur sentinelle de l'entree « Autre », impossible a confondre avec un nom. */
+const OTHER = '__other__';
 
 export function CommuneField({
   wilayaCode,
@@ -53,7 +60,7 @@ export function CommuneField({
 }) {
   const t = useTranslations('geo');
   const tCommon = useTranslations('common');
-  const listId = useId();
+  const selectId = useId();
 
   const { data } = useQuery({
     queryKey: ['geo', 'communes', wilayaCode],
@@ -66,23 +73,82 @@ export function CommuneField({
   });
 
   const communes = data ?? [];
+  const [freeText, setFreeText] = useState(false);
+
+  // Une valeur qui n'est pas dans la liste CHARGEE bascule le champ en saisie
+  // libre. La condition sur `data` est essentielle : tant que la requete n'a
+  // pas repondu, toute valeur parait absente, et basculer trop tot ferait
+  // clignoter le champ a chaque ouverture.
+  useEffect(() => {
+    if (!data || !value) return;
+    if (!data.some((commune) => commune.name === value)) setFreeText(true);
+  }, [data, value]);
+
+  // Changer de wilaya remet le champ en mode liste : la porte de sortie se
+  // reouvre si la nouvelle wilaya l'exige, mais ne reste pas ouverte par
+  // inertie.
+  useEffect(() => {
+    setFreeText(false);
+  }, [wilayaCode]);
+
+  if (freeText) {
+    return (
+      <div>
+        <Input
+          label={label ?? tCommon('commune')}
+          required={required}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={t('communePlaceholder')}
+          hint={t('communeFreeHint')}
+        />
+        <button
+          type="button"
+          className="mt-1 text-xs text-muted underline underline-offset-2 hover:text-ink"
+          onClick={() => {
+            setFreeText(false);
+            onChange('');
+          }}
+        >
+          {t('communeBackToList')}
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <Input
-        label={label ?? tCommon('commune')}
-        required={required}
-        list={listId}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={wilayaCode ? t('communePlaceholder') : t('communePickWilayaFirst')}
-        hint={wilayaCode && communes.length > 0 ? t('communeCount', { count: communes.length }) : undefined}
-      />
-      <datalist id={listId}>
-        {communes.map((commune) => (
-          <option key={commune.id} value={commune.name} />
-        ))}
-      </datalist>
-    </div>
+    <Select
+      id={selectId}
+      label={label ?? tCommon('commune')}
+      required={required}
+      value={value}
+      disabled={!wilayaCode}
+      hint={
+        wilayaCode && communes.length > 0
+          ? t('communeCount', { count: communes.length })
+          : undefined
+      }
+      onChange={(event) => {
+        if (event.target.value === OTHER) {
+          setFreeText(true);
+          onChange('');
+          return;
+        }
+        onChange(event.target.value);
+      }}
+    >
+      <option value="">
+        {wilayaCode ? tCommon('select') : t('communePickWilayaFirst')}
+      </option>
+      {communes.map((commune) => (
+        <option key={commune.id} value={commune.name}>
+          {commune.name}
+        </option>
+      ))}
+      {/* Toujours proposee, meme quand la liste est vide : une wilaya sans
+          commune connue au referentiel est precisement le cas ou la porte de
+          sortie est indispensable. */}
+      {wilayaCode ? <option value={OTHER}>{t('communeOther')}</option> : null}
+    </Select>
   );
 }

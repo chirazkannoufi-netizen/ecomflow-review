@@ -3,6 +3,7 @@ import { CustomersModule } from '../customers/customers.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
+import { OrdersExportService } from './orders-export.service';
 import { OrderWorkflowService } from './workflow/order-workflow.service';
 
 /**
@@ -15,7 +16,7 @@ import { OrderWorkflowService } from './workflow/order-workflow.service';
 @Module({
   imports: [InventoryModule, CustomersModule],
   controllers: [OrdersController],
-  providers: [OrderWorkflowService, OrdersService],
+  providers: [OrderWorkflowService, OrdersService, OrdersExportService],
   exports: [OrderWorkflowService, OrdersService],
 })
 export class OrdersModule {}

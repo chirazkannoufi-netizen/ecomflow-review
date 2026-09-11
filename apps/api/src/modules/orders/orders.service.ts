@@ -749,6 +749,32 @@ export class OrdersService {
       });
 
     switch (input.action) {
+      case 'STEP_BACK': {
+        // UNE etape en arriere, jamais deux. La cible se deduit du statut
+        // courant : c'est ce qui rend l'action sure sur une selection melangee
+        // — chaque ligne recule depuis LA ou elle est, et une ligne qui n'a
+        // nulle part ou reculer est refusee avec son motif plutot que
+        // silencieusement ignoree.
+        //
+        // Les deux transitions existaient deja dans la machine a etats ; seul
+        // le bouton manquait.
+        const backwards: Partial<Record<OrderStatus, OrderStatus>> = {
+          IN_PREPARATION: 'CONFIRMED',
+          READY_TO_SHIP: 'IN_PREPARATION',
+        };
+
+        const target = backwards[order.status];
+        if (!target) {
+          throw new ConflictException(
+            ERROR_CODES.ORDER_INVALID_TRANSITION,
+            'Cette commande est deja au debut de la preparation.',
+          );
+        }
+
+        await move(target);
+        return;
+      }
+
       case 'RETURN_TO_CONFIRMATION':
         await move('TO_CONFIRM');
         return;

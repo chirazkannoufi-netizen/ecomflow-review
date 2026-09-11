@@ -108,12 +108,19 @@ export interface BulkArchiveResult {
 /**
  * Actions groupees disponibles sur l'ecran de preparation.
  *
+ * `STEP_BACK` recule d'UNE etape dans le kanban — « en cours » revient a « a
+ * preparer », « prete a expedier » revient a « en cours ». Il est distinct de
+ * `RETURN_TO_CONFIRMATION`, qui fait sortir la commande de la preparation pour
+ * la renvoyer en file d'appel : l'un corrige un geste, l'autre constate que la
+ * commande n'aurait pas du arriver la.
+ *
  * `CANCEL_AND_ARCHIVE` porte les DEUX gestes dans son nom, et le bouton
  * l'annonce de meme : l'archivage seul serait refuse tant que le stock est
  * reserve, et un bouton « Archiver » qui annule en silence des commandes
  * confirmees ferait plus que ce que son libelle promet.
  */
 export const PREPARATION_BULK_ACTIONS = [
+  'STEP_BACK',
   'RETURN_TO_CONFIRMATION',
   'CANCEL_AND_ARCHIVE',
   'MARK_READY',

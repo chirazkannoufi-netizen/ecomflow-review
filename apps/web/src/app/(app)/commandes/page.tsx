@@ -129,17 +129,12 @@ function OrdersContent() {
 
   return (
     <>
-      <PageHeader
-        title={t('title')}
-        description={t('subtitle')}
-        actions={
-          <Link href="/commandes/nouvelle">
-            <span className="inline-flex h-9 items-center rounded-md bg-brand-600 px-3.5 text-sm font-medium text-white hover:bg-brand-700">
-              {t('new')}
-            </span>
-          </Link>
-        }
-      />
+      {/* Pas d'action « Nouvelle commande » ici : la barre du haut la porte sur
+          TOUTES les pages, et elle ouvre le menu des provenances. Un second
+          bouton au meme endroit de l'ecran menait, lui, directement au
+          formulaire — deux boutons de meme nom aux comportements differents,
+          a trente centimetres l'un de l'autre. */}
+      <PageHeader title={t('title')} description={t('subtitle')} />
 
       {/* --- Filtres ------------------------------------------------------- */}
       <Card className="mb-3">

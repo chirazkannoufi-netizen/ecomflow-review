@@ -152,6 +152,9 @@ export default function PreparationPage() {
  *   boite de confirmation evite que l'agent decouvre le refus apres avoir coche
  *   quinze lignes.
  */
+/** Ce qu'une colonne peut declencher sur sa selection. */
+type BulkAction = PreparationBulkAction | 'SHIP' | 'EXPORT';
+
 function ColumnBulkBar({
   columnKey,
   selection,
@@ -165,17 +168,27 @@ function ColumnBulkBar({
   const tCommon = useTranslations('common');
   const queryClient = useQueryClient();
 
-  const [pendingAction, setPendingAction] = useState<PreparationBulkAction | 'SHIP' | null>(null);
+  const [pendingAction, setPendingAction] = useState<BulkAction | null>(null);
   const [reason, setReason] = useState('');
   const [result, setResult] = useState<BulkArchiveResult | null>(null);
+
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: (action: PreparationBulkAction | 'SHIP') => {
+    mutationFn: async (action: BulkAction): Promise<BulkArchiveResult | null> => {
       const ids = [...selection.selected];
+
+      if (action === 'EXPORT') {
+        // L'export ne change rien : il ne produit donc pas de compte-rendu,
+        // et le fichier qui arrive EST le retour.
+        await api.download('/orders/export.xlsx', 'ecomflow-export.xlsx', { ids });
+        return null;
+      }
+
       if (action === 'SHIP') {
         return api.post<BulkArchiveResult>('/orders/bulk-ship', { ids });
       }
+
       return api.post<BulkArchiveResult>('/orders/bulk-preparation', {
         ids,
         action,
@@ -184,6 +197,7 @@ function ColumnBulkBar({
     },
     onSuccess: (data) => {
       setResult(data);
+      if (data === null) return;
       setError(null);
       setReason('');
       selection.clear();
@@ -198,16 +212,25 @@ function ColumnBulkBar({
     },
   });
 
-  const actions: readonly (PreparationBulkAction | 'SHIP')[] =
+  // CHAQUE COLONNE N'OFFRE QUE CE QUE SON STATUT PERMET.
+  //   « Reculer » n'apparait pas sur « a preparer » : une commande confirmee
+  //   est au debut de la preparation, et le geste qui la fait sortir vers
+  //   l'amont s'appelle « Retour » — il la renvoie en file d'appel, ce qui
+  //   n'est pas la meme chose et porte deja son propre bouton.
+  //
+  //   « Exporter » est partout : emporter sa tournee du jour vaut pour
+  //   n'importe quelle etape.
+  const actions: readonly BulkAction[] =
     columnKey === 'toPrepare'
-      ? ['RETURN_TO_CONFIRMATION', 'CANCEL_AND_ARCHIVE', 'MARK_READY']
-      : columnKey === 'readyToShip'
-        ? ['SHIP']
-        : [];
+      ? ['RETURN_TO_CONFIRMATION', 'CANCEL_AND_ARCHIVE', 'MARK_READY', 'EXPORT']
+      : columnKey === 'inProgress'
+        ? ['STEP_BACK', 'MARK_READY', 'EXPORT']
+        : ['STEP_BACK', 'SHIP', 'EXPORT'];
 
-  if (actions.length === 0) return null;
-
-  const needsReason = pendingAction !== null && pendingAction !== 'SHIP';
+  // `SHIP` et `EXPORT` ne franchissent aucune transition : leur reclamer un
+  // motif serait une formalite sans lecteur.
+  const needsReason =
+    pendingAction !== null && pendingAction !== 'SHIP' && pendingAction !== 'EXPORT';
 
   return (
     <>
@@ -256,7 +279,12 @@ function ColumnBulkBar({
               size="sm"
               variant={action === 'CANCEL_AND_ARCHIVE' ? 'danger' : 'secondary'}
               disabled={mutation.isPending}
-              onClick={() => setPendingAction(action)}
+              onClick={() =>
+                // Un telechargement ne se confirme pas : il n'y a rien a
+                // annuler apres coup, et la boite de dialogue ne ferait
+                // qu'ajouter un clic a un geste sans consequence.
+                action === 'EXPORT' ? mutation.mutate(action) : setPendingAction(action)
+              }
             >
               {t(`actions.${action}`)}
             </Button>

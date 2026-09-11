@@ -307,14 +307,23 @@ export const api = {
    *   lien temporaire. L'URL d'objet est REVOQUEE ensuite : chaque blob non
    *   libere reste en memoire jusqu'au rechargement de la page.
    */
-  download: async (path: string, filename: string): Promise<void> => {
+  download: async (path: string, filename: string, body?: unknown): Promise<void> => {
     const headers: Record<string, string> = {};
     const token = tokenStore.getAccessToken();
     if (token) headers.authorization = `Bearer ${token}`;
     const tenantId = tokenStore.getTenantId();
     if (tenantId) headers['x-tenant-id'] = tenantId;
 
-    const response = await fetch(buildUrl(path), { headers });
+    // POST des qu'un corps est fourni : une selection de deux cents
+    // identifiants ne tient pas dans une URL, et la tronquer exporterait
+    // silencieusement moins de lignes que ce qui etait coche.
+    if (body !== undefined) headers['content-type'] = 'application/json';
+
+    const response = await fetch(buildUrl(path), {
+      method: body === undefined ? 'GET' : 'POST',
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
 
     if (!response.ok) {
       throw new ApiError(response.status, 'DOWNLOAD_FAILED', 'Le telechargement a echoue.');

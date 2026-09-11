@@ -15,6 +15,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -22,6 +23,7 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -43,6 +45,7 @@ import {
 } from '../../common/decorators';
 import type { RequestContext } from '../../infra/context/request-context';
 import { OrdersService } from './orders.service';
+import { OrdersExportService } from './orders-export.service';
 import { OrderWorkflowService } from './workflow/order-workflow.service';
 import {
   AssignOrderDto,
@@ -60,6 +63,7 @@ export class OrdersController {
   constructor(
     private readonly orders: OrdersService,
     private readonly workflow: OrderWorkflowService,
+    private readonly exports: OrdersExportService,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -258,6 +262,28 @@ export class OrdersController {
       context.permissions,
     );
     return { acknowledged: true as const };
+  }
+
+  @Post('export.xlsx')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.ORDERS_EXPORT)
+  @Header(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  @Header('Content-Disposition', 'attachment; filename="ecomflow-export.xlsx"')
+  @ApiOperation({
+    summary: 'Exporter une selection de commandes en Excel',
+    description:
+      'POST et non GET : la selection peut compter deux cents identifiants, ' +
+      'qui ne tiennent pas dans une URL. Les montants sortent en DINARS — le ' +
+      'produit stocke des centimes, mais un classeur est lu par un humain.',
+  })
+  async exportXlsx(
+    @TenantId() tenantId: string,
+    @Body() dto: BulkArchiveDto,
+  ): Promise<StreamableFile> {
+    return new StreamableFile(await this.exports.buildXlsx(tenantId, dto.ids));
   }
 
   @Post('bulk-preparation')

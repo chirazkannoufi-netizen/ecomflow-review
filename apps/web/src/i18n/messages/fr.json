@@ -604,19 +604,23 @@
         "RETURN_TO_CONFIRMATION": "Retour",
         "CANCEL_AND_ARCHIVE": "Annuler et archiver",
         "MARK_READY": "Colis prêt",
-        "SHIP": "Expédier"
+        "SHIP": "Expédier",
+        "STEP_BACK": "Reculer d'une étape",
+        "EXPORT": "Exporter en Excel"
       },
       "confirm": {
         "RETURN_TO_CONFIRMATION": "{count, plural, one {Renvoyer # commande en confirmation ?} other {Renvoyer # commandes en confirmation ?}}",
         "CANCEL_AND_ARCHIVE": "{count, plural, one {Annuler et archiver # commande ?} other {Annuler et archiver # commandes ?}}",
         "MARK_READY": "{count, plural, one {Déclarer # colis prêt ?} other {Déclarer # colis prêts ?}}",
-        "SHIP": "{count, plural, one {Expédier # commande ?} other {Expédier # commandes ?}}"
+        "SHIP": "{count, plural, one {Expédier # commande ?} other {Expédier # commandes ?}}",
+        "STEP_BACK": "{count, plural, one {Reculer # commande d'une étape ?} other {Reculer # commandes d'une étape ?}}"
       },
       "confirmBody": {
         "RETURN_TO_CONFIRMATION": "La commande repart en file d'appel et son stock réservé est libéré.",
         "CANCEL_AND_ARCHIVE": "Deux gestes : la commande est d'abord annulée — ce qui libère son stock — puis archivée. L'annulation compte dans les indicateurs.",
         "MARK_READY": "Les commandes passent par « en préparation » puis « prête à expédier ». L'historique conserve les deux étapes.",
-        "SHIP": "Un colis est créé chez le transporteur pour chaque commande, une par une."
+        "SHIP": "Un colis est créé chez le transporteur pour chaque commande, une par une.",
+        "STEP_BACK": "Chaque commande revient à l'étape précédente du kanban. Celles qui sont déjà au début sont refusées, avec leur motif."
       }
     }
   },
@@ -1525,6 +1529,9 @@
   "geo": {
     "communePickWilayaFirst": "Choisissez d'abord la wilaya",
     "communeCount": "{count, plural, one {# commune proposée} other {# communes proposées}}",
-    "communePlaceholder": "Commune de livraison"
+    "communePlaceholder": "Commune de livraison",
+    "communeOther": "Autre / commune non listée",
+    "communeFreeHint": "Commune absente du référentiel : saisissez-la telle qu'elle doit apparaître sur le bordereau.",
+    "communeBackToList": "Revenir à la liste"
   }
 }
