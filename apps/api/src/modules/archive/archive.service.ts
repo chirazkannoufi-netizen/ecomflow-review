@@ -30,7 +30,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   ERROR_CODES,
+  ORDER_STATUS_LABELS,
   buildPageMeta,
+  isTerminalStatus,
   toSkipTake,
   type BulkArchiveResult,
   type BulkArchiveSkip,
@@ -48,6 +50,22 @@ export interface ArchivedItem {
   readonly label: string;
   readonly sublabel: string | null;
   readonly archivedAt: Date;
+  /**
+   * La ligne peut-elle revenir a son emplacement d'origine ?
+   *
+   * CALCULE ICI, PAS DECOUVERT AU CLIC. Une action proposee qui echoue est
+   * exactement le defaut que la matrice de capacites transporteur a servi a
+   * supprimer (D-049) : on ne dessine pas un bouton qui ne marchera pas.
+   */
+  readonly restorable: boolean;
+  /** Pourquoi la ligne ne peut pas revenir. `null` quand elle le peut. */
+  readonly blockedReason: string | null;
+}
+
+export interface RestoreSelection {
+  readonly orders?: readonly string[];
+  readonly products?: readonly string[];
+  readonly customers?: readonly string[];
 }
 
 export interface PurgeSelection {
@@ -96,6 +114,7 @@ export class ArchiveService {
             select: {
               id: true,
               reference: true,
+              status: true,
               customerNameSnapshot: true,
               archivedAt: true,
             },
@@ -114,7 +133,13 @@ export class ArchiveService {
             where: { tenantId, archivedAt: { not: null } },
             orderBy: { archivedAt: 'desc' },
             take: 200,
-            select: { id: true, fullName: true, phoneE164: true, archivedAt: true },
+            select: {
+              id: true,
+              fullName: true,
+              phoneE164: true,
+              anonymizedAt: true,
+              archivedAt: true,
+            },
           })
         : [],
     ]);
@@ -126,6 +151,17 @@ export class ArchiveService {
         label: row.reference,
         sublabel: row.customerNameSnapshot,
         archivedAt: row.archivedAt as Date,
+        // Une commande ANNULEE ne peut pas revenir en file : `CANCELLED` est
+        // declare terminal (`TERMINAL_ORDER_STATUSES`), et un test interdit
+        // nommement `CANCELLED -> TO_CONFIRM`. Lever `archivedAt` la sortirait
+        // de la corbeille en la laissant annulee — visible nulle part ou l'on
+        // travaille. On le DIT au lieu de le decouvrir au clic.
+        ...(isTerminalStatus(row.status)
+          ? {
+              restorable: false,
+              blockedReason: `${row.reference} est ${ORDER_STATUS_LABELS[row.status].toLowerCase()} : ce statut est definitif, la commande ne peut pas reprendre son cours.`,
+            }
+          : { restorable: true, blockedReason: null }),
       })),
       ...products.map((row) => ({
         kind: 'PRODUCT' as const,
@@ -133,6 +169,8 @@ export class ArchiveService {
         label: row.name,
         sublabel: row.sku,
         archivedAt: row.archivedAt as Date,
+        restorable: true,
+        blockedReason: null,
       })),
       ...customers.map((row) => ({
         kind: 'CUSTOMER' as const,
@@ -140,6 +178,14 @@ export class ArchiveService {
         label: row.fullName,
         sublabel: row.phoneE164,
         archivedAt: row.archivedAt as Date,
+        // Un client anonymise n'a plus rien a restaurer : ses donnees
+        // personnelles sont effacees, volontairement et sans retour.
+        ...(row.anonymizedAt
+          ? {
+              restorable: false,
+              blockedReason: 'Ce client a ete anonymise : il n y a plus de donnees a restaurer.',
+            }
+          : { restorable: true, blockedReason: null }),
       })),
     ].sort((a, b) => b.archivedAt.getTime() - a.archivedAt.getTime());
 
@@ -149,6 +195,151 @@ export class ArchiveService {
       data: items.slice(start, start + take),
       meta: buildPageMeta(page, take, items.length),
     };
+  }
+
+  /**
+   * Remet des lignes archivees a leur emplacement d'origine.
+   *
+   * POUR LES PRODUITS ET LES CLIENTS, LEVER `archivedAt` SUFFIT
+   *   L'archivage de ces deux entites ne touche a rien d'autre : la fiche
+   *   disparait des listes, et reapparait telle quelle.
+   *
+   * POUR LES COMMANDES, PAS TOUJOURS — ET C'EST LE PIEGE
+   *   « Annuler et archiver » fait DEUX choses : passer la commande en
+   *   ANNULEE, puis l'archiver. N'inverser que la seconde la sortirait de la
+   *   corbeille en la laissant annulee, donc visible nulle part ou l'on
+   *   travaille.
+   *
+   *   Inverser la premiere est IMPOSSIBLE en l'etat : `CANCELLED` figure dans
+   *   `TERMINAL_ORDER_STATUSES`, et un test interdit nommement
+   *   `CANCELLED -> TO_CONFIRM`. Ce n'est pas un oubli mais une regle ecrite.
+   *
+   *   Ces lignes sont donc REFUSEES, avec leur motif — et signalees comme non
+   *   restaurables dans la liste, pour que le bouton ne soit meme pas propose.
+   *   Une commande archivee SANS avoir ete annulee, elle, revient sans
+   *   difficulte : son statut n'a jamais change.
+   */
+  async restore(
+    tenantId: string,
+    selection: RestoreSelection,
+    membershipId: string,
+  ): Promise<BulkArchiveResult> {
+    const restored: string[] = [];
+    const skipped: BulkArchiveSkip[] = [];
+
+    const log = (kind: ArchivedKind, id: string, label: string) =>
+      this.audit.record({
+        action: 'ORDER_UPDATED',
+        entityType: kind,
+        entityId: id,
+        tenantId,
+        metadata: { restored: true, label, membershipId },
+      });
+
+    for (const id of selection.orders ?? []) {
+      const order = await this.prisma.order.findFirst({
+        where: { tenantId, id, archivedAt: { not: null } },
+        select: { reference: true, status: true },
+      });
+
+      if (!order) {
+        skipped.push({
+          id,
+          code: ERROR_CODES.NOT_FOUND,
+          message: 'Commande introuvable ou non archivee.',
+        });
+        continue;
+      }
+
+      if (isTerminalStatus(order.status)) {
+        skipped.push({
+          id,
+          code: ERROR_CODES.ORDER_INVALID_TRANSITION,
+          message: `${order.reference} est ${ORDER_STATUS_LABELS[order.status].toLowerCase()} : ce statut est definitif, la commande ne peut pas reprendre son cours.`,
+        });
+        continue;
+      }
+
+      await this.prisma.order.updateMany({
+        where: { tenantId, id },
+        data: { archivedAt: null },
+      });
+      await log('ORDER', id, order.reference);
+      restored.push(id);
+    }
+
+    for (const id of selection.products ?? []) {
+      const product = await this.prisma.product.findFirst({
+        where: { tenantId, id, archivedAt: { not: null } },
+        select: { name: true },
+      });
+
+      if (!product) {
+        skipped.push({
+          id,
+          code: ERROR_CODES.NOT_FOUND,
+          message: 'Produit introuvable ou non archive.',
+        });
+        continue;
+      }
+
+      // DEUX NIVEAUX A RELEVER, ET UN QU'ON NE TOUCHE PAS.
+      //
+      //   `archiveProduct` pose `archivedAt` sur le produit ET sur ses
+      //   variantes. Ne relever que celui du produit le ferait reapparaitre
+      //   sans aucune declinaison vendable — une fiche vide, inutilisable.
+      //
+      //   Il pose AUSSI `isActive: false`, et celui-la reste en place : rien ne
+      //   permet de distinguer un produit desactive PAR l'archivage d'un
+      //   produit que le commercant avait deja retire de la vente. Le remettre
+      //   en vente d'office reactiverait des articles qu'on avait
+      //   volontairement sortis. Le produit revient donc visible mais inactif,
+      //   et sa reactivation reste un geste conscient.
+      await this.prisma.product.updateMany({
+        where: { tenantId, id },
+        data: { archivedAt: null },
+      });
+      await this.prisma.productVariant.updateMany({
+        where: { tenantId, productId: id },
+        data: { archivedAt: null },
+      });
+      await log('PRODUCT', id, product.name);
+      restored.push(id);
+    }
+
+    for (const id of selection.customers ?? []) {
+      const customer = await this.prisma.customer.findFirst({
+        where: { tenantId, id, archivedAt: { not: null } },
+        select: { fullName: true, anonymizedAt: true },
+      });
+
+      if (!customer) {
+        skipped.push({
+          id,
+          code: ERROR_CODES.NOT_FOUND,
+          message: 'Client introuvable ou non archive.',
+        });
+        continue;
+      }
+
+      if (customer.anonymizedAt) {
+        skipped.push({
+          id,
+          code: ERROR_CODES.CONFLICT,
+          message: 'Ce client a ete anonymise : il n y a plus de donnees a restaurer.',
+        });
+        continue;
+      }
+
+      await this.prisma.customer.updateMany({
+        where: { tenantId, id },
+        data: { archivedAt: null },
+      });
+      await log('CUSTOMER', id, customer.fullName);
+      restored.push(id);
+    }
+
+    return { archived: restored.length, skipped };
   }
 
   /**

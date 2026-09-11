@@ -58,6 +58,9 @@ interface ArchivedItem {
   readonly label: string;
   readonly sublabel: string | null;
   readonly archivedAt: string;
+  /** Calcule par le serveur : voir `ArchivedItem.restorable`. */
+  readonly restorable: boolean;
+  readonly blockedReason: string | null;
 }
 
 interface Paginated {
@@ -83,7 +86,9 @@ export default function ArchivePage() {
 
   const [page, setPage] = useState(1);
   const [kind, setKind] = useState<'' | ArchivedKind>('');
-  const [pendingAction, setPendingAction] = useState<'PURGE' | 'ANONYMIZE' | null>(null);
+  const [pendingAction, setPendingAction] = useState<'PURGE' | 'ANONYMIZE' | 'RESTORE' | null>(
+    null,
+  );
   const [reason, setReason] = useState('');
   const [result, setResult] = useState<BulkArchiveResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -106,8 +111,21 @@ export default function ArchivePage() {
   const selected = rows.filter((row) => selection.isSelected(selectionId(row)));
   const selectedCustomers = selected.filter((row) => row.kind === 'CUSTOMER');
 
+  // Seules les lignes REELLEMENT restaurables comptent pour ce bouton : une
+  // commande annulee ou un client anonymise n'ont rien a retrouver, et le
+  // serveur les refuserait.
+  const restorable = selected.filter((row) => row.restorable);
+
   const mutation = useMutation({
-    mutationFn: (action: 'PURGE' | 'ANONYMIZE') => {
+    mutationFn: (action: 'PURGE' | 'ANONYMIZE' | 'RESTORE') => {
+      if (action === 'RESTORE') {
+        return api.post<BulkArchiveResult>('/archive/restore', {
+          orders: restorable.filter((row) => row.kind === 'ORDER').map((row) => row.id),
+          products: restorable.filter((row) => row.kind === 'PRODUCT').map((row) => row.id),
+          customers: restorable.filter((row) => row.kind === 'CUSTOMER').map((row) => row.id),
+        });
+      }
+
       if (action === 'ANONYMIZE') {
         return api.post<BulkArchiveResult>('/customers/bulk-anonymize', {
           ids: selectedCustomers.map((row) => row.id),
@@ -202,6 +220,15 @@ export default function ArchivePage() {
             </span>
             <div className="flex-1" />
 
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={restorable.length === 0 || mutation.isPending}
+              onClick={() => setPendingAction('RESTORE')}
+            >
+              {t('restore', { count: restorable.length })}
+            </Button>
+
             {canAnonymize ? (
               <Button
                 size="sm"
@@ -253,6 +280,7 @@ export default function ArchivePage() {
                     <th>{t('columns.kind')}</th>
                     <th>{t('columns.item')}</th>
                     <th>{t('columns.archivedAt')}</th>
+                    <th>{t('columns.state')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -275,6 +303,18 @@ export default function ArchivePage() {
                         ) : null}
                       </td>
                       <td className="text-xs text-muted">{formatDateTime(row.archivedAt)}</td>
+                      <td className="text-xs">
+                        {row.restorable ? (
+                          <span className="text-muted">{t('restorableYes')}</span>
+                        ) : (
+                          // Le motif est visible AVANT toute selection : c'est
+                          // ce qui evite de cocher dix lignes pour decouvrir
+                          // ensuite que la moitie ne reviendra pas.
+                          <span className="text-warning" title={row.blockedReason ?? undefined}>
+                            {t('restorableNo')}
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -295,15 +335,29 @@ export default function ArchivePage() {
 
       <ConfirmDialog
         open={pendingAction !== null}
-        danger
         loading={mutation.isPending}
+        danger={pendingAction !== 'RESTORE'}
         title={
-          pendingAction === 'PURGE'
-            ? t('confirmPurge', { count: selection.count })
-            : t('confirmAnonymize', { count: selectedCustomers.length })
+          pendingAction === 'RESTORE'
+            ? t('confirmRestore', { count: restorable.length })
+            : pendingAction === 'PURGE'
+              ? t('confirmPurge', { count: selection.count })
+              : t('confirmAnonymize', { count: selectedCustomers.length })
         }
-        message={pendingAction === 'PURGE' ? t('confirmPurgeBody') : t('confirmAnonymizeBody')}
-        confirmLabel={pendingAction === 'PURGE' ? t('purge') : t('anonymizeConfirm')}
+        message={
+          pendingAction === 'RESTORE'
+            ? t('confirmRestoreBody')
+            : pendingAction === 'PURGE'
+              ? t('confirmPurgeBody')
+              : t('confirmAnonymizeBody')
+        }
+        confirmLabel={
+          pendingAction === 'RESTORE'
+            ? t('restoreConfirm')
+            : pendingAction === 'PURGE'
+              ? t('purge')
+              : t('anonymizeConfirm')
+        }
         onCancel={() => {
           setPendingAction(null);
           setReason('');

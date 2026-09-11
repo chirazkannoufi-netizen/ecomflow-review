@@ -2273,6 +2273,65 @@ déjà écarté par une garde existante, sans rien à ajouter. L'ordre obligatoi
 
 ---
 
+## D-063 — « Restaurer » inverse ce qui est inversible, et le dit pour le reste
+
+**Date** : 11/09/2026 · **Statut** : appliquée
+
+**Contexte** — La page Archive devait recevoir une action « Restaurer », remettant
+une ligne à son emplacement d'origine.
+
+**Le piège, confirmé** — « Annuler et archiver » fait **deux** choses : passer la
+commande en `CANCELLED`, puis l'archiver. N'inverser que la seconde la sortirait
+de la corbeille en la laissant annulée, donc visible nulle part où l'on
+travaille.
+
+**Ce que la vérification a montré, et qui n'était pas anticipé** — L'historique
+conserve bien le statut précédent (`OrderStatusHistory.oldStatus`), donc y
+revenir serait techniquement possible. Mais **`CANCELLED` est déclaré terminal** :
+il figure dans la constante nommée `TERMINAL_ORDER_STATUSES`, et un test du
+paquet partagé interdit **nommément** `isTransitionAllowed('CANCELLED',
+'TO_CONFIRM')`.
+
+Ce n'est pas une omission. J'ai d'abord ajouté la transition, et deux tests sont
+tombés — c'est ainsi que l'invariant s'est manifesté. Il a été retiré plutôt
+qu'écrasé.
+
+**Décision — on restaure ce qui est inversible, et on annonce le reste.**
+
+| | Restauration |
+|---|---|
+| Produit | `archivedAt` levé sur le produit **et ses variantes** |
+| Client | `archivedAt` levé, sauf s'il est anonymisé |
+| Commande non terminale | `archivedAt` levé ; son statut n'avait jamais changé |
+| Commande terminale | **refusée**, avec son motif |
+
+**L'état est calculé côté serveur et affiché avant tout clic.** `ArchivedItem`
+porte `restorable` et `blockedReason` : le bouton n'est pas proposé sur une ligne
+qui le refuserait. C'est le principe de D-049 appliqué ici — on ne dessine pas
+une action qui ne marchera pas.
+
+**Deux détails qui auraient produit une restauration à moitié** —
+
+1. `archiveProduct` archive le produit **et ses variantes**. Ne relever que le
+   premier ferait réapparaître une fiche sans déclinaison vendable : visible,
+   mais inutilisable.
+2. Il pose aussi `isActive: false`, et celui-là **reste en place**. Rien ne
+   distingue un produit désactivé *par* l'archivage d'un produit que le
+   commerçant avait retiré de la vente. Le remettre en vente d'office
+   réactiverait des articles volontairement sortis. Le produit revient donc
+   visible mais inactif, et sa remise en vente reste un geste conscient.
+
+**Reste ouvert** — Faire revenir une commande annulée dans la file de
+confirmation demande de retirer `CANCELLED` de `TERMINAL_ORDER_STATUSES`. La
+vérification a montré que `isTerminalStatus` n'est utilisé **que par ses propres
+tests** — aucun code de production n'en dépend — et que la transition serait
+neutre pour le stock (ni `CANCELLED` ni `TO_CONFIRM` ne réservent). Le compteur
+`cancelledCount` du client se corrige seul via `recomputeReliability`, qui
+recalcule depuis les statuts réels. Le changement est donc **petit et sûr** —
+mais il renverse un invariant nommé, et cela se décide, cela ne se déduit pas.
+
+---
+
 ---
 
 *Ce journal est mis à jour à chaque décision structurante. Les entrées ne sont

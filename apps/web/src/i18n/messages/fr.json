@@ -1541,7 +1541,8 @@
     "columns": {
       "kind": "Type",
       "item": "Élément",
-      "archivedAt": "Archivé le"
+      "archivedAt": "Archivé le",
+      "state": "État"
     },
     "emptyTitle": "Rien d'archivé",
     "emptyDescription": "Les éléments que vous archiverez apparaîtront ici, et resteront consultables.",
@@ -1556,6 +1557,12 @@
     "confirmAnonymize": "{count, plural, one {Anonymiser # client ?} other {Anonymiser # clients ?}}",
     "confirmAnonymizeBody": "Les données personnelles sont effacées ; l'historique commercial est conservé. Irréversible.",
     "doneTitle": "{count, plural, =0 {Aucun élément traité} one {# élément traité} other {# éléments traités}}",
-    "doneAll": "Toute la sélection a été traitée."
+    "doneAll": "Toute la sélection a été traitée.",
+    "restore": "{count, plural, =0 {Restaurer la sélection} one {Restaurer # élément} other {Restaurer # éléments}}",
+    "restoreConfirm": "Restaurer",
+    "confirmRestore": "{count, plural, one {Restaurer # élément ?} other {Restaurer # éléments ?}}",
+    "confirmRestoreBody": "Les lignes reprennent leur place dans les listes. Un produit revient marqué inactif : sa remise en vente reste un geste séparé.",
+    "restorableYes": "Restaurable",
+    "restorableNo": "Non restaurable"
   }
 }

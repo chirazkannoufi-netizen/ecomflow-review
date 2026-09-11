@@ -1005,6 +1005,147 @@ describe('workflow des commandes', () => {
   });
 
   // ==========================================================================
+  describe('corbeille : restauration', () => {
+    it('remet un produit ET ses declinaisons dans les listes', async () => {
+      // Le piege : `archiveProduct` archive le produit ET ses variantes. Ne
+      // relever que le premier ferait reapparaitre une fiche sans declinaison
+      // vendable — visible, mais inutilisable.
+      const tenant = await createTenant(prisma);
+      const product = await createProduct(prisma, tenant.tenantId, { stock: 0 });
+      const now = new Date();
+
+      await prisma.product.update({
+        where: { id: product.productId },
+        data: { archivedAt: now, isActive: false },
+      });
+      await prisma.productVariant.updateMany({
+        where: { productId: product.productId },
+        data: { archivedAt: now, isActive: false },
+      });
+
+      const result = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        archive.restore(
+          tenant.tenantId,
+          { products: [product.productId] },
+          tenant.ownerMembershipId,
+        ),
+      );
+
+      expect(result.archived).toBe(1);
+
+      const row = await prisma.product.findUniqueOrThrow({
+        where: { id: product.productId },
+        select: { archivedAt: true, isActive: true },
+      });
+      expect(row.archivedAt).toBeNull();
+      // `isActive` reste FAUX : rien ne distingue un produit desactive par
+      // l'archivage d'un produit retire de la vente volontairement.
+      expect(row.isActive).toBe(false);
+
+      const variants = await prisma.productVariant.findMany({
+        where: { productId: product.productId },
+        select: { archivedAt: true },
+      });
+      expect(variants.every((variant) => variant.archivedAt === null)).toBe(true);
+    });
+
+    it('remet un client dans les listes', async () => {
+      const tenant = await createTenant(prisma);
+      const customer = await createCustomer(prisma, tenant.tenantId);
+      await prisma.customer.update({
+        where: { id: customer.customerId },
+        data: { archivedAt: new Date() },
+      });
+
+      const result = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        archive.restore(
+          tenant.tenantId,
+          { customers: [customer.customerId] },
+          tenant.ownerMembershipId,
+        ),
+      );
+
+      expect(result.archived).toBe(1);
+      expect(
+        (
+          await prisma.customer.findUniqueOrThrow({
+            where: { id: customer.customerId },
+            select: { archivedAt: true },
+          })
+        ).archivedAt,
+      ).toBeNull();
+    });
+
+    it('refuse un client anonymise : il n y a plus rien a restaurer', async () => {
+      const tenant = await createTenant(prisma);
+      const customer = await createCustomer(prisma, tenant.tenantId);
+      await prisma.customer.update({
+        where: { id: customer.customerId },
+        data: { archivedAt: new Date(), anonymizedAt: new Date() },
+      });
+
+      const result = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        archive.restore(
+          tenant.tenantId,
+          { customers: [customer.customerId] },
+          tenant.ownerMembershipId,
+        ),
+      );
+
+      expect(result.archived).toBe(0);
+      expect(result.skipped[0]?.message).toContain('anonymise');
+    });
+
+    it('remet une commande NON annulee dans les listes', async () => {
+      const { tenant, order } = await scenario();
+      await prisma.order.update({
+        where: { id: order.orderId },
+        data: { archivedAt: new Date() },
+      });
+
+      const result = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        archive.restore(tenant.tenantId, { orders: [order.orderId] }, tenant.ownerMembershipId),
+      );
+
+      expect(result.archived).toBe(1);
+      const row = await prisma.order.findUniqueOrThrow({
+        where: { id: order.orderId },
+        select: { archivedAt: true, status: true },
+      });
+      expect(row.archivedAt).toBeNull();
+      // Son statut n'avait jamais change : elle revient telle qu'elle etait.
+      expect(row.status).toBe('TO_CONFIRM');
+    });
+
+    it('refuse une commande annulee, et le DIT dans la liste', async () => {
+      // Le piege central. « Annuler et archiver » fait deux choses ; seule la
+      // seconde est reversible. `CANCELLED` est declare terminal, et un test du
+      // paquet partage interdit nommement son retour en file.
+      const { tenant, order } = await scenario();
+      await move(tenant, order.orderId, 'CANCELLED', { reason: 'Client injoignable' });
+      await prisma.order.update({
+        where: { id: order.orderId },
+        data: { archivedAt: new Date() },
+      });
+
+      const result = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        archive.restore(tenant.tenantId, { orders: [order.orderId] }, tenant.ownerMembershipId),
+      );
+
+      expect(result.archived).toBe(0);
+      expect(result.skipped[0]?.message).toContain('definitif');
+
+      // Et surtout : la liste l'annonce AVANT tout clic.
+      const page = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        archive.list(tenant.tenantId),
+      );
+      const entry = page.data.find((item) => item.id === order.orderId);
+      expect(entry?.restorable).toBe(false);
+      expect(entry?.blockedReason).toContain('definitif');
+    });
+  });
+
+  // ==========================================================================
   describe('effets sur le stock', () => {
     it('libere la reservation lors d une annulation apres confirmation', async () => {
       const { tenant, product, order } = await scenario({ stock: 10, quantity: 3 });

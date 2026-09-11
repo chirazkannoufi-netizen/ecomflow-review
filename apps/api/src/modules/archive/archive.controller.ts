@@ -85,6 +85,33 @@ export class ArchiveController {
     );
   }
 
+  @Post('restore')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.ORDERS_READ)
+  @Audited({ action: 'ORDER_UPDATED', entityType: 'Archive' })
+  @ApiOperation({
+    summary: 'Remettre une selection archivee a son emplacement d origine',
+    description:
+      'Produits et clients reviennent en levant `archivedAt`. Les commandes ' +
+      'aussi — SAUF celles dont le statut est terminal : « Annuler et ' +
+      'archiver » fait deux choses, et seule la seconde est reversible. ' +
+      '`CANCELLED` figure dans `TERMINAL_ORDER_STATUSES` et un test interdit ' +
+      'nommement son retour en file. Ces lignes sont refusees avec leur motif, ' +
+      'et signalees non restaurables dans la liste pour que le bouton ne soit ' +
+      'pas propose.',
+  })
+  async restore(
+    @TenantId() tenantId: string,
+    @Body() dto: PurgeDto,
+    @Ctx() context: RequestContext,
+  ) {
+    return this.archive.restore(
+      tenantId,
+      { orders: dto.orders, products: dto.products, customers: dto.customers },
+      context.membershipId as string,
+    );
+  }
+
   @Post('purge')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions(PERMISSIONS.DATA_PURGE)
