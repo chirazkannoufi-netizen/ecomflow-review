@@ -103,6 +103,15 @@ export class AnonymizeCustomerDto {
   reason!: string;
 }
 
+export class BulkAnonymizeDto extends BulkArchiveDto {
+  @ApiProperty({ description: 'Motif de l effacement, conserve au journal d audit.' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'Un motif est obligatoire pour un effacement de donnees.' })
+  @MaxLength(500)
+  reason!: string;
+}
+
 @ApiTags('Clients')
 @ApiBearerAuth()
 @Controller('customers')
@@ -199,6 +208,25 @@ export class CustomersController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     await this.customers.unarchive(tenantId, id);
+  }
+
+  @Post('bulk-anonymize')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.CUSTOMERS_MANAGE, PERMISSIONS.SETTINGS_MANAGE)
+  @Audited({ action: 'CUSTOMER_DATA_ERASED', entityType: 'Customer' })
+  @ApiOperation({
+    summary: 'Anonymiser une selection de clients (droit a l effacement)',
+    description:
+      'Efface les donnees PERSONNELLES en conservant l historique COMMERCIAL. ' +
+      'Distinct de la suppression, qui efface la ligne et se heurte a la cle ' +
+      'etrangere des qu un client a commande — c est pourquoi les deux gestes ' +
+      'coexistent sur la page Archive au lieu de partager un bouton.',
+  })
+  async bulkAnonymize(
+    @TenantId() tenantId: string,
+    @Body() dto: BulkAnonymizeDto,
+  ) {
+    return this.customers.anonymizeMany(tenantId, dto.ids, dto.reason);
   }
 
   @Post(':id/anonymize')

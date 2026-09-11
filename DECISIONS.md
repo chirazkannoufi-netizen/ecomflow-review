@@ -2142,6 +2142,70 @@ exposé, pour qu'on ne le croie pas actif.
 
 ---
 
+## D-061 — Une corbeille unique, et deux gestes qui ne se confondent pas
+
+**Date** : 11/09/2026 · **Statut** : appliquée
+
+**Contexte** — L'archivage existe sur trois entités (commandes, produits, et
+clients depuis `customers.archived_at`). Décision produit : une page Archive
+listant les trois ensemble, avec une vraie suppression définitive réservée au
+rôle le plus restrictif.
+
+**Problème 1 — ce qui était archivé n'était visible nulle part.** Une commande
+archivée par erreur ne se retrouvait qu'en connaissant sa référence. Un
+commerçant qui ne la retrouve pas la **recrée** — produisant exactement le
+doublon que le reste du produit s'emploie à éviter.
+
+**Problème 2 — la suppression définitive refuse plus souvent qu'elle n'accepte.**
+Les clés étrangères sont en `Restrict` là où l'historique doit survivre. Mesuré
+sur la base de développement :
+
+| | Supprimables | Bloquées |
+|---|---|---|
+| Clients | 10 / 42 | **76 %** — dès qu'une commande existe (`Order.customer`) |
+| Produits | 0 / 4 | **100 %** — mouvement de stock ou ligne de commande |
+| Commandes | 45 / 45 | 0 % ici, mais un retour les bloque (`ReturnItem.orderItem`) |
+
+Ce n'est **pas un défaut à contourner** : c'est ce qui garantit que les marges,
+l'inventaire et les scores de fiabilité déjà calculés restent justes. Un bouton
+qui forcerait la suppression casserait les chiffres passés pour gagner une ligne
+de liste.
+
+**Décision — on tente, et on rend compte.** Le service n'anticipe pas les
+refus : il laisse la base trancher et traduit la violation de clé étrangère en
+un motif **métier**. « Violation de contrainte » ne dit rien à un commerçant ;
+« ce client a passé une commande, utilisez Anonymiser » lui dit quoi faire.
+
+**Décision — deux boutons, pas un.** « Supprimer » efface la **ligne** ;
+« Anonymiser » efface les **données personnelles** d'un client en gardant son
+historique commercial. Les fondre aurait rendu le geste imprévisible : sur une
+sélection mélangée, le même clic aurait fait deux choses différentes selon la
+ligne. Et pour un client, c'est presque toujours l'anonymisation qui répond
+réellement à l'intention — la suppression étant bloquée trois fois sur quatre.
+
+**Décision — la permission réutilise le mécanisme existant.** `DATA_PURGE`
+rejoint `BILLING_MANAGE` dans `ADMIN_EXCLUDED` : aucun rôle n'est inventé, et
+seul le propriétaire hérite du geste. La raison est la même pour les deux — ce
+sont les seuls actes qu'on ne peut pas défaire. Un administrateur pilote toute
+l'exploitation, mais effacer définitivement engage la boutique au-delà de
+l'opérationnel.
+
+**Trois garde-fous, dans cet ordre** —
+1. La ligne doit être **archivée**. On ne supprime jamais depuis une liste de
+   travail : archiver d'abord oblige à passer par un état où l'erreur se
+   rattrape.
+2. La **base** a le dernier mot ; sa violation devient un motif lisible.
+3. Chaque suppression est **journalisée avant** de disparaître — c'est la seule
+   trace qui restera de la ligne.
+
+**Impact** — La liste fusionne trois requêtes **en mémoire** plutôt qu'en SQL :
+une union imposerait du SQL brut sur trois tables, donc trois filtres
+`tenant_id` écrits à la main, hors de portée du garde d'isolation (D-004). Le
+volume d'une corbeille ne justifie pas d'échanger une garantie contre quelques
+millisecondes.
+
+---
+
 ---
 
 *Ce journal est mis à jour à chaque décision structurante. Les entrées ne sont

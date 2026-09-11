@@ -18,6 +18,8 @@ import { OrderWorkflowService } from '../../src/modules/orders/workflow/order-wo
 import { OrdersService } from '../../src/modules/orders/orders.service';
 import { ShipmentsService } from '../../src/modules/shipments/shipments.service';
 import { ShipmentsModule } from '../../src/modules/shipments/shipments.module';
+import { ArchiveService } from '../../src/modules/archive/archive.service';
+import { ArchiveModule } from '../../src/modules/archive/archive.module';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { RequestContextStore } from '../../src/infra/context/request-context';
 import {
@@ -40,14 +42,16 @@ describe('workflow des commandes', () => {
   let workflow: OrderWorkflowService;
   let orders: OrdersService;
   let shipments: ShipmentsService;
+  let archive: ArchiveService;
   let inventory: InventoryService;
 
   beforeAll(async () => {
     prisma = rawPrisma();
-    context = await buildTestModule({ imports: [ShipmentsModule] });
+    context = await buildTestModule({ imports: [ShipmentsModule, ArchiveModule] });
     workflow = context.get(OrderWorkflowService);
     orders = context.get(OrdersService);
     shipments = context.get(ShipmentsService);
+    archive = context.get(ArchiveService);
     inventory = context.get(InventoryService);
   });
 
@@ -691,6 +695,131 @@ describe('workflow des commandes', () => {
 
       expect(result.archived).toBe(1);
       expect(result.skipped).toHaveLength(0);
+    });
+  });
+
+  // ==========================================================================
+  describe('corbeille : suppression definitive', () => {
+    it('refuse un client qui a passe une commande, avec un motif lisible', async () => {
+      // Le cas majoritaire sur des donnees reelles. Le refus vient de la cle
+      // etrangere `Order.customer`, en Restrict — et c'est elle qui garantit
+      // que les chiffres passes restent calculables.
+      const { tenant, customer } = await scenario();
+      await prisma.customer.update({
+        where: { id: customer.customerId },
+        data: { archivedAt: new Date() },
+      });
+
+      const result = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        archive.purge(
+          tenant.tenantId,
+          { customers: [customer.customerId] },
+          tenant.ownerMembershipId,
+        ),
+      );
+
+      expect(result.archived).toBe(0);
+      expect(result.skipped).toHaveLength(1);
+      // Le motif parle metier, pas PostgreSQL, et oriente vers le bon geste.
+      expect(result.skipped[0]?.message).toContain('commande');
+      expect(result.skipped[0]?.message).toContain('Anonymiser');
+
+      // La fiche est toujours la : un refus n'abime rien.
+      expect(
+        await prisma.customer.count({ where: { id: customer.customerId } }),
+      ).toBe(1);
+    });
+
+    it('refuse un produit qui a connu un mouvement de stock', async () => {
+      const tenant = await createTenant(prisma);
+      const product = await createProduct(prisma, tenant.tenantId, { stock: 5 });
+      await prisma.product.update({
+        where: { id: product.productId },
+        data: { archivedAt: new Date() },
+      });
+
+      const result = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        archive.purge(
+          tenant.tenantId,
+          { products: [product.productId] },
+          tenant.ownerMembershipId,
+        ),
+      );
+
+      expect(result.archived).toBe(0);
+      expect(result.skipped[0]?.message).toContain('stock');
+    });
+
+    it('refuse une ligne qui n est pas archivee', async () => {
+      // Premier garde-fou : on ne supprime jamais directement depuis une liste
+      // de travail. Archiver d'abord oblige a passer par un etat ou l'erreur se
+      // rattrape encore.
+      const tenant = await createTenant(prisma);
+      const product = await createProduct(prisma, tenant.tenantId, { stock: 0 });
+
+      const result = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        archive.purge(
+          tenant.tenantId,
+          { products: [product.productId] },
+          tenant.ownerMembershipId,
+        ),
+      );
+
+      expect(result.archived).toBe(0);
+      expect(result.skipped[0]?.message).toContain('archivee');
+      expect(await prisma.product.count({ where: { id: product.productId } })).toBe(1);
+    });
+
+    it('supprime ce que la base autorise, et le journalise avant', async () => {
+      // Un produit sans mouvement de stock ni ligne de commande : le seul cas
+      // ou la suppression aboutit vraiment.
+      const tenant = await createTenant(prisma);
+      const product = await createProduct(prisma, tenant.tenantId, { stock: 0 });
+      await prisma.product.update({
+        where: { id: product.productId },
+        data: { archivedAt: new Date() },
+      });
+
+      const result = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        archive.purge(
+          tenant.tenantId,
+          { products: [product.productId] },
+          tenant.ownerMembershipId,
+        ),
+      );
+
+      expect(result.archived).toBe(1);
+      expect(result.skipped).toHaveLength(0);
+      expect(await prisma.product.count({ where: { id: product.productId } })).toBe(0);
+
+      // La seule trace qui subsiste de la ligne effacee.
+      const logged = await prisma.auditLog.count({
+        where: { entityId: product.productId, action: 'DATA_PURGED' },
+      });
+      expect(logged).toBe(1);
+    });
+
+    it('ne montre que ce qui est archive, et de la boutique courante', async () => {
+      const boutiqueA = await createTenant(prisma);
+      const boutiqueB = await createTenant(prisma);
+
+      const visible = await createProduct(prisma, boutiqueA.tenantId, { stock: 0 });
+      const actif = await createProduct(prisma, boutiqueA.tenantId, { stock: 0 });
+      const voisin = await createProduct(prisma, boutiqueB.tenantId, { stock: 0 });
+
+      await prisma.product.updateMany({
+        where: { id: { in: [visible.productId, voisin.productId] } },
+        data: { archivedAt: new Date() },
+      });
+
+      const page = await RequestContextStore.runWithTenant(boutiqueA.tenantId, () =>
+        archive.list(boutiqueA.tenantId),
+      );
+
+      const ids = page.data.map((item) => item.id);
+      expect(ids).toContain(visible.productId);
+      expect(ids).not.toContain(actif.productId);
+      expect(ids).not.toContain(voisin.productId);
     });
   });
 

@@ -73,6 +73,15 @@ export const PERMISSIONS = {
   BILLING_MANAGE: 'billing.manage',
   SETTINGS_MANAGE: 'settings.manage',
   AUDIT_VIEW: 'audit.view',
+  /**
+   * Suppression DEFINITIVE depuis la page Archive.
+   *
+   * Distincte des permissions d'archivage (`ORDERS_DELETE`, `PRODUCTS_MANAGE`,
+   * `CUSTOMERS_MANAGE`), qui ne font que retirer des listes. Celle-ci efface,
+   * et rien ne la rattrape : elle est reservee au proprietaire de la boutique
+   * par `ADMIN_EXCLUDED`, au meme titre que la gestion de l'abonnement.
+   */
+  DATA_PURGE: 'data.purge',
 
   // --- Administration plateforme (SUPER_ADMIN uniquement) ---
   PLATFORM_TENANTS_MANAGE: 'platform.tenants.manage',
@@ -155,6 +164,7 @@ export const PERMISSION_CATALOG: readonly PermissionDescriptor[] = [
   { key: PERMISSIONS.NOTIFICATIONS_MANAGE, group: 'Administration', label: 'Gerer les notifications', description: 'Configurer canaux et preferences.', sensitive: false },
   { key: PERMISSIONS.BILLING_VIEW, group: 'Abonnement', label: 'Voir l abonnement', description: 'Consulter plan, essai et factures.', sensitive: false },
   { key: PERMISSIONS.BILLING_MANAGE, group: 'Abonnement', label: 'Gerer l abonnement', description: 'Souscrire, changer de plan et soumettre un paiement.', sensitive: true },
+  { key: PERMISSIONS.DATA_PURGE, group: 'Systeme', label: 'Supprimer definitivement', description: 'Effacer des lignes archivees. Irreversible : aucune sauvegarde applicative ne les rattrape.', sensitive: true },
   { key: PERMISSIONS.SETTINGS_MANAGE, group: 'Administration', label: 'Gerer les parametres', description: 'Modifier les parametres de la boutique.', sensitive: true },
   { key: PERMISSIONS.AUDIT_VIEW, group: 'Administration', label: 'Consulter l audit', description: 'Lire le journal des actions sensibles de la boutique.', sensitive: true },
 

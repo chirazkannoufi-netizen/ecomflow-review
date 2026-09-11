@@ -27,6 +27,7 @@ import {
   Plug,
   ScrollText,
   Settings,
+  Trash2,
   TrendingUp,
   Truck,
   UserCog,
@@ -224,6 +225,14 @@ export const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEnt
         labelKey: 'notifications',
         icon: Bell,
         permission: PERMISSIONS.NOTIFICATIONS_MANAGE,
+      },
+      {
+        // La corbeille vit dans SYSTEME, a cote du journal d'audit : on y va
+        // pour retrouver ou effacer, pas pour travailler.
+        href: '/archive',
+        labelKey: 'archive',
+        icon: Trash2,
+        permission: PERMISSIONS.ORDERS_READ,
       },
       { href: null, labelKey: 'auditLogs', icon: ScrollText, permission: PERMISSIONS.AUDIT_VIEW },
       { href: '/parametres', labelKey: 'settings', icon: Settings, permission: PERMISSIONS.SETTINGS_MANAGE },

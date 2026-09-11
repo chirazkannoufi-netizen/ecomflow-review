@@ -317,6 +317,39 @@ export class CustomersService {
     return { archived: archived.length, skipped };
   }
 
+  /**
+   * Anonymise une SELECTION de clients.
+   *
+   * Geste distinct de la suppression, et volontairement : anonymiser efface les
+   * donnees PERSONNELLES en conservant l'historique commercial, la ou supprimer
+   * efface la ligne — et se heurte a la cle etrangere des qu'un client a
+   * commande. Sur la page Archive, les deux boutons coexistent pour que chacun
+   * dise ce qu'il fait.
+   */
+  async anonymizeMany(
+    tenantId: string,
+    customerIds: readonly string[],
+    reason: string,
+  ): Promise<BulkArchiveResult> {
+    const done: string[] = [];
+    const skipped: BulkArchiveSkip[] = [];
+
+    for (const customerId of customerIds) {
+      try {
+        await this.anonymize(tenantId, customerId, reason);
+        done.push(customerId);
+      } catch (error) {
+        if (error instanceof BusinessException) {
+          skipped.push({ id: customerId, code: error.code, message: error.message });
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return { archived: done.length, skipped };
+  }
+
   async anonymize(tenantId: string, customerId: string, reason: string): Promise<void> {
     const customer = await this.prisma.customer.findFirst({
       where: { tenantId, id: customerId },

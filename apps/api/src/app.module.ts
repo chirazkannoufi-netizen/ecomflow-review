@@ -38,6 +38,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { GeoModule } from './modules/geo/geo.module';
+import { ArchiveModule } from './modules/archive/archive.module';
 import { ConfirmationModule } from './modules/confirmation/confirmation.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
@@ -106,6 +107,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     CustomersModule,
     CatalogModule,
     GeoModule,
+    ArchiveModule,
     InventoryModule,
     OrdersModule,
     ConfirmationModule,

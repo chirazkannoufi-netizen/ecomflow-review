@@ -96,7 +96,8 @@
     "processing": "Traitement",
     "followUp": "Suivi",
     "inDelivery": "En livraison",
-    "delivered": "Livré"
+    "delivered": "Livré",
+    "archive": "Archive"
   },
   "orderStatus": {
     "NEW": "Nouvelle",
@@ -1527,5 +1528,34 @@
     "communeOther": "Autre / commune non listée",
     "communeFreeHint": "Commune absente du référentiel : saisissez-la telle qu'elle doit apparaître sur le bordereau.",
     "communeBackToList": "Revenir à la liste"
+  },
+  "archive": {
+    "title": "Archive",
+    "subtitle": "Ce qui a été retiré des listes — commandes, produits, clients.",
+    "kindFilter": "Type",
+    "kinds": {
+      "ORDER": "Commande",
+      "PRODUCT": "Produit",
+      "CUSTOMER": "Client"
+    },
+    "columns": {
+      "kind": "Type",
+      "item": "Élément",
+      "archivedAt": "Archivé le"
+    },
+    "emptyTitle": "Rien d'archivé",
+    "emptyDescription": "Les éléments que vous archiverez apparaîtront ici, et resteront consultables.",
+    "selected": "{count, plural, one {# élément sélectionné} other {# éléments sélectionnés}}",
+    "purge": "Supprimer définitivement",
+    "purgeWarning": "La suppression définitive est refusée dès qu'un chiffre passé en dépend : un client qui a commandé, un produit qui a bougé en stock, une commande liée à un retour. Chaque refus est expliqué ligne par ligne.",
+    "anonymize": "{count, plural, =0 {Anonymiser les clients} one {Anonymiser # client} other {Anonymiser # clients}}",
+    "anonymizeConfirm": "Anonymiser",
+    "anonymizeReasonPlaceholder": "Demande d'effacement du client, reçue le…",
+    "confirmPurge": "{count, plural, one {Supprimer définitivement # élément ?} other {Supprimer définitivement # éléments ?}}",
+    "confirmPurgeBody": "Irréversible : aucune sauvegarde applicative ne les rattrape. Les lignes dont un chiffre passé dépend seront refusées, avec leur motif.",
+    "confirmAnonymize": "{count, plural, one {Anonymiser # client ?} other {Anonymiser # clients ?}}",
+    "confirmAnonymizeBody": "Les données personnelles sont effacées ; l'historique commercial est conservé. Irréversible.",
+    "doneTitle": "{count, plural, =0 {Aucun élément traité} one {# élément traité} other {# éléments traités}}",
+    "doneAll": "Toute la sélection a été traitée."
   }
 }

@@ -111,7 +111,15 @@ const PREPARER_PERMISSIONS: readonly Permission[] = [
  * ADMIN = toutes les permissions tenant sauf la gestion de l abonnement et la
  * suppression de la boutique. OWNER = toutes les permissions tenant.
  */
-const ADMIN_EXCLUDED: readonly Permission[] = [P.BILLING_MANAGE];
+/**
+ * Ce qu'un ADMIN n'a PAS, et que seul le proprietaire possede.
+ *
+ * `DATA_PURGE` rejoint la facturation pour la meme raison : ce sont les deux
+ * gestes qu'on ne peut pas defaire. Un administrateur pilote toute
+ * l'exploitation — il archive, il annule, il corrige — mais effacer
+ * definitivement des lignes engage la boutique au-dela de l'operationnel.
+ */
+const ADMIN_EXCLUDED: readonly Permission[] = [P.BILLING_MANAGE, P.DATA_PURGE];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRole, readonly Permission[]> = {
   SUPER_ADMIN: PLATFORM_PERMISSIONS,

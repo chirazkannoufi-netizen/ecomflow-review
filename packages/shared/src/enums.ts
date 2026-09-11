@@ -573,6 +573,8 @@ export const AUDIT_ACTIONS = [
   'TRIAL_ABUSE_REVIEWED',
   'DATA_RETENTION_APPLIED',
   'CUSTOMER_DATA_ERASED',
+  /** Suppression definitive depuis la corbeille. Voir `DATA_PURGE`. */
+  'DATA_PURGED',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
