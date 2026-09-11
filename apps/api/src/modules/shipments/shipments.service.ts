@@ -28,6 +28,8 @@ import {
   ACTIVE_SHIPMENT_STATUSES,
   ERROR_CODES,
   getWilayaByCode,
+  type BulkArchiveResult,
+  type BulkArchiveSkip,
   type ShipmentStatus,
 } from '@ecomflow/shared';
 import { createHash } from 'node:crypto';
@@ -696,6 +698,54 @@ export class ShipmentsService {
     if (updated.count === 0) {
       throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Compte transporteur introuvable.');
     }
+  }
+
+  /**
+   * Expedie une SELECTION de commandes pretes.
+   *
+   * SEQUENTIEL, ET C'EST VOLONTAIRE
+   *   Chaque ligne declenche un appel au transporteur. Les lancer en parallele
+   *   ferait tomber le quota de l'API distante au premier lot un peu large, et
+   *   le transporteur ne distingue pas un pic legitime d'un emballement : on
+   *   perdrait le droit d'expedier pour la journee. Vingt colis pris un par un
+   *   coutent quelques secondes ; un blocage de compte coute une journee.
+   *
+   * L'IDEMPOTENCE FAIT LE RESTE
+   *   `createShipment` derive sa cle de (commande, compte transporteur) et
+   *   retourne le colis existant si l'appel est rejoue. Un lot relance apres
+   *   une coupure ne cree donc pas de second colis — il retrouve ceux qui sont
+   *   deja partis et poursuit avec les autres.
+   */
+  async createShipmentsBulk(input: {
+    tenantId: string;
+    orderIds: readonly string[];
+    carrierAccountId?: string;
+    membershipId: string;
+    permissions: ReadonlySet<string>;
+  }): Promise<BulkArchiveResult> {
+    const shipped: string[] = [];
+    const skipped: BulkArchiveSkip[] = [];
+
+    for (const orderId of input.orderIds) {
+      try {
+        await this.createShipment({
+          tenantId: input.tenantId,
+          orderId,
+          carrierAccountId: input.carrierAccountId,
+          membershipId: input.membershipId,
+          permissions: input.permissions,
+        });
+        shipped.push(orderId);
+      } catch (error) {
+        if (error instanceof BusinessException) {
+          skipped.push({ id: orderId, code: error.code, message: error.message });
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return { archived: shipped.length, skipped };
   }
 
   /** Comptes transporteur configures pour la boutique. */

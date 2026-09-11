@@ -51,7 +51,7 @@ import {
   ListOrdersQueryDto,
   ResolveDuplicateDto,
 } from './dto/orders.dto';
-import { BulkArchiveDto } from '../../common/dto/query.dto';
+import { BulkArchiveDto, PreparationBulkDto } from '../../common/dto/query.dto';
 
 @ApiTags('Commandes')
 @ApiBearerAuth()
@@ -228,6 +228,66 @@ export class OrdersController {
     @CurrentMembershipId() membershipId: string,
   ): Promise<void> {
     await this.orders.archive(tenantId, id, membershipId);
+  }
+
+  @Post(':id/mark-ready')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.PREPARATION_MANAGE)
+  @RequiresOperationalSubscription()
+  @ApiOperation({
+    summary: 'Declarer un colis pret a expedier',
+    description:
+      'Enregistre les lignes comme preparees, PUIS bascule le statut. La ' +
+      'transition est gardee par `REQUIRE_PREPARATION_COMPLETED`, qui exige ' +
+      '`preparedQuantity` sur chaque ligne — un champ qu aucun code n ecrivait, ' +
+      'ce qui rendait le bouton « Colis pret » systematiquement refuse. ' +
+      'Declarer un colis pret EST l affirmation que les lignes y sont : elle ' +
+      'est desormais enregistree, et la garde la verifie au lieu de la ' +
+      'supposer. Une commande encore CONFIRMEE passe d abord par la ' +
+      'preparation, sans raccourci.',
+  })
+  async markReady(
+    @TenantId() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Ctx() context: RequestContext,
+  ) {
+    await this.orders.markPreparationReady(
+      tenantId,
+      id,
+      context.membershipId as string,
+      context.permissions,
+    );
+    return { acknowledged: true as const };
+  }
+
+  @Post('bulk-preparation')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.PREPARATION_MANAGE)
+  @RequiresOperationalSubscription()
+  @ApiOperation({
+    summary: 'Action groupee sur une selection de l ecran de preparation',
+    description:
+      'Chaque ligne passe par le MOTEUR DE WORKFLOW, comme un clic unitaire : ' +
+      'le lot n est pas un chemin derobe vers un etat qu une action unitaire ' +
+      'n aurait pas permis. `MARK_READY` enchaine les deux transitions legales ' +
+      'quand la commande part de CONFIRMEE, au lieu de sauter l etape. ' +
+      '`CANCEL_AND_ARCHIVE` annule d abord — l archivage est refuse tant que le ' +
+      'stock est reserve. Le resultat detaille ce qui n est pas passe, et ' +
+      'pourquoi.',
+  })
+  async bulkPreparation(
+    @TenantId() tenantId: string,
+    @Body() dto: PreparationBulkDto,
+    @Ctx() context: RequestContext,
+  ) {
+    return this.orders.bulkPreparationAction({
+      tenantId,
+      action: dto.action,
+      orderIds: dto.ids,
+      membershipId: context.membershipId as string,
+      permissions: context.permissions,
+      reason: dto.reason,
+    });
   }
 
   @Post('bulk-archive')

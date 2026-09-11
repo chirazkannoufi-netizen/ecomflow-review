@@ -594,7 +594,31 @@
       "ship": "Expédier"
     },
     "emptyTitle": "Rien à traiter",
-    "empty": "Cette colonne est vide."
+    "empty": "Cette colonne est vide.",
+    "bulk": {
+      "selected": "{count, plural, one {# sélectionnée} other {# sélectionnées}}",
+      "reasonPlaceholder": "Client injoignable au dépôt, article manquant…",
+      "doneTitle": "{count, plural, one {# commande traitée} other {# commandes traitées}}",
+      "doneAll": "Toute la sélection a été traitée.",
+      "actions": {
+        "RETURN_TO_CONFIRMATION": "Retour",
+        "CANCEL_AND_ARCHIVE": "Annuler et archiver",
+        "MARK_READY": "Colis prêt",
+        "SHIP": "Expédier"
+      },
+      "confirm": {
+        "RETURN_TO_CONFIRMATION": "{count, plural, one {Renvoyer # commande en confirmation ?} other {Renvoyer # commandes en confirmation ?}}",
+        "CANCEL_AND_ARCHIVE": "{count, plural, one {Annuler et archiver # commande ?} other {Annuler et archiver # commandes ?}}",
+        "MARK_READY": "{count, plural, one {Déclarer # colis prêt ?} other {Déclarer # colis prêts ?}}",
+        "SHIP": "{count, plural, one {Expédier # commande ?} other {Expédier # commandes ?}}"
+      },
+      "confirmBody": {
+        "RETURN_TO_CONFIRMATION": "La commande repart en file d'appel et son stock réservé est libéré.",
+        "CANCEL_AND_ARCHIVE": "Deux gestes : la commande est d'abord annulée — ce qui libère son stock — puis archivée. L'annulation compte dans les indicateurs.",
+        "MARK_READY": "Les commandes passent par « en préparation » puis « prête à expédier ». L'historique conserve les deux étapes.",
+        "SHIP": "Un colis est créé chez le transporteur pour chaque commande, une par une."
+      }
+    }
   },
   "shipments": {
     "title": "Expéditions",

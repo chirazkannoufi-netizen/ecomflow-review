@@ -1936,6 +1936,131 @@ synchronisation Google Sheets existante, et le menu ne le promet pas.
 
 ---
 
+## D-056 — Retour au centre de confirmation : une transition qui manquait
+
+**Date** : 11/09/2026 · **Statut** : appliquée
+
+**Contexte** — L'écran de préparation devait offrir une action groupée
+« Retour », renvoyant une commande confirmée au centre de confirmation « comme
+une commande neuve ».
+
+**Problème** — Cette transition **n'existait pas**. Depuis `CONFIRMED`, la
+machine à états ne connaissait que `IN_PREPARATION` et `CANCELLED` ; aucun
+chemin ne ramenait vers un statut de la file (`TO_CONFIRM`, `NO_ANSWER`,
+`CALL_BACK`, `POSTPONED`).
+
+Le seul geste disponible au préparateur qui découvre un problème — client qui a
+changé d'avis, adresse fausse, mauvais article — était donc **annuler**. Ce qui
+comptait la commande comme perdue dans tous les indicateurs et dégradait le
+score de fiabilité du client, alors que personne n'avait renoncé : il fallait
+seulement rappeler.
+
+**Décision** — `CONFIRMED → TO_CONFIRM`, avec `requiresReason: true`.
+
+Le **stock est libéré** automatiquement : `CONFIRMED` figure dans
+`STOCK_RESERVED_STATUSES`, `TO_CONFIRM` non, et le moteur applique déjà
+`wasReserved && !willBeReserved → releaseReservation`. Aucune garde
+supplémentaire n'a été nécessaire — c'est le signe que la table des statuts
+portait déjà la bonne information, et qu'il ne manquait que l'arête.
+
+Le motif est **obligatoire** : un retour en file sans motif oblige l'agent
+suivant à rappeler le client pour découvrir ce que le préparateur savait déjà.
+
+**Impact** — Quatre tests d'intégration figent le comportement : libération du
+stock, motif exigé, `cancelledAt` qui reste nul, et re-confirmation possible
+avec re-réservation. Le dernier vérifie que le cycle est complet et non une
+impasse.
+
+---
+
+## D-057 — « Colis prêt » : le geste manquait, pas la règle
+
+**Date** : 11/09/2026 · **Statut** : appliquée
+
+**Contexte** — L'action groupée « Colis prêt » devait faire passer une sélection
+de « À préparer » directement à « Prêtes à expédier ». Question posée avant
+de coder ; réponse retenue : **enchaîner les deux transitions légales** plutôt
+que d'ouvrir un raccourci.
+
+**Ce que l'écriture des tests a révélé** — Le problème était plus profond que le
+saut d'étape. La transition `IN_PREPARATION → READY_TO_SHIP` est gardée par
+`REQUIRE_PREPARATION_COMPLETED`, qui exige `preparedQuantity` sur chaque ligne.
+
+**Aucun code n'écrivait jamais ce champ.** Il était lu par la garde, affiché sur
+la fiche commande, et renseigné nulle part. Le bouton individuel « Colis prêt »
+de l'écran de préparation échouait donc **systématiquement**, avec un message —
+« toutes les lignes doivent être préparées » — décrivant une action que
+l'interface n'offrait pas. La colonne du milieu était un cul-de-sac, et le
+défaut était antérieur à cette demande.
+
+**Décision** — `OrdersService.markPreparationReady` fournit le geste manquant :
+
+1. une commande encore `CONFIRMED` passe d'abord par `IN_PREPARATION` — la
+   machine à états ne connaît pas de raccourci, et c'est délibéré : un colis
+   « prêt » qui n'est jamais passé « en préparation » viderait de son sens la
+   colonne du milieu et fausserait tout indicateur de durée ;
+2. les lignes sans quantité préparée reçoivent la quantité commandée ;
+3. la transition est franchie, et la garde **vérifie** ce qui vient d'être
+   enregistré au lieu de le supposer.
+
+**Pourquoi remplir le champ plutôt que retirer la garde** — La garde dit quelque
+chose de vrai : on ne ferme pas un colis sans avoir vérifié son contenu.
+Déclarer un colis prêt **est** l'affirmation que toutes les lignes y sont ; elle
+est désormais écrite. Les lignes déjà renseignées ne sont pas écrasées : le jour
+où un écran permettra une quantité partielle, cette saisie fera foi et la garde
+refusera le colis incomplet — ce qui est exactement son rôle.
+
+**Impact** — Le bouton individuel et l'action groupée empruntent **le même
+chemin**. Le lot n'est pas un raccourci vers un état qu'un clic unitaire
+n'aurait pas permis : c'est la règle qui rendait l'écriture d'un `updateMany`
+sur le statut tentante, et fausse.
+
+---
+
+## D-058 — Les actions groupées passent par le moteur, et rendent compte ligne par ligne
+
+**Date** : 11/09/2026 · **Statut** : appliquée
+
+**Contexte** — Quatre actions groupées demandées sur l'écran de préparation.
+Trois se heurtaient à des règles existantes, découvertes en vérifiant avant de
+coder.
+
+| Action demandée | Conflit constaté | Résolution retenue |
+|---|---|---|
+| Retour | `CONFIRMED → TO_CONFIRM` n'existait pas | transition ajoutée (D-056) |
+| Colis prêt | saut d'étape interdit, **et** garde jamais satisfiable | enchaînement + geste manquant (D-057) |
+| Archiver | refusé tant que le stock est réservé — donc **toujours**, sur une commande confirmée | annule d'abord, et **le libellé le dit** |
+| Expédier | aucun conflit | création de colis, séquentielle |
+
+**Décision — le libellé dit ce que le bouton fait.** « Archiver » est devenu
+**« Annuler et archiver »**. L'archivage seul étant refusé tant que le stock est
+réservé, l'action doit annuler d'abord ; un bouton nommé « Archiver » qui annule
+en silence des commandes confirmées ferait plus que ce que son libellé promet —
+même principe que la distinction archiver/anonymiser sur les clients (D-051 du
+même chantier). L'ordre compte : archiver puis annuler laisserait une commande
+archivée dont le stock reste bloqué si la seconde étape échoue.
+
+**Décision — chaque ligne passe par le moteur de workflow.** Il aurait été plus
+court d'écrire un `updateMany` sur le statut. Ce raccourci aurait sauté tout ce
+qui pend aux transitions : réservation et libération du stock, historique
+append-only, événements sortants, gardes d'abonnement. **Le lot ne doit pas être
+un chemin dérobé vers un état qu'un clic unitaire n'aurait pas permis.**
+
+**Décision — le résultat est détaillé, jamais global.** Une sélection
+partiellement traitée est le cas normal : une commande a pu changer d'état entre
+l'affichage et le clic. On applique ce qui passe, on rend compte du reste avec
+son motif, ligne par ligne.
+
+**L'expédition en lot est séquentielle** — chaque ligne appelle le transporteur.
+Les lancer en parallèle ferait tomber le quota de l'API distante au premier lot
+un peu large, et le transporteur ne distingue pas un pic légitime d'un
+emballement : on perdrait le droit d'expédier pour la journée. Vingt colis pris
+un par un coûtent quelques secondes ; un blocage de compte coûte une journée.
+L'idempotence de `createShipment` fait le reste : un lot relancé après une
+coupure retrouve les colis déjà partis au lieu d'en créer de seconds.
+
+---
+
 ---
 
 *Ce journal est mis à jour à chaque décision structurante. Les entrées ne sont

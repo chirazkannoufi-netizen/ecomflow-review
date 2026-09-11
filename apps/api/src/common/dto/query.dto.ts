@@ -15,6 +15,7 @@ import {
   IsDate,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -22,7 +23,12 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@ecomflow/shared';
+import {
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  PREPARATION_BULK_ACTIONS,
+  type PreparationBulkAction,
+} from '@ecomflow/shared';
 import { asPrimitiveString } from '../utils/text';
 
 export class PaginationQueryDto {
@@ -147,4 +153,28 @@ export class BulkArchiveDto {
   })
   @IsUUID('7', { each: true })
   ids!: string[];
+}
+
+/** Normalise une saisie texte avant validation. */
+const trimValue = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? value.trim() : value;
+
+/**
+ * Selection + action, pour les lots de l'ecran de preparation.
+ *
+ * `reason` est OBLIGATOIRE : deux des trois actions provoquent une transition
+ * qui l'exige (`requiresReason`), et la demander au niveau du lot evite qu'un
+ * agent decouvre le refus apres avoir coche quinze lignes.
+ */
+export class PreparationBulkDto extends BulkArchiveDto {
+  @ApiProperty({ enum: PREPARATION_BULK_ACTIONS })
+  @IsIn(PREPARATION_BULK_ACTIONS)
+  action!: PreparationBulkAction;
+
+  @ApiProperty({ description: 'Motif, consigne dans l historique de chaque commande.' })
+  @Transform(trimValue)
+  @IsString()
+  @IsNotEmpty({ message: 'Un motif est obligatoire pour une action groupee.' })
+  @MaxLength(500)
+  reason!: string;
 }

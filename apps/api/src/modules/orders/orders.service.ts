@@ -31,6 +31,8 @@ import {
   type BulkArchiveResult,
   type BulkArchiveSkip,
   type DuplicateCandidateInput,
+  type OrderStatus,
+  type PreparationBulkAction,
   type OutOfStockBehavior,
   type Paginated,
 } from '@ecomflow/shared';
@@ -592,6 +594,194 @@ export class OrdersService {
         available: shortage.available,
       })),
     );
+  }
+
+  /**
+   * Declare un colis PRET : enregistre les lignes comme preparees, puis bascule
+   * le statut.
+   *
+   * LE DEFAUT QUE CETTE METHODE CORRIGE
+   *   La transition `IN_PREPARATION -> READY_TO_SHIP` est gardee par
+   *   `REQUIRE_PREPARATION_COMPLETED`, qui exige `preparedQuantity` sur chaque
+   *   ligne. Or AUCUN code n'ecrivait jamais ce champ : il etait lu par la
+   *   garde, affiche sur la fiche commande, et renseigne nulle part.
+   *
+   *   Consequence : le bouton « Colis pret » de l'ecran de preparation echouait
+   *   systematiquement, avec un message — « toutes les lignes doivent etre
+   *   preparees » — qui decrivait une action que l'interface n'offrait pas. La
+   *   colonne du milieu etait un cul-de-sac.
+   *
+   * POURQUOI REMPLIR `preparedQuantity` PLUTOT QUE RETIRER LA GARDE
+   *   La garde dit quelque chose de vrai : on ne ferme pas un colis sans avoir
+   *   verifie son contenu. C'est le GESTE qui manquait, pas la regle.
+   *   Declarer un colis pret EST l'affirmation que toutes les lignes y sont ;
+   *   la methode l'enregistre donc explicitement, et la garde la verifie
+   *   ensuite au lieu de la supposer.
+   *
+   *   Les lignes deja renseignees ne sont PAS ecrasees : le jour ou un ecran
+   *   permettra de saisir une quantite partielle, cette saisie fera foi, et la
+   *   garde refusera le colis incomplet — ce qui est exactement son role.
+   */
+  async markPreparationReady(
+    tenantId: string,
+    orderId: string,
+    membershipId: string,
+    permissions: ReadonlySet<string>,
+  ): Promise<void> {
+    const order = await this.prisma.order.findFirst({
+      where: { tenantId, id: orderId },
+      select: { status: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException(ERROR_CODES.ORDER_NOT_FOUND, 'Commande introuvable.');
+    }
+
+    const move = (to: OrderStatus) =>
+      this.workflow.transition({
+        tenantId,
+        orderId,
+        to,
+        actorKind: 'USER',
+        membershipId,
+        permissions,
+        reason: null,
+        note: null,
+        source: 'ui',
+      });
+
+    // Une commande encore CONFIRMEE passe d'abord par la preparation : la
+    // machine a etats ne connait pas de raccourci, et c'est deliberé — un colis
+    // « pret » qui n'est jamais passe « en preparation » viderait de son sens
+    // la colonne du milieu et fausserait tout indicateur de duree.
+    if (order.status === 'CONFIRMED') await move('IN_PREPARATION');
+
+    // `updateMany` ne sait pas copier une colonne dans une autre : on lit les
+    // lignes a completer, puis on les ecrit. Le volume est celui d'une
+    // commande, pas d'un catalogue.
+    const pending = await this.prisma.orderItem.findMany({
+      where: { tenantId, orderId, preparedQuantity: null },
+      select: { id: true, quantity: true },
+    });
+
+    for (const item of pending) {
+      await this.prisma.orderItem.update({
+        where: { id: item.id },
+        data: { preparedQuantity: item.quantity },
+      });
+    }
+
+    await move('READY_TO_SHIP');
+  }
+
+  /**
+   * Actions groupees de l'ecran de preparation.
+   *
+   * POURQUOI CES ACTIONS PASSENT PAR LE MOTEUR DE WORKFLOW, LIGNE PAR LIGNE
+   *   Il aurait ete plus court d'ecrire un `updateMany` sur le statut. Ce
+   *   raccourci aurait saute TOUT ce qui pend aux transitions : la reservation
+   *   et la liberation du stock, l'historique append-only, les evenements
+   *   sortants, les gardes d'abonnement. Le lot ne doit pas etre un chemin
+   *   derobe vers un etat qu'un clic unitaire n'aurait pas permis.
+   *
+   * CHAQUE LIGNE EST INDEPENDANTE
+   *   Une selection partiellement traitee est le cas NORMAL : une commande a pu
+   *   changer d'etat entre l'affichage et le clic. On applique ce qui passe, on
+   *   rend compte du reste avec son motif.
+   */
+  async bulkPreparationAction(input: {
+    tenantId: string;
+    action: PreparationBulkAction;
+    orderIds: readonly string[];
+    membershipId: string;
+    permissions: ReadonlySet<string>;
+    reason: string;
+  }): Promise<BulkArchiveResult> {
+    const done: string[] = [];
+    const skipped: BulkArchiveSkip[] = [];
+
+    for (const orderId of input.orderIds) {
+      try {
+        await this.applyPreparationAction(input, orderId);
+        done.push(orderId);
+      } catch (error) {
+        if (error instanceof BusinessException) {
+          skipped.push({ id: orderId, code: error.code, message: error.message });
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return { archived: done.length, skipped };
+  }
+
+  private async applyPreparationAction(
+    input: {
+      tenantId: string;
+      action: PreparationBulkAction;
+      membershipId: string;
+      permissions: ReadonlySet<string>;
+      reason: string;
+    },
+    orderId: string,
+  ): Promise<void> {
+    const order = await this.prisma.order.findFirst({
+      where: { tenantId: input.tenantId, id: orderId },
+      select: { status: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException(ERROR_CODES.ORDER_NOT_FOUND, 'Commande introuvable.');
+    }
+
+    const move = (to: OrderStatus) =>
+      this.workflow.transition({
+        tenantId: input.tenantId,
+        orderId,
+        to,
+        actorKind: 'USER',
+        membershipId: input.membershipId,
+        permissions: input.permissions,
+        reason: input.reason,
+        note: null,
+        source: 'ui-bulk',
+      });
+
+    switch (input.action) {
+      case 'RETURN_TO_CONFIRMATION':
+        await move('TO_CONFIRM');
+        return;
+
+      case 'CANCEL_AND_ARCHIVE':
+        // DEUX GESTES, ANNONCES COMME TELS DANS LE LIBELLE DU BOUTON.
+        //   L'archivage exige que le stock ne soit plus reserve, ce qu'une
+        //   commande confirmee ne respecte jamais. Annuler d'abord libere la
+        //   marchandise ; archiver ensuite retire la ligne des listes.
+        //
+        //   L'ordre compte : archiver puis annuler laisserait une commande
+        //   archivee dont le stock reste bloque si la seconde etape echoue.
+        await move('CANCELLED');
+        await this.archive(input.tenantId, orderId, input.membershipId);
+        return;
+
+      case 'MARK_READY':
+        // EXACTEMENT le meme chemin que le bouton unitaire : enchainement des
+        // transitions legales, et enregistrement des lignes preparees. Le lot
+        // n'est pas un raccourci vers un etat qu'un clic n'aurait pas permis.
+        await this.markPreparationReady(
+          input.tenantId,
+          orderId,
+          input.membershipId,
+          input.permissions,
+        );
+        return;
+
+      default: {
+        const exhaustive: never = input.action;
+        throw new ValidationException(`Action inconnue : ${String(exhaustive)}`);
+      }
+    }
   }
 
   /**

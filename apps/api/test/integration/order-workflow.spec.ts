@@ -15,6 +15,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { PERMISSIONS, type OrderStatus } from '@ecomflow/shared';
 import { OrderWorkflowService } from '../../src/modules/orders/workflow/order-workflow.service';
+import { OrdersService } from '../../src/modules/orders/orders.service';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { RequestContextStore } from '../../src/infra/context/request-context';
 import {
@@ -35,12 +36,14 @@ describe('workflow des commandes', () => {
   let prisma: PrismaClient;
   let context: TestContext;
   let workflow: OrderWorkflowService;
+  let orders: OrdersService;
   let inventory: InventoryService;
 
   beforeAll(async () => {
     prisma = rawPrisma();
     context = await buildTestModule();
     workflow = context.get(OrderWorkflowService);
+    orders = context.get(OrdersService);
     inventory = context.get(InventoryService);
   });
 
@@ -402,6 +405,133 @@ describe('workflow des commandes', () => {
       await expect(move(tenant, order.orderId, 'CONFIRMED')).rejects.toMatchObject({
         response: { code: 'SUBSCRIPTION_REQUIRED' },
       });
+    });
+  });
+
+  // ==========================================================================
+  describe('retour au centre de confirmation', () => {
+    it('libere le stock reserve en repassant a TO_CONFIRM', async () => {
+      // C'est la raison d'etre de cette transition. Sans liberation, la
+      // marchandise resterait bloquee sur une commande qui n'est plus promise
+      // a personne, et le defaut ne se verrait qu'au moment ou une AUTRE
+      // commande serait refusee faute de stock.
+      const { tenant, product, order } = await scenario({ stock: 5, quantity: 2 });
+
+      await move(tenant, order.orderId, 'CONFIRMED');
+      expect(await stockOf(product.variantId)).toMatchObject({ reserved: 2, available: 3 });
+
+      await move(tenant, order.orderId, 'TO_CONFIRM', {
+        reason: 'Le client veut changer de taille',
+      });
+
+      expect(await stockOf(product.variantId)).toMatchObject({ reserved: 0, available: 5 });
+    });
+
+    it('exige un motif', async () => {
+      // Un retour en file sans motif oblige l'agent suivant a rappeler le
+      // client pour decouvrir ce que le preparateur savait deja.
+      const { tenant, order } = await scenario();
+      await move(tenant, order.orderId, 'CONFIRMED');
+
+      await expect(move(tenant, order.orderId, 'TO_CONFIRM')).rejects.toThrow();
+    });
+
+    it('n annule pas la commande', async () => {
+      // La distinction est tout l'interet : une commande renvoyee en file n'est
+      // pas une commande perdue, et ne doit peser ni sur les indicateurs
+      // d'annulation ni sur le score de fiabilite du client.
+      const { tenant, order } = await scenario();
+      await move(tenant, order.orderId, 'CONFIRMED');
+      await move(tenant, order.orderId, 'TO_CONFIRM', { reason: 'Adresse a verifier' });
+
+      const row = await prisma.order.findUniqueOrThrow({
+        where: { id: order.orderId },
+        select: { status: true, cancelledAt: true },
+      });
+
+      expect(row.status).toBe('TO_CONFIRM');
+      expect(row.cancelledAt).toBeNull();
+    });
+
+    it('laisse la commande a nouveau confirmable', async () => {
+      const { tenant, product, order } = await scenario({ stock: 5, quantity: 2 });
+
+      await move(tenant, order.orderId, 'CONFIRMED');
+      await move(tenant, order.orderId, 'TO_CONFIRM', { reason: 'Rappeler demain' });
+      await move(tenant, order.orderId, 'CONFIRMED');
+
+      // Le stock est re-reserve : le cycle est complet, pas une impasse.
+      expect(await stockOf(product.variantId)).toMatchObject({ reserved: 2, available: 3 });
+    });
+  });
+
+  // ==========================================================================
+  describe('enchainement « colis pret » depuis une commande confirmee', () => {
+    it('refuse le saut direct de CONFIRMED a READY_TO_SHIP', async () => {
+      // La garantie qui rend l'enchainement necessaire : si ce test tombe, le
+      // lot pourrait se contenter d'un seul appel, et la colonne du milieu
+      // perdrait son sens.
+      const { tenant, order } = await scenario();
+      await move(tenant, order.orderId, 'CONFIRMED');
+
+      await expect(move(tenant, order.orderId, 'READY_TO_SHIP')).rejects.toThrow();
+    });
+
+    it('declare le colis pret en enregistrant les lignes preparees', async () => {
+      // Le correctif : `markPreparationReady` fournit le geste qui manquait.
+      // Il remplit `preparedQuantity`, puis franchit la garde — au lieu de la
+      // contourner.
+      const { tenant, order } = await scenario({ quantity: 3 });
+      await move(tenant, order.orderId, 'CONFIRMED');
+
+      await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        orders.markPreparationReady(
+          tenant.tenantId,
+          order.orderId,
+          tenant.ownerMembershipId,
+          ALL_TENANT_PERMISSIONS,
+        ),
+      );
+
+      const row = await prisma.order.findUniqueOrThrow({
+        where: { id: order.orderId },
+        select: { status: true },
+      });
+      expect(row.status).toBe('READY_TO_SHIP');
+
+      // Les lignes portent la quantite reellement preparee, egale a la
+      // quantite commandee : c'est ce que « colis pret » affirme.
+      const items = await prisma.orderItem.findMany({
+        where: { orderId: order.orderId },
+        select: { quantity: true, preparedQuantity: true },
+      });
+      for (const item of items) {
+        expect(item.preparedQuantity).toBe(item.quantity);
+      }
+
+      // Et l'etape intermediaire est bien tracee : le colis n'a pas saute
+      // « en preparation ».
+      const history = await prisma.orderStatusHistory.findMany({
+        where: { orderId: order.orderId },
+        select: { newStatus: true },
+      });
+      expect(history.map((entry) => entry.newStatus)).toEqual(
+        expect.arrayContaining(['IN_PREPARATION', 'READY_TO_SHIP']),
+      );
+    });
+
+    it('refuse aussi le passage a READY_TO_SHIP sans lignes preparees', async () => {
+      // La SECONDE garde, decouverte en ecrivant ces tests : la transition
+      // exige `preparedQuantity` sur chaque ligne. Aucun code ne l'ecrivait,
+      // ce qui rendait le bouton « Colis pret » systematiquement refuse — un
+      // message decrivant une action que l'interface n'offrait pas.
+      //
+      // Ce test fige la garde : c'est le GESTE qui manquait, pas la regle.
+      const { tenant, order } = await scenario();
+      await move(tenant, order.orderId, 'CONFIRMED');
+      await move(tenant, order.orderId, 'IN_PREPARATION');
+
+      await expect(move(tenant, order.orderId, 'READY_TO_SHIP')).rejects.toThrow();
     });
   });
 

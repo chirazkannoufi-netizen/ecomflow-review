@@ -33,6 +33,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { BulkArchiveDto } from '../../common/dto/query.dto';
 import {
   CARRIER_ACCOUNT_KINDS,
   PERMISSIONS,
@@ -229,6 +230,16 @@ export class ListShipmentsQueryDto extends PaginationQueryDto {
   search?: string;
 }
 
+export class BulkShipDto extends BulkArchiveDto {
+  @ApiPropertyOptional({
+    description:
+      'Compte transporteur a utiliser. A defaut, celui par defaut de la boutique.',
+  })
+  @IsOptional()
+  @IsUUID('7')
+  carrierAccountId?: string;
+}
+
 export class SetCarrierCoverageDto {
   @ApiProperty({ minimum: 1, maximum: WILAYA_COUNT, description: 'Code wilaya, 1 a 58.' })
   @Type(() => Number)
@@ -418,6 +429,32 @@ export class ShipmentsController {
       weightGrams: dto.weightGrams ?? null,
       notes: dto.notes ?? null,
       allowOpening: dto.allowOpening,
+    });
+  }
+
+  @Post('orders/bulk-ship')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.SHIPMENTS_CREATE)
+  @RequiresOperationalSubscription()
+  @ApiOperation({
+    summary: 'Expedier une selection de commandes pretes',
+    description:
+      'Les colis sont crees UN PAR UN chez le transporteur : les lancer en ' +
+      'parallele ferait tomber son quota, et un compte bloque coute une ' +
+      'journee la ou vingt appels sequentiels coutent quelques secondes. ' +
+      'L appel est idempotent, un lot relance ne duplique aucun colis.',
+  })
+  async bulkShip(
+    @TenantId() tenantId: string,
+    @Body() dto: BulkShipDto,
+    @Ctx() context: RequestContext,
+  ) {
+    return this.shipments.createShipmentsBulk({
+      tenantId,
+      orderIds: dto.ids,
+      carrierAccountId: dto.carrierAccountId,
+      membershipId: context.membershipId as string,
+      permissions: context.permissions,
     });
   }
 

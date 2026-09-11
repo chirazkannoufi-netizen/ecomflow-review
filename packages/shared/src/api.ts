@@ -104,3 +104,19 @@ export interface BulkArchiveResult {
   readonly archived: number;
   readonly skipped: readonly BulkArchiveSkip[];
 }
+
+/**
+ * Actions groupees disponibles sur l'ecran de preparation.
+ *
+ * `CANCEL_AND_ARCHIVE` porte les DEUX gestes dans son nom, et le bouton
+ * l'annonce de meme : l'archivage seul serait refuse tant que le stock est
+ * reserve, et un bouton « Archiver » qui annule en silence des commandes
+ * confirmees ferait plus que ce que son libelle promet.
+ */
+export const PREPARATION_BULK_ACTIONS = [
+  'RETURN_TO_CONFIRMATION',
+  'CANCEL_AND_ARCHIVE',
+  'MARK_READY',
+] as const;
+
+export type PreparationBulkAction = (typeof PREPARATION_BULK_ACTIONS)[number];

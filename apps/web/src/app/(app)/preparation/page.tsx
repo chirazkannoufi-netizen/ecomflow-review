@@ -17,8 +17,15 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { getWilayaByCode } from '@ecomflow/shared';
+import { getWilayaByCode, type PreparationBulkAction } from '@ecomflow/shared';
 import { api, ApiError } from '@/lib/api-client';
+import {
+  RowCheckbox,
+  SelectAllCheckbox,
+  useRowSelection,
+  type BulkArchiveResult,
+  type RowSelection,
+} from '@/components/bulk-selection';
 import { PageHeader } from '@/components/app-shell';
 import { GroupTabs } from '@/components/group-tabs';
 import {
@@ -27,9 +34,11 @@ import {
   Button,
   Card,
   EmptyState,
+  ConfirmDialog,
   ErrorState,
   LoadingState,
   StatusBadge,
+  Textarea,
   useRelativeTime,
 } from '@/components/ui';
 
@@ -80,7 +89,14 @@ export default function PreparationPage() {
 
   const transitionMutation = useMutation({
     mutationFn: (payload: { orderId: string; status: string }) =>
-      api.post(`/orders/${payload.orderId}/status`, { status: payload.status }),
+      // « Colis pret » ne peut pas passer par la route generique de statut : la
+      // transition exige que les lignes soient enregistrees comme preparees,
+      // ce que seule cette route fait. Y aller directement produisait un refus
+      // systematique, avec un message decrivant une action que l'interface
+      // n'offrait pas.
+      payload.status === 'READY_TO_SHIP'
+        ? api.post(`/orders/${payload.orderId}/mark-ready`, {})
+        : api.post(`/orders/${payload.orderId}/status`, { status: payload.status }),
     onSuccess: () => {
       setFeedback(null);
       void queryClient.invalidateQueries({ queryKey: ['preparation'] });
@@ -121,6 +137,171 @@ export default function PreparationPage() {
   );
 }
 
+/**
+ * Actions groupees d'une colonne de preparation.
+ *
+ * CHAQUE COLONNE N'OFFRE QUE CE QUE SON STATUT PERMET
+ *   « A preparer » peut renvoyer en confirmation, annuler-et-archiver, ou
+ *   declarer le colis pret. « Pretes a expedier » ne peut qu'expedier. La
+ *   colonne du milieu n'a pas d'action groupee propre : le geste qui s'y trouve
+ *   — declarer le colis pret — est deja couvert par « Colis pret » de la
+ *   premiere colonne, qui enchaine les deux transitions.
+ *
+ * LE MOTIF EST DEMANDE AVANT, PAS APRES
+ *   Deux des trois actions exigent un motif cote serveur. Le reclamer dans la
+ *   boite de confirmation evite que l'agent decouvre le refus apres avoir coche
+ *   quinze lignes.
+ */
+function ColumnBulkBar({
+  columnKey,
+  selection,
+  onDone,
+}: {
+  columnKey: 'toPrepare' | 'inProgress' | 'readyToShip';
+  selection: RowSelection;
+  onDone: () => void;
+}) {
+  const t = useTranslations('preparation.bulk');
+  const tCommon = useTranslations('common');
+  const queryClient = useQueryClient();
+
+  const [pendingAction, setPendingAction] = useState<PreparationBulkAction | 'SHIP' | null>(null);
+  const [reason, setReason] = useState('');
+  const [result, setResult] = useState<BulkArchiveResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: (action: PreparationBulkAction | 'SHIP') => {
+      const ids = [...selection.selected];
+      if (action === 'SHIP') {
+        return api.post<BulkArchiveResult>('/orders/bulk-ship', { ids });
+      }
+      return api.post<BulkArchiveResult>('/orders/bulk-preparation', {
+        ids,
+        action,
+        reason: reason.trim(),
+      });
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      setError(null);
+      setReason('');
+      selection.clear();
+      onDone();
+      void queryClient.invalidateQueries({ queryKey: ['preparation'] });
+      void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      void queryClient.invalidateQueries({ queryKey: ['shipments'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (caught) => {
+      setError(caught instanceof ApiError ? caught.userMessage : tCommon('actionFailed'));
+    },
+  });
+
+  const actions: readonly (PreparationBulkAction | 'SHIP')[] =
+    columnKey === 'toPrepare'
+      ? ['RETURN_TO_CONFIRMATION', 'CANCEL_AND_ARCHIVE', 'MARK_READY']
+      : columnKey === 'readyToShip'
+        ? ['SHIP']
+        : [];
+
+  if (actions.length === 0) return null;
+
+  const needsReason = pendingAction !== null && pendingAction !== 'SHIP';
+
+  return (
+    <>
+      {result ? (
+        <div className="border-b border-slate-100 p-2">
+          <Alert
+            tone={result.skipped.length > 0 ? 'warning' : 'success'}
+            title={t('doneTitle', { count: result.archived })}
+            action={
+              <button
+                className="text-xs font-semibold underline underline-offset-2"
+                onClick={() => setResult(null)}
+              >
+                {tCommon('close')}
+              </button>
+            }
+          >
+            {result.skipped.length === 0 ? (
+              t('doneAll')
+            ) : (
+              <ul className="space-y-0.5 text-xs">
+                {result.skipped.map((skip) => (
+                  <li key={skip.id}>{skip.message}</li>
+                ))}
+              </ul>
+            )}
+          </Alert>
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="border-b border-slate-100 p-2">
+          <Alert tone="danger">{error}</Alert>
+        </div>
+      ) : null}
+
+      {selection.count > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50/60 px-2 py-2">
+          <span className="text-xs font-semibold text-slate-700">
+            {t('selected', { count: selection.count })}
+          </span>
+          <div className="flex-1" />
+          {actions.map((action) => (
+            <Button
+              key={action}
+              size="sm"
+              variant={action === 'CANCEL_AND_ARCHIVE' ? 'danger' : 'secondary'}
+              disabled={mutation.isPending}
+              onClick={() => setPendingAction(action)}
+            >
+              {t(`actions.${action}`)}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+
+      <ConfirmDialog
+        open={pendingAction !== null}
+        danger={pendingAction === 'CANCEL_AND_ARCHIVE'}
+        loading={mutation.isPending}
+        title={
+          pendingAction
+            ? t(`confirm.${pendingAction}`, { count: selection.count })
+            : ''
+        }
+        message={pendingAction ? t(`confirmBody.${pendingAction}`) : undefined}
+        confirmLabel={pendingAction ? t(`actions.${pendingAction}`) : undefined}
+        onCancel={() => {
+          setPendingAction(null);
+          setReason('');
+        }}
+        onConfirm={() => {
+          if (!pendingAction) return;
+          if (needsReason && !reason.trim()) return;
+          const action = pendingAction;
+          setPendingAction(null);
+          mutation.mutate(action);
+        }}
+      >
+        {needsReason ? (
+          <Textarea
+            label={tCommon('reason')}
+            required
+            rows={2}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder={t('reasonPlaceholder')}
+          />
+        ) : null}
+      </ConfirmDialog>
+    </>
+  );
+}
+
 function PreparationColumn({
   column,
   pending,
@@ -144,17 +325,31 @@ function PreparationColumn({
     refetchInterval: 45_000,
   });
 
+  const visibleIds = (data?.data ?? []).map((order) => order.id);
+  const selection = useRowSelection(visibleIds);
+
   return (
     <Card
       title={
         <span className="flex items-center gap-2">
           {t(`columns.${column.key}`)}
           {data ? <Badge tone="neutral">{data.meta.total}</Badge> : null}
+          {visibleIds.length > 0 ? (
+            <span className="ms-auto">
+              <SelectAllCheckbox selection={selection} />
+            </span>
+          ) : null}
         </span>
       }
       padded={false}
       footer={<p className="text-xs text-slate-500">{t(`hints.${column.key}`)}</p>}
     >
+      <ColumnBulkBar
+        columnKey={column.key}
+        selection={selection}
+        onDone={() => void refetch()}
+      />
+
       {isLoading ? (
         <LoadingState />
       ) : error ? (
@@ -172,7 +367,15 @@ function PreparationColumn({
             return (
               <li key={order.id} className="px-3 py-2.5">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
+                  <div className="flex min-w-0 gap-2">
+                    <span className="pt-0.5">
+                      <RowCheckbox
+                        id={order.id}
+                        selection={selection}
+                        label={order.reference}
+                      />
+                    </span>
+                    <div className="min-w-0">
                     <Link
                       href={`/commandes/${order.id}`}
                       className="font-mono text-xs font-medium text-brand-700 hover:underline"
@@ -184,6 +387,7 @@ function PreparationColumn({
                       {wilaya ? `${wilaya.code2} ${wilaya.name}` : '—'}
                       {order.commune ? ` · ${order.commune}` : ''}
                     </p>
+                    </div>
                   </div>
                   <div className="text-end">
                     <StatusBadge status={order.status} />

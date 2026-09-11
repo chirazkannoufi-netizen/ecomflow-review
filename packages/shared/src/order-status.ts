@@ -352,6 +352,36 @@ export const ORDER_TRANSITIONS: readonly OrderTransitionRule[] = [
     requiresReason: true,
     guards: [],
   },
+  /**
+   * Retour au centre de confirmation.
+   *
+   * POURQUOI CETTE TRANSITION MANQUAIT, ET POURQUOI ELLE EST NECESSAIRE
+   *   Une commande confirmee dont le preparateur decouvre un probleme — le
+   *   client a change d'avis, l'adresse est fausse, l'article commande n'est
+   *   pas celui qu'il voulait — n'avait aucun chemin de retour. Le seul geste
+   *   disponible etait ANNULER, ce qui la comptait comme perdue dans tous les
+   *   indicateurs et abimait le score de fiabilite du client, alors que
+   *   personne n'avait renonce : il fallait seulement rappeler.
+   *
+   *   `requiresReason` est VRAI : un retour en file sans motif oblige
+   *   l'agent suivant a rappeler le client pour decouvrir ce que le
+   *   preparateur savait deja.
+   *
+   * LE STOCK EST LIBERE
+   *   `CONFIRMED` reserve le stock, `TO_CONFIRM` non. Sans liberation, la
+   *   marchandise resterait bloquee sur une commande qui n'est plus promise a
+   *   personne. La bascule est portee par `STOCK_RESERVED_STATUSES`, que le
+   *   moteur de workflow lit pour decider ; aucune garde supplementaire n'est
+   *   donc necessaire ici.
+   */
+  {
+    from: 'CONFIRMED',
+    to: 'TO_CONFIRM',
+    permission: P.CHANGE_STATUS,
+    actors: ['USER'],
+    requiresReason: true,
+    guards: ['REQUIRE_SUBSCRIPTION_OPERATIONAL'],
+  },
   {
     from: 'IN_PREPARATION',
     to: 'READY_TO_SHIP',
