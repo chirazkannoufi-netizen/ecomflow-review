@@ -405,6 +405,13 @@ des rejets d'import injustifiés sur des commandes parfaitement valides.
 boutique (apprentissage) et contre le référentiel du transporteur quand il en
 publie un. Une contrainte `CHECK` en base impose `wilaya_code BETWEEN 1 AND 58`.
 
+> **Amendée par [D-053](#d-053)** (11/09/2026) — un référentiel de communes
+> existe désormais en base et alimente les suggestions du formulaire. Le fond de
+> cette décision est **maintenu** : une commune absente du référentiel reste
+> acceptée, aucun import n'est rejeté pour ce motif, et aucune clé étrangère ne
+> relie `orders` à `communes`. Ce qui change est l'aide à la saisie, pas la
+> validation.
+
 ---
 
 ## D-019 — Tests d'intégration sur un vrai PostgreSQL, sans Docker
@@ -1756,6 +1763,176 @@ dit ce qui **existe**, l'autre ce qui est **utilisable aujourd'hui**.
 
 **Impact** — `api.put` est ajouté au client web pour la déclaration de
 couverture, qui est un remplacement idempotent et non une création.
+
+---
+
+## D-053 — Le référentiel des communes entre en base ; D-018 est amendée, pas renversée
+
+**Date** : 11/09/2026 · **Statut** : appliquée · **Amende** : D-018
+
+**Contexte** — Le métier a fourni un classeur de référence contenant les 58
+wilayas et les 1541 communes avec leur rattachement, en demandant de filtrer le
+champ Commune du formulaire par la wilaya choisie.
+
+**Constat préalable, contraire à la demande** — La demande était formulée comme
+« rien n'existe ». Vérification faite, c'est vrai pour les communes et faux pour
+les wilayas :
+
+- les 58 wilayas sont embarquées depuis l'origine dans
+  `packages/shared/src/algeria.ts`, avec résolution des variantes de
+  translittération (« Algiers », « BBA », « Béjaïa »/« Bejaia », noms arabes),
+  et sont utilisées par `orders.service`, `confirmation.service`,
+  `shipments.service` et trois écrans ;
+- l'absence des communes n'était **pas un oubli** mais **D-018**, avec sa
+  justification écrite : plus de 1500 entrées aux translittérations variables
+  selon les transporteurs, dont l'embarquement « produirait des rejets d'import
+  injustifiés sur des commandes parfaitement valides ».
+
+Construire un référentiel neuf aurait donc produit exactement la deuxième
+version locale que la demande cherchait à éviter. Les deux listes ont été
+**réconciliées** : les 58 libellés du classeur correspondent exactement à ceux
+d'`algeria.ts`, au même rang, et aucune des 1541 communes ne pointe vers une
+wilaya inconnue.
+
+**Ce qui change dans D-018, et ce qui n'y change pas** — L'objection de D-018
+portait sur le **rejet d'imports**, pas sur l'existence d'une liste. Un
+référentiel qui *assiste* la saisie ne rejette rien. D-018 tient donc toujours
+sur le fond :
+
+| | Avant | Après |
+|---|---|---|
+| Commune inconnue à l'import | acceptée | **acceptée** — inchangé |
+| Champ Commune du formulaire | texte libre nu | texte libre **avec suggestions filtrées** |
+| Clé étrangère `orders` → `communes` | aucune | **aucune** — inchangé |
+
+Le champ reste un `input` avec `datalist`, et non un `select` fermé. C'est la
+traduction en interface d'une règle de fond : on aide, on n'emprisonne pas.
+
+**Décision — où vit chaque référentiel, et pourquoi pas au même endroit**
+
+- **Les wilayas restent en CODE.** Elles sont lues à *chaque ligne d'import*
+  pour résoudre un libellé en code. Ce travail doit être synchrone et local :
+  le faire passer par une requête transformerait un import de mille lignes en
+  mille allers-retours.
+- **Les communes vont en BASE.** Elles servent à *choisir dans une liste*. Le
+  paquet partagé est compilé en CommonJS, donc mal élagué par le bundler : 1541
+  entrées s'y retrouveraient dans le bundle de **chaque** page du produit, y
+  compris celles sans champ adresse.
+
+C'est l'usage qui tranche, pas la nature de la donnée.
+
+**Une seule normalisation, sous peine de table muette** — `Commune.searchName`
+est produit par `normalizeGeoName` — **la même fonction** que celle qui
+normalise le libellé saisi avant la recherche. Deux règles différentes, l'une à
+la génération et l'autre à la lecture, ne se rencontreraient jamais : la table
+paraîtrait vide alors qu'elle est pleine, et le défaut serait invisible en
+lecture de code. Vérifié en base : « BAB  EZZOUAR », « bab-ezzouar » et
+« Bab Ezzouâr » retrouvent tous « Bab Ezzouar » ; une commune inventée reste
+acceptée.
+
+**Impact** — Changer de wilaya vide la commune déjà saisie : la garder
+produirait une adresse incohérente que rien ne signalerait avant le départ du
+colis. Le référentiel sert aussi le gabarit Excel (D-055) et reste disponible
+pour la grille de frais par wilaya (D-046) et la couverture transporteur
+(D-050), qui travaillent au niveau wilaya et n'avaient donc pas besoin des
+communes.
+
+---
+
+## D-054 — `OrderSource` nomme les canaux au lieu de les agréger
+
+**Date** : 11/09/2026 · **Statut** : appliquée
+
+**Contexte** — Le menu « Nouvelle commande » doit proposer dix provenances.
+L'énumération en couvrait trois sans ambiguïté (Formulaire, Excel, Google
+Sheet) ; les sept autres tombaient dans des valeurs génériques ou n'existaient
+pas.
+
+**Problème** — `OrderSource` distinguait le **moyen** d'entrée (saisie, feuille,
+API) mais pas le **canal**. Shopify, WooCommerce, Youcan et Lightfunnels
+tombaient tous dans `WEBSITE` ; Facebook et TikTok dans `SOCIAL`. Un commerçant
+qui tient deux boutiques et deux comptes publicitaires ne demande pas « combien
+de commandes viennent du web ? » mais « laquelle des deux convertit ? ». La
+question était sans réponse, alors que l'attribution par canal est le chiffre le
+plus regardé du commerce en paiement à la livraison.
+
+Le **panier abandonné** n'avait aucun équivalent, ni même d'approximation. Et ce
+n'est pas une plateforme : c'est une **nature** de commande — un panier non
+finalisé, relancé par la boutique. Elle change le script d'appel (on ne parle
+pas à quelqu'un qui a commandé comme à quelqu'un qui a renoncé) et ouvre un taux
+de récupération qu'aucune autre valeur ne permettait de calculer.
+
+**Décision** — Sept valeurs ajoutées : `ABANDONED_CART`, `SHOPIFY`,
+`WOOCOMMERCE`, `YOUCAN`, `LIGHTFUNNELS`, `FACEBOOK`, `TIKTOK`. Les génériques
+`WEBSITE`, `SOCIAL`, `API` et `CSV_IMPORT` **survivent** : les retirer
+obligerait à inventer une plateforme pour chaque provenance inconnue, et
+casserait les lignes déjà écrites.
+
+**L'historique n'est pas réécrit.** Une commande déjà enregistrée en `WEBSITE`
+le reste : rien ne permet de deviner après coup de quelle boutique elle venait.
+Reconstituer l'attribution sur une supposition produirait des statistiques
+fausses et crédibles, ce qui est pire que leur absence.
+
+**Alternatives écartées** —
+- *Un menu purement visuel, dix entrées vers `WEBSITE`/`SOCIAL`* : la solution
+  la moins chère, et celle qui rend le menu inutile — l'agent choisirait
+  « Par TikTok » sans qu'aucun chiffre ne s'en souvienne.
+- *Une colonne libre `sourceDetail`* : rend le canal non interrogeable en SQL et
+  ouvre la porte à quinze orthographes de « facebook ».
+
+**Impact** — `MANUAL_ORDER_SOURCES` borne ce qu'un humain peut **déclarer** :
+`API` et `CSV_IMPORT` en sont exclus, parce que ce ne sont pas des choix mais
+des constats posés par le système qui crée la commande. Les proposer dans un
+menu laisserait croire qu'un agent peut se déclarer « API ».
+
+---
+
+## D-055 — Le menu de création annonce ce que chaque entrée fait réellement
+
+**Date** : 11/09/2026 · **Statut** : appliquée
+
+**Contexte** — Dix entrées de menu, mais l'inventaire du code est sans appel :
+`exceljs` est déclaré en dépendance et **utilisé nulle part** ; il n'existe
+**aucun** point d'entrée d'upload, aucun `FileInterceptor`, aucun pipeline
+d'import — seulement un modèle `ImportJob` inutilisé. Six des dix canaux
+(Facebook, TikTok, Shopify, WooCommerce, Youcan, Lightfunnels) n'ont pas de
+connecteur.
+
+**Problème** — Dix entrées d'apparence identique promettraient dix intégrations.
+C'est exactement le défaut que D-049 a servi à supprimer côté transporteurs : un
+bouton cliqué qui échoue. Ici la facture est plus lourde qu'un clic — un
+commerçant peut remplir cent lignes d'un classeur avant de découvrir qu'aucun
+dépôt n'est possible.
+
+**Décision** — Dix entrées, **trois comportements**, et le menu le dit :
+
+1. **Saisie pré-étiquetée** (les six canaux + panier abandonné) — le formulaire
+   s'ouvre avec la provenance déjà posée. L'agent qui saisit une commande
+   arrivée par message TikTok choisit « Par Prospect TikTok », et l'attribution
+   par canal devient calculable **dès aujourd'hui**, sans attendre aucune
+   intégration. Ce n'est pas un pis-aller : la majorité des commandes de ces
+   canaux arrive par message privé, donc à la main, même quand un connecteur
+   existe.
+2. **Gabarit** (« Par Excel ») — télécharge le classeur, et **annonce sous le
+   libellé** que le dépôt du fichier rempli n'est pas encore disponible.
+3. **Renvoi** (« Par Google Sheet ») — mène à `/integrations`, où la
+   synchronisation se configure réellement.
+
+**Le gabarit est produit à la demande**, pas servi comme fichier figé : il
+embarque les wilayas et les communes réellement en base, et la colonne Wilaya
+porte une liste de validation Excel. La colonne Commune n'en porte pas —
+dépendre de la ligne exigerait des formules fragiles, et surtout D-018 refuse de
+rejeter une commune inconnue. Les communes sont fournies en **feuille de
+référence** consultable.
+
+**Aucune ligne d'exemple dans le gabarit.** Une ligne d'exemple finit toujours
+par être importée. Les unités (« En dinars », « Oui / Non ») vivent en
+commentaire d'en-tête.
+
+**Impact** — `api.download` est ajouté au client web : la route exige un jeton
+porteur, qu'un simple `<a href>` ne transmet pas. Le dépôt et l'analyse d'un
+classeur rempli restent **à construire** — c'est un chantier de la taille de la
+synchronisation Google Sheets existante, et le menu ne le promet pas.
 
 ---
 

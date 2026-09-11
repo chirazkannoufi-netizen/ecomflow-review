@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { GeoController } from './geo.controller';
 import { GeoService } from './geo.service';
+import { OrderTemplateService } from './order-template.service';
 
 /**
  * Referentiel geographique.
@@ -10,7 +11,7 @@ import { GeoService } from './geo.service';
  */
 @Module({
   controllers: [GeoController],
-  providers: [GeoService],
-  exports: [GeoService],
+  providers: [GeoService, OrderTemplateService],
+  exports: [GeoService, OrderTemplateService],
 })
 export class GeoModule {}

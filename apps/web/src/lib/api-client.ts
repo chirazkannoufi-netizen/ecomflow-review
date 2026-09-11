@@ -298,6 +298,39 @@ export const api = {
   put: <T>(path: string, body?: unknown, options: Omit<RequestOptions, 'method'> = {}) =>
     apiRequest<T>(path, { ...options, method: 'PUT', body }),
 
+  /**
+   * Telecharge un fichier servi par l'API.
+   *
+   * POURQUOI PAS UN SIMPLE `<a href>`
+   *   La route exige un jeton porteur, qu'un lien ne transmet pas. On recupere
+   *   donc la reponse en blob, puis on declenche le telechargement depuis un
+   *   lien temporaire. L'URL d'objet est REVOQUEE ensuite : chaque blob non
+   *   libere reste en memoire jusqu'au rechargement de la page.
+   */
+  download: async (path: string, filename: string): Promise<void> => {
+    const headers: Record<string, string> = {};
+    const token = tokenStore.getAccessToken();
+    if (token) headers.authorization = `Bearer ${token}`;
+    const tenantId = tokenStore.getTenantId();
+    if (tenantId) headers['x-tenant-id'] = tenantId;
+
+    const response = await fetch(buildUrl(path), { headers });
+
+    if (!response.ok) {
+      throw new ApiError(response.status, 'DOWNLOAD_FAILED', 'Le telechargement a echoue.');
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  },
+
   delete: <T>(path: string, options: Omit<RequestOptions, 'method' | 'body'> = {}) =>
     apiRequest<T>(path, { ...options, method: 'DELETE' }),
 };

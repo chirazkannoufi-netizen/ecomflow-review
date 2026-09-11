@@ -20,11 +20,12 @@
  */
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import {
+  MANUAL_ORDER_SOURCES,
   WILAYAS,
   dinarsToCentimes,
   formatCentimes,
@@ -86,6 +87,7 @@ export default function NewOrderPage() {
   const t = useTranslations('newOrder');
   const tCommon = useTranslations('common');
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
@@ -141,6 +143,19 @@ export default function NewOrderPage() {
    * n'ouvrira jamais. `staleTime` a l'infini parce qu'un decoupage
    * administratif ne change pas pendant une session de travail.
    */
+  /**
+   * Provenance declaree par le menu « Nouvelle commande ».
+   *
+   * Validee contre la liste partagee plutot que transmise telle quelle : un
+   * parametre d'URL est une saisie utilisateur comme une autre, et une valeur
+   * fantaisiste doit retomber sur le defaut du serveur, pas provoquer un rejet
+   * incomprehensible au moment de valider un formulaire deja rempli.
+   */
+  const sourceParam = searchParams.get('source');
+  const declaredSource = MANUAL_ORDER_SOURCES.includes(sourceParam as never)
+    ? sourceParam
+    : null;
+
   const communesQuery = useQuery({
     queryKey: ['geo', 'communes', wilaya],
     queryFn: () =>
@@ -230,6 +245,9 @@ export default function NewOrderPage() {
       commune: commune.trim(),
       addressText: addressText.trim(),
       lines: payloadLines,
+      // La provenance vient du menu qui a ouvert ce formulaire. Absente, le
+      // serveur retombe sur `MANUAL`.
+      ...(declaredSource ? { source: declaredSource } : {}),
       ...(deliveryFee.trim() ? { deliveryFeeCentimes } : {}),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
     });

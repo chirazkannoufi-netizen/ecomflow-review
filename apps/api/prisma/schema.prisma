@@ -86,6 +86,27 @@ enum OrderStatus {
   RETURNED
 }
 
+/// Provenance d'une commande.
+///
+/// POURQUOI DES VALEURS PAR PLATEFORME, ET NON UN SEUL « WEBSITE »
+///   Un commercant qui tient deux boutiques en ligne et deux comptes
+///   publicitaires ne demande pas « combien de commandes viennent du web ? »
+///   mais « laquelle des deux convertit ? ». Fondre Shopify, WooCommerce,
+///   Youcan et Lightfunnels dans `WEBSITE` — et Facebook et TikTok dans
+///   `SOCIAL` — rend cette question sans reponse, alors que l'attribution par
+///   canal est le chiffre le plus regarde du commerce en paiement a la
+///   livraison.
+///
+/// `ABANDONED_CART` N'EST PAS UNE PLATEFORME
+///   C'est une NATURE de commande : un panier non finalise, relance par la
+///   boutique. Elle change le script d'appel — on ne parle pas a quelqu'un qui
+///   a commande comme a quelqu'un qui a renonce — et ouvre un taux de
+///   recuperation qu'aucune autre valeur ne permettait de calculer.
+///
+/// LES VALEURS GENERIQUES RESTENT
+///   `WEBSITE`, `SOCIAL`, `API` et `CSV_IMPORT` couvrent ce qui n'est pas
+///   nomme ici. Les retirer obligerait a inventer une plateforme pour chaque
+///   provenance inconnue.
 enum OrderSource {
   GOOGLE_SHEETS
   MANUAL
@@ -94,6 +115,19 @@ enum OrderSource {
   API
   WEBSITE
   SOCIAL
+
+  // --- Paniers abandonnes ---
+  ABANDONED_CART
+
+  // --- Plateformes de vente ---
+  SHOPIFY
+  WOOCOMMERCE
+  YOUCAN
+  LIGHTFUNNELS
+
+  // --- Canaux publicitaires ---
+  FACEBOOK
+  TIKTOK
 }
 
 enum ActorKind {

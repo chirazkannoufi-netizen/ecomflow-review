@@ -18,6 +18,13 @@ export const ORDER_SOURCES = [
   'API',
   'WEBSITE',
   'SOCIAL',
+  'ABANDONED_CART',
+  'SHOPIFY',
+  'WOOCOMMERCE',
+  'YOUCAN',
+  'LIGHTFUNNELS',
+  'FACEBOOK',
+  'TIKTOK',
 ] as const;
 export type OrderSource = (typeof ORDER_SOURCES)[number];
 
@@ -29,7 +36,34 @@ export const ORDER_SOURCE_LABELS: Record<OrderSource, string> = {
   API: 'API',
   WEBSITE: 'Site web',
   SOCIAL: 'Reseaux sociaux',
+  ABANDONED_CART: 'Panier abandonne',
+  SHOPIFY: 'Shopify',
+  WOOCOMMERCE: 'WooCommerce',
+  YOUCAN: 'Youcan',
+  LIGHTFUNNELS: 'Lightfunnels',
+  FACEBOOK: 'Prospect Facebook',
+  TIKTOK: 'Prospect TikTok',
 };
+
+/**
+ * Provenances qu'un agent peut choisir A LA SAISIE.
+ *
+ * `API` et `CSV_IMPORT` en sont exclus : ce ne sont pas des choix, ce sont des
+ * constats poses par le systeme qui a cree la commande. Les proposer dans un
+ * menu laisserait croire qu'un humain peut se declarer « API ».
+ */
+export const MANUAL_ORDER_SOURCES: readonly OrderSource[] = [
+  'MANUAL',
+  'ABANDONED_CART',
+  'FACEBOOK',
+  'TIKTOK',
+  'SHOPIFY',
+  'WOOCOMMERCE',
+  'YOUCAN',
+  'LIGHTFUNNELS',
+  'WEBSITE',
+  'SOCIAL',
+];
 
 // ---------------------------------------------------------------------------
 // Canal de confirmation (Addendum §31)

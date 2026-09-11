@@ -1489,5 +1489,21 @@
     "doneAll": "تمت أرشفة كل ما تم تحديده.",
     "doneSkipped": "{count, plural, zero {لا سطر} one {سطر واحد تعذّرت أرشفته:} two {سطران تعذّرت أرشفتهما:} few {# أسطر تعذّرت أرشفتها:} many {# سطراً تعذّرت أرشفته:} other {# سطر تعذّرت أرشفته:}}",
     "failed": "فشلت الأرشفة."
+  },
+  "orderSourceMenu": {
+    "title": "مصدر الطلب",
+    "excelHint": "يُنزّل النموذج. إيداع الملف المعبّأ غير متاح بعد.",
+    "entries": {
+      "form": "عبر الاستمارة",
+      "excel": "عبر Excel",
+      "abandonedCart": "عبر سلة متروكة",
+      "facebook": "عبر عميل محتمل من Facebook",
+      "tiktok": "عبر عميل محتمل من TikTok",
+      "shopify": "عبر Shopify",
+      "woocommerce": "عبر WooCommerce",
+      "youcan": "عبر Youcan",
+      "lightfunnels": "عبر Lightfunnels",
+      "googleSheet": "عبر Google Sheet"
+    }
   }
 }

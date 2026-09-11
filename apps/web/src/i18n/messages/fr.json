@@ -1489,5 +1489,21 @@
     "doneAll": "Toute la sélection a été archivée.",
     "doneSkipped": "{count, plural, one {# ligne n'a pas pu être archivée :} other {# lignes n'ont pas pu être archivées :}}",
     "failed": "L'archivage a échoué."
+  },
+  "orderSourceMenu": {
+    "title": "Source de la commande",
+    "excelHint": "Télécharge le gabarit. Le dépôt du fichier rempli n'est pas encore disponible.",
+    "entries": {
+      "form": "Par Formulaire",
+      "excel": "Par Excel",
+      "abandonedCart": "Par Panier Abandonné",
+      "facebook": "Par Prospect Facebook",
+      "tiktok": "Par Prospect TikTok",
+      "shopify": "Par Shopify",
+      "woocommerce": "Par WooCommerce",
+      "youcan": "Par Youcan",
+      "lightfunnels": "Par Lightfunnels",
+      "googleSheet": "Par Google Sheet"
+    }
   }
 }

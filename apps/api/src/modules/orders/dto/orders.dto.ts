@@ -24,7 +24,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { ORDER_SOURCES, ORDER_STATUSES } from '@ecomflow/shared';
+import { MANUAL_ORDER_SOURCES, ORDER_SOURCES, ORDER_STATUSES } from '@ecomflow/shared';
 import {
   DateRangeQueryDto,
   PaginationQueryDto,
@@ -72,6 +72,18 @@ export class OrderLineDto {
 }
 
 export class CreateOrderDto {
+  @ApiPropertyOptional({
+    enum: MANUAL_ORDER_SOURCES,
+    default: 'MANUAL',
+    description:
+      'Provenance declaree par l agent. Bornee aux choix HUMAINS : `API` et ' +
+      '`CSV_IMPORT` sont des constats poses par le systeme qui cree la ' +
+      'commande, pas des options de saisie.',
+  })
+  @IsOptional()
+  @IsIn(MANUAL_ORDER_SOURCES)
+  source?: (typeof MANUAL_ORDER_SOURCES)[number];
+
   @ApiProperty({ example: 'Sara Benali' })
   @Transform(trim)
   @IsString()

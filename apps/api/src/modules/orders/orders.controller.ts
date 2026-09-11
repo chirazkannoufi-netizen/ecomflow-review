@@ -150,7 +150,9 @@ export class OrdersController {
   ) {
     return this.orders.createOrder({
       tenantId,
-      source: 'MANUAL',
+      // `MANUAL` a defaut : une commande saisie sans provenance declaree reste
+      // une saisie manuelle, ce qu'elle etait avant que le menu existe.
+      source: dto.source ?? 'MANUAL',
       customerName: dto.customerName,
       phone: dto.phone,
       wilaya: dto.wilaya,

@@ -1,22 +1,33 @@
 /**
  * Referentiel geographique — lecture seule, commun a toutes les boutiques.
  *
- * PAS DE PERMISSION METIER SUR CES ROUTES
- *   La liste des wilayas et des communes d'Algerie n'est la donnee de personne.
- *   Exiger `ORDERS_CREATE` pour lire un nom de commune melangerait le droit de
- *   VOIR un referentiel public avec celui d'AGIR sur une boutique. Le garde
- *   d'authentification suffit : il faut etre connecte, rien de plus.
+ * DEUX REGIMES DE PERMISSION, ET LA LIGNE PASSE ENTRE LIRE ET AGIR
+ *   Les deux routes de LECTURE n'exigent aucune permission metier : la liste
+ *   des wilayas et des communes d'Algerie n'est la donnee de personne, et
+ *   demander `ORDERS_CREATE` pour lire un nom de commune melangerait le droit
+ *   de VOIR un referentiel public avec celui d'AGIR sur une boutique. Le garde
+ *   d'authentification suffit.
+ *
+ *   Le GABARIT, lui, porte `ORDERS_CREATE`. Ce n'est pas un referentiel mais un
+ *   outil de saisie : le telecharger n'a de sens que pour qui va s'en servir
+ *   pour creer des commandes.
  */
 
-import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Header, Param, ParseIntPipe, StreamableFile } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { PERMISSIONS } from '@ecomflow/shared';
+import { RequirePermissions } from '../../common/decorators';
 import { GeoService } from './geo.service';
+import { OrderTemplateService } from './order-template.service';
 
 @ApiTags('Referentiel geographique')
 @ApiBearerAuth()
 @Controller('geo')
 export class GeoController {
-  constructor(private readonly geo: GeoService) {}
+  constructor(
+    private readonly geo: GeoService,
+    private readonly template: OrderTemplateService,
+  ) {}
 
   @Get('wilayas')
   @ApiOperation({
@@ -40,5 +51,24 @@ export class GeoController {
   })
   async listCommunes(@Param('code', ParseIntPipe) code: number) {
     return this.geo.listCommunes(code);
+  }
+
+  @Get('order-template.xlsx')
+  @RequirePermissions(PERMISSIONS.ORDERS_CREATE)
+  @Header(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  @Header('Content-Disposition', 'attachment; filename="ecomflow-commandes.xlsx"')
+  @ApiOperation({
+    summary: 'Gabarit d import de commandes',
+    description:
+      'Produit a la demande, avec les wilayas et les communes REELLEMENT en ' +
+      'base : un gabarit fige se desynchroniserait du referentiel. La colonne ' +
+      'Wilaya porte une liste de validation ; la commune reste libre, parce ' +
+      'qu une commune inconnue n est pas une erreur (D-018).',
+  })
+  async orderTemplate(): Promise<StreamableFile> {
+    return new StreamableFile(await this.template.build());
   }
 }

@@ -44,7 +44,6 @@ import {
   PackageCheck,
   Phone,
   Plug,
-  PlusCircle,
   ScrollText,
   Search,
   Settings,
@@ -64,6 +63,7 @@ import { api } from '@/lib/api-client';
 import { useSession, type SessionTenant } from '@/lib/session';
 import { subscriptionReasonKey } from '@/lib/subscription-reason';
 import { LanguageSwitcher } from './language-switcher';
+import { NewOrderMenu } from './new-order-menu';
 import { Badge, Button, LoadingState } from './ui';
 
 /** Cle de preference locale du repli de la barre laterale. */
@@ -887,11 +887,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="flex items-center gap-2">
             {can(PERMISSIONS.ORDERS_CREATE) ? (
-              <Link href="/commandes/nouvelle" className="hidden sm:block">
-                <Button variant="create" size="sm" icon={<PlusCircle className="h-4 w-4" strokeWidth={1.8} />}>
-                  {tNav('newOrder')}
-                </Button>
-              </Link>
+              <div className="hidden sm:block">
+                <NewOrderMenu />
+              </div>
             ) : null}
 
             {/* Le selecteur de langue est encadre de DEUX filets, et non d'un
