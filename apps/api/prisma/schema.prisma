@@ -233,6 +233,15 @@ enum InventoryMovementType {
   RETURN_RESTOCK
   RETURN_QUARANTINE
   ADJUSTMENT
+  /// Annulation d'une sortie : la marchandise n'est jamais partie.
+  ///
+  /// A NE PAS CONFONDRE AVEC UN RETOUR. `RETURN_RESTOCK` decrit une
+  /// marchandise qui est allee chez le client et qui revient — elle a voyage,
+  /// elle peut etre abimee, et le taux de retour la compte. Celui-ci decrit une
+  /// expedition ANNULEE avant d'avoir eu lieu : le colis n'a pas bouge, et le
+  /// compter comme un retour fausserait l'indicateur le plus surveille du
+  /// paiement a la livraison.
+  OUTBOUND_REVERSAL
 }
 
 enum InventoryReferenceType {

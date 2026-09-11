@@ -485,6 +485,64 @@ export class InventoryService {
   }
 
   /**
+   * Annule une sortie de stock : la marchandise n'est jamais partie.
+   *
+   * INVERSE EXACT DE `commitOutbound`
+   *   Celui-ci fait `onHand -= q` ET `reserved -= q` ; celui-la fait
+   *   `onHand += q` ET `reserved += q`. Les deux compteurs sont restaures,
+   *   parce que la commande qui retenait la marchandise existe toujours : elle
+   *   redevient simplement une commande non expediee, donc une reservation.
+   *
+   *   Ne restaurer que `onHand` rendrait la marchandise vendable alors qu'elle
+   *   est toujours promise a quelqu'un — c'est la survente que tout le reste du
+   *   produit s'emploie a eviter.
+   *
+   * POURQUOI PAS `inbound`, `adjust` OU `processReturn`
+   *   Aucun des trois ne dit la verite. `inbound` inventerait une reception
+   *   fournisseur ; `adjust` rendrait la correction indistinguable d'un
+   *   comptage ou d'une casse ; `processReturn` decrirait une marchandise
+   *   revenue de chez le client, et la compterait dans le TAUX DE RETOUR — le
+   *   chiffre le plus surveille du paiement a la livraison.
+   *
+   * AUCUNE CONDITION SQL, CONTRAIREMENT AUX SORTIES
+   *   `outboundConditionally` verifie qu'il y a de quoi sortir, parce qu'on ne
+   *   peut pas retirer ce qui n'existe pas. Ici on AJOUTE : la seule contrainte
+   *   de la base (`>= 0`) ne peut pas etre violee par un increment. C'est
+   *   l'APPELANT qui doit garantir qu'il n'annule pas plus qu'il n'a sorti — en
+   *   pratique le moteur de workflow, qui ne rappellera cette methode que sur
+   *   une commande dont il sait le stock deja sorti (`stockReleased`).
+   */
+  async reverseOutbound(
+    tx: PrismaTransactionClient,
+    tenantId: string,
+    lines: readonly StockLine[],
+    context: MovementContext,
+  ): Promise<void> {
+    const demand = aggregate(lines);
+
+    for (const [variantId, quantity] of demand) {
+      this.assertPositive(quantity);
+
+      const updated = await this.increment(tx, tenantId, variantId, {
+        onHand: quantity,
+        reserved: quantity,
+      });
+
+      if (!updated) throw this.variantNotFound(variantId);
+
+      await this.recordMovement(
+        tx,
+        tenantId,
+        variantId,
+        'OUTBOUND_REVERSAL',
+        quantity,
+        context,
+        updated,
+      );
+    }
+  }
+
+  /**
    * Entree en stock (reception fournisseur).
    *
    * `batch` est FACULTATIF, et c'est ce qui rend le suivi par lots adoptable

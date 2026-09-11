@@ -1,0 +1,46 @@
+-- =============================================================================
+-- Annulation d'une sortie de stock
+--
+-- LE MANQUE
+--   `commitOutbound` transforme une reservation en sortie definitive au moment
+--   de l'expedition : `on_hand` et `reserved` sont tous deux decrementes. Cette
+--   operation n'avait AUCUN inverse.
+--
+--   `InventoryService` offrait `inbound`, `adjust` et `processReturn`, et aucun
+--   des trois ne convient :
+--     - `inbound` decrit une RECEPTION fournisseur, avec son lot et son cout
+--       d'achat ; l'utiliser pour annuler une expedition inventerait une
+--       entree de marchandise qui n'a jamais eu lieu ;
+--     - `adjust` decrit une correction d'inventaire — casse, vol, comptage —
+--       et exige un motif libre : il rendrait indistinguables une erreur de
+--       comptage et une expedition annulee ;
+--     - `processReturn` decrit une marchandise QUI EST ALLEE chez le client et
+--       qui revient.
+--
+--   Faute d'inverse, toute correction d'une expedition erronee se faisait par
+--   un ajustement manuel, qui laissait dans l'historique la trace d'un evenement
+--   qui n'avait pas eu lieu.
+--
+-- POURQUOI UN TYPE DISTINCT, ET NON `RETURN_RESTOCK`
+--   C'est la distinction qui compte le plus ici. Un RETOUR decrit une
+--   marchandise qui a voyage : elle peut etre abimee, elle a coute un transport
+--   aller, et le TAUX DE RETOUR la compte — c'est l'indicateur le plus
+--   surveille du commerce en paiement a la livraison.
+--
+--   Une sortie annulee decrit un colis qui n'est jamais parti. Les confondre
+--   gonflerait artificiellement le taux de retour de la boutique, et ferait
+--   croire a un probleme de qualite la ou il n'y a eu qu'une correction de
+--   saisie.
+--
+-- CE QUE CETTE MIGRATION NE FAIT PAS
+--   Elle n'ouvre aucune transition de statut. `SHIPPED -> CONFIRMED` n'existe
+--   toujours pas : ce lot fournit l'operation d'inventaire qui manquait, et
+--   rien d'autre. Le retour d'une commande expediee vers le centre de
+--   confirmation reste a specifier, notamment parce qu'il depend de la capacite
+--   du transporteur a annuler un colis deja depose.
+--
+--   L'operation a une valeur propre en attendant : elle rend corrigeable une
+--   expedition erronee, ce qui ne l'etait pas.
+-- =============================================================================
+
+ALTER TYPE "InventoryMovementType" ADD VALUE IF NOT EXISTS 'OUTBOUND_REVERSAL';

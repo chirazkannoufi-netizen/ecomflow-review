@@ -2206,6 +2206,73 @@ millisecondes.
 
 ---
 
+## D-062 — `commitOutbound` reçoit son inverse, et il porte un nom à lui
+
+**Date** : 11/09/2026 · **Statut** : appliquée · **Prépare** : le retour d'une
+commande expédiée vers le centre de confirmation (non livré)
+
+**Contexte** — Revenir d'une commande expédiée vers `CONFIRMED` suppose de
+rendre à l'inventaire ce que l'expédition en avait sorti. Ce lot livre cette
+opération **seule**, indépendamment de la transition qui l'utilisera.
+
+**Problème** — `commitOutbound` décrémente `onHand` **et** `reserved` au moment
+de l'expédition. Aucun inverse n'existait, et aucune des trois opérations
+disponibles ne convenait :
+
+- `inbound` décrit une **réception fournisseur**, avec son lot et son coût
+  d'achat. L'utiliser inventerait une entrée de marchandise qui n'a jamais eu
+  lieu, et fausserait le coût d'achat moyen dès que le suivi par lots est actif.
+- `adjust` décrit une **correction d'inventaire** — casse, vol, comptage — et
+  exige un motif libre. Il rendrait indistinguables une erreur de comptage et
+  une expédition annulée.
+- `processReturn` décrit une marchandise **qui est allée chez le client** et qui
+  revient.
+
+Faute d'inverse, corriger une expédition erronée passait par un ajustement
+manuel, qui laissait dans l'historique la trace d'un événement n'ayant pas eu
+lieu.
+
+**Décision — un type de mouvement distinct : `OUTBOUND_REVERSAL`.** C'est la
+distinction qui compte le plus ici, et elle n'est pas cosmétique.
+
+Un **retour** décrit une marchandise qui a voyagé : elle peut être abîmée, elle
+a coûté un transport aller, et le **taux de retour** la compte — l'indicateur le
+plus surveillé du commerce en paiement à la livraison. Une **sortie annulée**
+décrit un colis qui n'est jamais parti. Les confondre gonflerait artificiellement
+le taux de retour, et ferait chercher un problème de qualité là où il n'y a eu
+qu'une correction de saisie.
+
+**Décision — les DEUX compteurs sont restaurés.** `onHand += q` **et**
+`reserved += q`. Ne remonter que `onHand` rendrait la marchandise vendable alors
+qu'elle est toujours promise au client dont la commande existe encore — c'est
+exactement la survente que le reste du produit s'emploie à éviter. L'opération
+ramène au « juste avant expédition », pas au « juste avant commande ».
+
+**Décision — aucune condition SQL, contrairement aux sorties.**
+`outboundConditionally` vérifie qu'il y a de quoi sortir : on ne retire pas ce
+qui n'existe pas. Ici on **ajoute**, et la seule contrainte de la base
+(`>= 0`) ne peut pas être violée par un incrément. C'est donc à l'**appelant**
+de garantir qu'il n'annule pas plus qu'il n'a sorti — en pratique le moteur de
+workflow, qui connaît `stockReserved` / `stockReleased`.
+
+**Ce que ce lot ne fait pas** — Il n'ouvre **aucune transition**.
+`SHIPPED → CONFIRMED` n'existe toujours pas, et aucun code n'appelle encore
+`reverseOutbound`. L'opération a néanmoins une valeur propre : elle rend
+corrigeable une expédition erronée, ce qui ne l'était pas.
+
+**Ce que son écriture a révélé, et qui de-risque la suite** — Le test a d'abord
+échoué sur `REQUIRE_ACTIVE_SHIPMENT` : `READY_TO_SHIP → SHIPPED` refuse sans
+colis. Le garde **symétrique** existe déjà — `REQUIRE_NO_ACTIVE_SHIPMENT` —
+et il est posé sur les transitions qui quittent `SHIPPED`. Autrement dit, la
+machine à états **refuse déjà** de faire reculer une commande dont le colis est
+encore vivant.
+
+C'est le risque principal du lot C — « stock rendu, colis toujours en route » —
+déjà écarté par une garde existante, sans rien à ajouter. L'ordre obligatoire
+(annuler le colis d'abord) n'est pas une discipline à tenir : il est imposé.
+
+---
+
 ---
 
 *Ce journal est mis à jour à chaque décision structurante. Les entrées ne sont

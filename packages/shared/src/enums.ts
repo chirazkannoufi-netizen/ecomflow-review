@@ -104,6 +104,7 @@ export const INVENTORY_MOVEMENT_TYPES = [
   'RETURN_RESTOCK',
   'RETURN_QUARANTINE',
   'ADJUSTMENT',
+  'OUTBOUND_REVERSAL',
 ] as const;
 export type InventoryMovementType = (typeof INVENTORY_MOVEMENT_TYPES)[number];
 
@@ -115,6 +116,7 @@ export const INVENTORY_MOVEMENT_LABELS: Record<InventoryMovementType, string> = 
   RETURN_RESTOCK: 'Retour remis en stock',
   RETURN_QUARANTINE: 'Retour en stock a verifier',
   ADJUSTMENT: 'Ajustement',
+  OUTBOUND_REVERSAL: 'Sortie annulee',
 };
 
 /**
@@ -135,6 +137,9 @@ export const INVENTORY_MOVEMENT_EFFECTS: Record<
   RETURN_RESTOCK: { onHand: 1, reserved: 0, quarantine: 0 },
   RETURN_QUARANTINE: { onHand: 0, reserved: 0, quarantine: 1 },
   ADJUSTMENT: { onHand: 1, reserved: 0, quarantine: 0 },
+  // L'inverse exact d'`OUTBOUND` : la marchandise revient en stock ET redevient
+  // reservee, parce que la commande qui la retenait existe toujours.
+  OUTBOUND_REVERSAL: { onHand: 1, reserved: 1, quarantine: 0 },
 };
 
 export const OUT_OF_STOCK_BEHAVIORS = [

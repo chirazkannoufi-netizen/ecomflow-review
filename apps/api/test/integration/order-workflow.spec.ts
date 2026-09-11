@@ -824,6 +824,187 @@ describe('workflow des commandes', () => {
   });
 
   // ==========================================================================
+  describe('annulation d une sortie de stock', () => {
+    /** Sort le stock comme le ferait une expedition, puis rend les compteurs. */
+    async function afterShipping(quantity: number, stock: number) {
+      const tenant = await createTenant(prisma);
+      const product = await createProduct(prisma, tenant.tenantId, { stock });
+      const customer = await createCustomer(prisma, tenant.tenantId);
+      const order = await createOrder(prisma, {
+        tenantId: tenant.tenantId,
+        customerId: customer.customerId,
+        addressId: customer.addressId,
+        variantId: product.variantId,
+        sku: product.sku,
+        status: 'TO_CONFIRM',
+        quantity,
+      });
+
+      // On passe par le VRAI chemin d'expedition — `READY_TO_SHIP -> SHIPPED`
+      // exige un colis actif, et c'est `createShipment` qui le cree. Forcer le
+      // statut a la main sauterait `commitOutbound`, donc la sortie de stock
+      // que ce test cherche justement a annuler.
+      const carrier = await createCarrierAccount(prisma, tenant.tenantId);
+      await move(tenant, order.orderId, 'CONFIRMED');
+      await prisma.order.update({
+        where: { id: order.orderId },
+        data: { carrierAccountId: carrier.carrierAccountId },
+      });
+
+      await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        shipments.dispatchOrders({
+          tenantId: tenant.tenantId,
+          orderIds: [order.orderId],
+          membershipId: tenant.ownerMembershipId,
+          permissions: ALL_TENANT_PERMISSIONS,
+        }),
+      );
+
+      return { tenant, product, order };
+    }
+
+    it('restaure EXACTEMENT les compteurs que la sortie avait decrementes', async () => {
+      // La propriete qui definit cette operation : appliquer la sortie puis son
+      // inverse doit laisser le stock dans l'etat d'avant l'expedition — pas
+      // dans celui d'avant la commande.
+      const { tenant, product } = await afterShipping(3, 10);
+
+      // Apres expedition : 3 sortis, plus rien de reserve.
+      expect(await stockOf(product.variantId)).toMatchObject({
+        onHand: 7,
+        reserved: 0,
+        available: 7,
+      });
+
+      await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        prisma.$transaction(async (tx) =>
+          inventory.reverseOutbound(
+            tx as never,
+            tenant.tenantId,
+            [{ variantId: product.variantId, quantity: 3 }],
+            { referenceType: 'MANUAL', note: 'Expedition annulee' },
+          ),
+        ),
+      );
+
+      // Retour a l'etat « commande confirmee, pas encore partie » : la
+      // marchandise est revenue ET reste promise au client.
+      expect(await stockOf(product.variantId)).toMatchObject({
+        onHand: 10,
+        reserved: 3,
+        available: 7,
+      });
+    });
+
+    it('ne rend pas la marchandise vendable : elle reste reservee', async () => {
+      // Le defaut que la restauration des DEUX compteurs evite. Ne remonter que
+      // `onHand` ferait passer le disponible de 7 a 10 : la marchandise
+      // redeviendrait vendable alors qu'elle est toujours promise a quelqu'un.
+      const { tenant, product } = await afterShipping(3, 10);
+
+      await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        prisma.$transaction(async (tx) =>
+          inventory.reverseOutbound(
+            tx as never,
+            tenant.tenantId,
+            [{ variantId: product.variantId, quantity: 3 }],
+            { referenceType: 'MANUAL' },
+          ),
+        ),
+      );
+
+      const level = await stockOf(product.variantId);
+      expect(level.available).toBe(7);
+      expect(level.available).not.toBe(level.onHand);
+    });
+
+    it('journalise un mouvement DISTINCT d un retour', async () => {
+      // La distinction qui protege le taux de retour — l'indicateur le plus
+      // surveille du paiement a la livraison. Un colis qui n'est jamais parti
+      // ne doit pas y figurer.
+      const { tenant, product } = await afterShipping(2, 5);
+
+      await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        prisma.$transaction(async (tx) =>
+          inventory.reverseOutbound(
+            tx as never,
+            tenant.tenantId,
+            [{ variantId: product.variantId, quantity: 2 }],
+            { referenceType: 'MANUAL' },
+          ),
+        ),
+      );
+
+      const movements = await prisma.inventoryMovement.findMany({
+        where: { variantId: product.variantId },
+        select: { type: true, quantity: true, onHandAfter: true, reservedAfter: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      const reversal = movements.at(-1);
+      expect(reversal?.type).toBe('OUTBOUND_REVERSAL');
+      expect(reversal?.quantity).toBe(2);
+      // L'etat resultant est fige dans le mouvement, comme pour tous les autres.
+      expect(reversal?.onHandAfter).toBe(5);
+      expect(reversal?.reservedAfter).toBe(2);
+
+      // Aucune trace de retour : la marchandise n'est jamais allee chez le
+      // client.
+      expect(movements.map((m) => m.type)).not.toContain('RETURN_RESTOCK');
+      expect(movements.map((m) => m.type)).not.toContain('RETURN_QUARANTINE');
+    });
+
+    it('agrege plusieurs lignes portant la meme variante', async () => {
+      // Meme precaution que partout ailleurs : deux lignes de la meme variante
+      // traitees separement fausseraient le total.
+      const { tenant, product } = await afterShipping(4, 10);
+
+      await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        prisma.$transaction(async (tx) =>
+          inventory.reverseOutbound(
+            tx as never,
+            tenant.tenantId,
+            [
+              { variantId: product.variantId, quantity: 1 },
+              { variantId: product.variantId, quantity: 3 },
+            ],
+            { referenceType: 'MANUAL' },
+          ),
+        ),
+      );
+
+      expect(await stockOf(product.variantId)).toMatchObject({ onHand: 10, reserved: 4 });
+
+      // Un SEUL mouvement de 4, et non deux de 1 et 3.
+      const reversals = await prisma.inventoryMovement.findMany({
+        where: { variantId: product.variantId, type: 'OUTBOUND_REVERSAL' },
+        select: { quantity: true },
+      });
+      expect(reversals).toHaveLength(1);
+      expect(reversals[0]?.quantity).toBe(4);
+    });
+
+    it('refuse une quantite nulle ou negative', async () => {
+      const { tenant, product } = await afterShipping(2, 5);
+
+      for (const quantity of [0, -2]) {
+        await expect(
+          RequestContextStore.runWithTenant(tenant.tenantId, () =>
+            prisma.$transaction(async (tx) =>
+              inventory.reverseOutbound(
+                tx as never,
+                tenant.tenantId,
+                [{ variantId: product.variantId, quantity }],
+                { referenceType: 'MANUAL' },
+              ),
+            ),
+          ),
+        ).rejects.toThrow();
+      }
+    });
+  });
+
+  // ==========================================================================
   describe('effets sur le stock', () => {
     it('libere la reservation lors d une annulation apres confirmation', async () => {
       const { tenant, product, order } = await scenario({ stock: 10, quantity: 3 });
