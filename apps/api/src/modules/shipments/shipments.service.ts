@@ -47,6 +47,7 @@ import type { PrismaTransactionClient } from '../../infra/prisma/prisma.service'
 import { isUniqueConstraintError } from '../../infra/prisma/prisma.service';
 import { OutboxService, DOMAIN_EVENTS } from '../events/outbox.service';
 import { OrderWorkflowService } from '../orders/workflow/order-workflow.service';
+import { OrdersService } from '../orders/orders.service';
 import { CarrierRegistry } from './carriers/carrier.registry';
 import type { CarrierContext, ShipmentRequest } from './carriers/carrier-adapter.interface';
 
@@ -110,6 +111,16 @@ export interface CarrierCoverageEntry {
   readonly leadTimeDays: number | null;
 }
 
+/**
+ * Statuts ou le colis n'existe pas encore, donc ou le transporteur reste un
+ * CHOIX revisable. Au-dela, c'est le colis qui fait foi.
+ */
+const PRE_SHIPMENT_STATUSES: readonly string[] = [
+  'CONFIRMED',
+  'IN_PREPARATION',
+  'READY_TO_SHIP',
+];
+
 export interface CreateShipmentInput {
   readonly tenantId: string;
   readonly orderId: string;
@@ -141,6 +152,7 @@ export class ShipmentsService {
     @InjectPrisma() private readonly prisma: PrismaClientExtended,
     private readonly registry: CarrierRegistry,
     private readonly workflow: OrderWorkflowService,
+    private readonly orders: OrdersService,
     private readonly outbox: OutboxService,
     private readonly encryption: EncryptionService,
     private readonly clock: ClockService,
@@ -698,6 +710,166 @@ export class ShipmentsService {
     if (updated.count === 0) {
       throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Compte transporteur introuvable.');
     }
+  }
+
+  /**
+   * DISPATCHER : un clic, de « confirmee » a « expediee ».
+   *
+   * CE QUE LE GESTE REMPLACE
+   *   Trois etapes que l'interface exposait separement — prendre en
+   *   preparation, declarer le colis pret, expedier — et qui ne decrivaient
+   *   rien d'observable pour l'exploitant : entre la confirmation et le depart
+   *   du colis, il n'y a qu'un seul moment de verite, celui ou l'on remet la
+   *   marchandise au livreur. Les trois etats intermediaires existent toujours
+   *   dans la machine a etats ; ils cessent simplement d'etre des ECRANS.
+   *
+   * LE GARDE SUR `preparedQuantity` N'EST PAS CONTOURNE
+   *   Il reste actif, et il est satisfait de la meme facon que par le bouton
+   *   unitaire : cocher des lignes puis cliquer « Dispatcher » EST l'affirmation
+   *   que ces commandes sont pretes. `markPreparationReady` enregistre cette
+   *   affirmation, et le garde la VERIFIE ensuite au lieu de la supposer.
+   *
+   *   La nuance compte : on ne retire pas la regle, on fournit le geste qui la
+   *   satisfait. Un `updateMany` sur le statut aurait saute le garde, la
+   *   reservation de stock, l'historique et les evenements sortants — et le
+   *   lot serait devenu un chemin derobe vers un etat qu'aucun clic unitaire
+   *   n'aurait permis.
+   *
+   * LE TRANSPORTEUR EST UN PREREQUIS DUR
+   *   `createShipment` ne peut rien appeler sans compte transporteur. Une
+   *   commande sans transporteur choisi est donc REFUSEE, avec son motif, au
+   *   lieu de retomber silencieusement sur le compte par defaut de la boutique
+   *   — ce que faisait l'ancien chemin, et qui expediait chez le mauvais
+   *   livreur sans que personne ne l'ait demande.
+   *
+   * SEQUENTIEL
+   *   Voir `createShipmentsBulk` : chaque ligne appelle le transporteur, et les
+   *   lancer en parallele ferait tomber son quota.
+   */
+  async dispatchOrders(input: {
+    tenantId: string;
+    orderIds: readonly string[];
+    membershipId: string;
+    permissions: ReadonlySet<string>;
+  }): Promise<BulkArchiveResult> {
+    const dispatched: string[] = [];
+    const skipped: BulkArchiveSkip[] = [];
+
+    for (const orderId of input.orderIds) {
+      try {
+        const order = await this.prisma.order.findFirst({
+          where: { tenantId: input.tenantId, id: orderId },
+          select: { status: true, carrierAccountId: true },
+        });
+
+        if (!order) {
+          throw new NotFoundException(ERROR_CODES.ORDER_NOT_FOUND, 'Commande introuvable.');
+        }
+
+        if (!order.carrierAccountId) {
+          throw new ValidationException(
+            'Aucun transporteur choisi pour cette commande. Utilisez « Changer le livreur » avant de dispatcher.',
+            { details: { orderId } },
+          );
+        }
+
+        // 1. Confirmee -> prete a expedier, en enregistrant les lignes
+        //    preparees. Sans effet si la commande est deja prete : le rejeu
+        //    d'un dispatch interrompu ne doit pas echouer sur l'etape deja
+        //    franchie.
+        if (order.status === 'CONFIRMED' || order.status === 'IN_PREPARATION') {
+          await this.orders.markPreparationReady(
+            input.tenantId,
+            orderId,
+            input.membershipId,
+            input.permissions,
+          );
+        }
+
+        // 2. Creation du colis chez le transporteur CHOISI, qui bascule la
+        //    commande en EXPEDIEE. Idempotent : un rejeu retrouve le colis
+        //    existant au lieu d'en creer un second.
+        await this.createShipment({
+          tenantId: input.tenantId,
+          orderId,
+          carrierAccountId: order.carrierAccountId,
+          membershipId: input.membershipId,
+          permissions: input.permissions,
+        });
+
+        dispatched.push(orderId);
+      } catch (error) {
+        if (error instanceof BusinessException) {
+          skipped.push({ id: orderId, code: error.code, message: error.message });
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return { archived: dispatched.length, skipped };
+  }
+
+  /**
+   * Affecte un transporteur a une selection de commandes.
+   *
+   * REVISABLE TANT QUE LE COLIS N'EXISTE PAS
+   *   Une commande deja expediee garde le transporteur de son colis : changer
+   *   l'intention apres coup ne deplacerait aucun paquet et ferait mentir
+   *   l'ecran. Ces lignes-la sont refusees avec leur motif.
+   */
+  async assignCarrierAccount(input: {
+    tenantId: string;
+    orderIds: readonly string[];
+    carrierAccountId: string;
+  }): Promise<BulkArchiveResult> {
+    const account = await this.prisma.carrierAccount.findFirst({
+      where: { tenantId: input.tenantId, id: input.carrierAccountId },
+      select: { id: true, status: true },
+    });
+
+    if (!account) {
+      throw new NotFoundException(
+        ERROR_CODES.CARRIER_NOT_CONFIGURED,
+        'Ce compte transporteur est introuvable.',
+      );
+    }
+
+    const assigned: string[] = [];
+    const skipped: BulkArchiveSkip[] = [];
+
+    for (const orderId of input.orderIds) {
+      const order = await this.prisma.order.findFirst({
+        where: { tenantId: input.tenantId, id: orderId },
+        select: { status: true, reference: true },
+      });
+
+      if (!order) {
+        skipped.push({
+          id: orderId,
+          code: ERROR_CODES.ORDER_NOT_FOUND,
+          message: 'Commande introuvable.',
+        });
+        continue;
+      }
+
+      if (!PRE_SHIPMENT_STATUSES.includes(order.status)) {
+        skipped.push({
+          id: orderId,
+          code: ERROR_CODES.ORDER_INVALID_TRANSITION,
+          message: `${order.reference} est deja partie : son transporteur ne se change plus ici.`,
+        });
+        continue;
+      }
+
+      await this.prisma.order.updateMany({
+        where: { tenantId: input.tenantId, id: orderId },
+        data: { carrierAccountId: input.carrierAccountId },
+      });
+      assigned.push(orderId);
+    }
+
+    return { archived: assigned.length, skipped };
   }
 
   /**

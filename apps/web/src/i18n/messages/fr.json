@@ -581,17 +581,10 @@
     "columns": {
       "toPrepare": "A préparer",
       "inProgress": "En cours",
-      "readyToShip": "Prêtes à expédier"
-    },
-    "hints": {
-      "toPrepare": "Commandes confirmées par téléphone, stock déjà réservé.",
-      "inProgress": "Colis en cours de montage au dépôt.",
-      "readyToShip": "En attente du transporteur. L'expédition se fait depuis la fiche commande."
-    },
-    "next": {
-      "takeInPreparation": "Prendre en préparation",
-      "packReady": "Colis pret",
-      "ship": "Expédier"
+      "readyToShip": "Prêtes à expédier",
+      "reference": "Référence",
+      "items": "Articles",
+      "confirmedAt": "Confirmée"
     },
     "emptyTitle": "Rien à traiter",
     "empty": "Cette colonne est vide.",
@@ -603,26 +596,27 @@
       "actions": {
         "RETURN_TO_CONFIRMATION": "Retour",
         "CANCEL_AND_ARCHIVE": "Annuler et archiver",
-        "MARK_READY": "Colis prêt",
-        "SHIP": "Expédier",
-        "STEP_BACK": "Reculer d'une étape",
-        "EXPORT": "Exporter en Excel"
+        "EXPORT": "Exporter en Excel",
+        "DISPATCH": "Dispatcher",
+        "ASSIGN_CARRIER": "Changer le livreur"
       },
       "confirm": {
         "RETURN_TO_CONFIRMATION": "{count, plural, one {Renvoyer # commande en confirmation ?} other {Renvoyer # commandes en confirmation ?}}",
         "CANCEL_AND_ARCHIVE": "{count, plural, one {Annuler et archiver # commande ?} other {Annuler et archiver # commandes ?}}",
-        "MARK_READY": "{count, plural, one {Déclarer # colis prêt ?} other {Déclarer # colis prêts ?}}",
-        "SHIP": "{count, plural, one {Expédier # commande ?} other {Expédier # commandes ?}}",
-        "STEP_BACK": "{count, plural, one {Reculer # commande d'une étape ?} other {Reculer # commandes d'une étape ?}}"
+        "DISPATCH": "{count, plural, one {Dispatcher # commande ?} other {Dispatcher # commandes ?}}",
+        "ASSIGN_CARRIER": "{count, plural, one {Affecter un livreur à # commande ?} other {Affecter un livreur à # commandes ?}}"
       },
       "confirmBody": {
         "RETURN_TO_CONFIRMATION": "La commande repart en file d'appel et son stock réservé est libéré.",
         "CANCEL_AND_ARCHIVE": "Deux gestes : la commande est d'abord annulée — ce qui libère son stock — puis archivée. L'annulation compte dans les indicateurs.",
-        "MARK_READY": "Les commandes passent par « en préparation » puis « prête à expédier ». L'historique conserve les deux étapes.",
-        "SHIP": "Un colis est créé chez le transporteur pour chaque commande, une par une.",
-        "STEP_BACK": "Chaque commande revient à l'étape précédente du kanban. Celles qui sont déjà au début sont refusées, avec leur motif."
+        "DISPATCH": "Chaque commande est déclarée prête puis remise au transporteur choisi, en un geste. Cocher ces lignes vaut affirmation qu'elles sont complètes.",
+        "ASSIGN_CARRIER": "Le choix reste modifiable tant que le colis n'est pas créé."
       }
-    }
+    },
+    "searchPlaceholder": "Référence, client, téléphone…",
+    "carrierColumn": "Livreur",
+    "noCarrier": "Aucun",
+    "missingCarrierWarning": "{count, plural, one {# commande sélectionnée n'a pas de livreur : elle sera refusée au dispatch.} other {# commandes sélectionnées n'ont pas de livreur : elles seront refusées au dispatch.}}"
   },
   "shipments": {
     "title": "Expéditions",

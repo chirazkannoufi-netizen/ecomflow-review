@@ -108,11 +108,23 @@ export interface BulkArchiveResult {
 /**
  * Actions groupees disponibles sur l'ecran de preparation.
  *
- * `STEP_BACK` recule d'UNE etape dans le kanban — « en cours » revient a « a
- * preparer », « prete a expedier » revient a « en cours ». Il est distinct de
- * `RETURN_TO_CONFIRMATION`, qui fait sortir la commande de la preparation pour
- * la renvoyer en file d'appel : l'un corrige un geste, l'autre constate que la
- * commande n'aurait pas du arriver la.
+ * `STEP_BACK` recule d'UNE etape — « en cours » revient a « a preparer »,
+ * « prete a expedier » revient a « en cours ».
+ *
+ * IL N'EST PLUS EXPOSE PAR AUCUN ECRAN.
+ *   Il servait le kanban a trois colonnes de l'ecran de preparation, remplace
+ *   par une table unique ou les etapes intermediaires n'apparaissent plus. Le
+ *   cas d'usage — corriger un pas de trop entre deux colonnes — a disparu avec
+ *   les colonnes.
+ *
+ *   Il est CONSERVE plutot que supprime : les transitions qu'il emprunte sont
+ *   legales, testees, et redeviendront utiles si un ecran expose un jour les
+ *   etapes intermediaires. Le retirer maintenant couterait une reecriture pour
+ *   le retrouver.
+ *
+ * Distinct de `RETURN_TO_CONFIRMATION`, qui fait sortir la commande de la
+ * preparation pour la renvoyer en file d'appel : l'un corrige un geste, l'autre
+ * constate que la commande n'aurait pas du arriver la.
  *
  * `CANCEL_AND_ARCHIVE` porte les DEUX gestes dans son nom, et le bouton
  * l'annonce de meme : l'archivage seul serait refuse tant que le stock est

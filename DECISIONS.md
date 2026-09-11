@@ -2061,6 +2061,87 @@ coupure retrouve les colis déjà partis au lieu d'en créer de seconds.
 
 ---
 
+## D-059 — Le transporteur se choisit avant l'expédition, pas pendant
+
+**Date** : 11/09/2026 · **Statut** : appliquée
+
+**Contexte** — « Dispatcher » doit remettre une sélection de commandes au
+transporteur en un geste. `createShipment` exige un compte transporteur.
+
+**Problème** — Ce compte n'avait **nulle part où se poser avant l'expédition**.
+`Shipment.carrierAccountId` existe, mais le colis n'existe qu'à l'instant où on
+l'envoie. Le paramètre `carrierAccountId` de `createShipment` existait aussi —
+et **aucun écran ne le renseignait** : toute expédition retombait sur le compte
+**par défaut** de la boutique.
+
+Conséquence concrète : une boutique travaillant avec deux transporteurs ne
+pouvait pas choisir lequel, sinon en changeant son défaut entre deux clics. Les
+colis partaient chez un livreur que personne n'avait désigné.
+
+**Décision** — `Order.carrierAccountId`, nullable, avec clé étrangère
+**composite** `(tenant_id, carrier_account_id)` — une commande ne peut pas viser
+le compte d'une autre boutique (D-004).
+
+**Intention ici, fait là-bas.** Ce champ enregistre une intention, révisable
+tant que le colis n'existe pas. Une fois `Shipment` créé, c'est
+`shipments.carrier_account_id` qui fait foi : une commande a pu partir par un
+autre transporteur que celui prévu, et l'historique doit garder le vrai. Les
+deux colonnes coexistent sans que l'une soit la copie de l'autre.
+
+`ON DELETE SET NULL`, là où `shipments.carrier_account_id` reste en `RESTRICT` :
+supprimer un compte ne doit pas bloquer sur des commandes qui ne sont pas encore
+parties — l'intention devient caduque et l'écran redemande un choix. Un colis
+**parti** par ce compte, lui, est un fait qu'on n'efface pas.
+
+**Impact** — L'affectation est refusée sur une commande déjà expédiée : changer
+l'intention après coup ne déplacerait aucun paquet et ferait mentir l'écran.
+
+---
+
+## D-060 — Les étapes de préparation quittent l'interface, pas la machine à états
+
+**Date** : 11/09/2026 · **Statut** : appliquée
+
+**Contexte** — L'écran de préparation montrait trois colonnes : à préparer, en
+cours, prêtes à expédier. Décision produit : une seule table, et un geste unique
+— « Dispatcher » — de la commande confirmée au colis parti.
+
+**Problème** — La tentation évidente était de supprimer `IN_PREPARATION` et
+`READY_TO_SHIP` du workflow, puisque plus rien ne les affiche.
+
+**Décision** — Les deux statuts **restent**, et le dispatch les **traverse**.
+Ce qui disparaît, ce sont les écrans, pas les états.
+
+**Justification** — Trois choses cassent si on les retire :
+
+1. **L'historique.** `OrderStatusHistory` est append-only ; les lignes déjà
+   écrites référencent ces statuts. Les supprimer de l'énumération rendrait
+   illisible l'historique de toutes les commandes passées.
+2. **Les indicateurs de durée.** « Combien de temps entre la confirmation et le
+   départ ? » se calcule entre deux bornes. Sans état intermédiaire, on perd la
+   distinction entre une commande préparée en dix minutes et une autre restée
+   trois jours au dépôt.
+3. **Les gardes.** `REQUIRE_PREPARATION_COMPLETED` s'applique sur
+   `IN_PREPARATION → READY_TO_SHIP`. Supprimer l'arête supprimerait le garde,
+   donc la vérification que les lignes sont préparées.
+
+**Le garde n'est pas contourné, il est satisfait.** Cocher des lignes puis
+cliquer « Dispatcher » **est** l'affirmation que ces commandes sont prêtes.
+`markPreparationReady` enregistre cette affirmation ; le garde la **vérifie**
+ensuite au lieu de la supposer. C'est exactement le principe déjà posé en D-057
+pour le bouton unitaire — et c'est ce qui distingue un geste condensé d'un
+*bypass* : un `updateMany` sur le statut aurait sauté le garde, la réservation
+de stock, l'historique et les événements sortants.
+
+**Impact** — `STEP_BACK` devient orphelin : il reculait d'une colonne à l'autre,
+et les colonnes ont disparu. Il est **conservé** dans l'API plutôt que supprimé —
+les transitions qu'il emprunte sont légales et testées, et il redeviendra utile
+si un écran expose un jour les étapes. Aucun autre code ne s'y appuie
+(vérifié). Le commentaire de `PREPARATION_BULK_ACTIONS` dit qu'il n'est plus
+exposé, pour qu'on ne le croie pas actif.
+
+---
+
 ---
 
 *Ce journal est mis à jour à chaque décision structurante. Les entrées ne sont

@@ -230,6 +230,12 @@ export class ListShipmentsQueryDto extends PaginationQueryDto {
   search?: string;
 }
 
+export class AssignCarrierDto extends BulkArchiveDto {
+  @ApiProperty({ description: 'Compte transporteur a affecter a la selection.' })
+  @IsUUID('7')
+  carrierAccountId!: string;
+}
+
 export class BulkShipDto extends BulkArchiveDto {
   @ApiPropertyOptional({
     description:
@@ -429,6 +435,55 @@ export class ShipmentsController {
       weightGrams: dto.weightGrams ?? null,
       notes: dto.notes ?? null,
       allowOpening: dto.allowOpening,
+    });
+  }
+
+  @Post('orders/bulk-dispatch')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.SHIPMENTS_CREATE, PERMISSIONS.PREPARATION_MANAGE)
+  @RequiresOperationalSubscription()
+  @ApiOperation({
+    summary: 'Dispatcher une selection : de confirmee a expediee, en un geste',
+    description:
+      'Enchaine la mise en preparation, l enregistrement des lignes preparees ' +
+      'et la creation du colis. Le garde `REQUIRE_PREPARATION_COMPLETED` reste ' +
+      'ACTIF : cocher des lignes puis dispatcher EST l affirmation qu elles ' +
+      'sont pretes, et cette affirmation est enregistree avant d etre ' +
+      'verifiee — pas contournee. Une commande sans transporteur choisi est ' +
+      'refusee, au lieu de retomber sur le compte par defaut de la boutique.',
+  })
+  async bulkDispatch(
+    @TenantId() tenantId: string,
+    @Body() dto: BulkArchiveDto,
+    @Ctx() context: RequestContext,
+  ) {
+    return this.shipments.dispatchOrders({
+      tenantId,
+      orderIds: dto.ids,
+      membershipId: context.membershipId as string,
+      permissions: context.permissions,
+    });
+  }
+
+  @Post('orders/bulk-assign-carrier')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.SHIPMENTS_CREATE)
+  @ApiOperation({
+    summary: 'Affecter un transporteur a une selection',
+    description:
+      'Enregistre une INTENTION, revisable tant que le colis n existe pas. ' +
+      'Une commande deja partie garde le transporteur de son colis : changer ' +
+      'l intention apres coup ne deplacerait aucun paquet et ferait mentir ' +
+      'l ecran.',
+  })
+  async bulkAssignCarrier(
+    @TenantId() tenantId: string,
+    @Body() dto: AssignCarrierDto,
+  ) {
+    return this.shipments.assignCarrierAccount({
+      tenantId,
+      orderIds: dto.ids,
+      carrierAccountId: dto.carrierAccountId,
     });
   }
 

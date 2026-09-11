@@ -1021,6 +1021,7 @@ export class OrdersService {
           nextCallbackAt: true,
           archivedAt: true,
           assignee: { select: { id: true, user: { select: { fullName: true } } } },
+          carrierAccount: { select: { id: true, label: true } },
           items: { select: { skuSnapshot: true, productNameSnapshot: true, quantity: true } },
           shipments: {
             select: { trackingNumber: true, status: true, carrier: { select: { name: true } } },
@@ -1050,6 +1051,9 @@ export class OrdersService {
         nextCallbackAt: row.nextCallbackAt,
         archived: row.archivedAt !== null,
         assigneeName: row.assignee?.user.fullName ?? null,
+        carrierAccount: row.carrierAccount
+          ? { id: row.carrierAccount.id, label: row.carrierAccount.label }
+          : null,
         items: row.items.map((item) => ({
           sku: item.skuSnapshot,
           productName: item.productNameSnapshot,
@@ -1294,6 +1298,9 @@ export interface OrderListItem {
   readonly nextCallbackAt: Date | null;
   readonly archived: boolean;
   readonly assigneeName: string | null;
+  /// Transporteur CHOISI avant expedition. Distinct de `tracking.carrierName`,
+  /// qui est celui du colis reellement parti.
+  readonly carrierAccount: { id: string; label: string } | null;
   readonly items: readonly { sku: string; productName: string; quantity: number }[];
   readonly tracking: { number: string | null; status: string; carrierName: string } | null;
   readonly pendingDuplicateFlags: number;

@@ -1211,6 +1211,18 @@ model Order {
   returnCostCentimes    Int @default(0) @map("return_cost_centimes")
 
   // --- Operations ---
+  /// Transporteur choisi AVANT l'expedition.
+  ///
+  /// POURQUOI SUR LA COMMANDE, ET NON SEULEMENT SUR LE COLIS
+  ///   `Shipment` porte deja le compte transporteur, mais il n'existe qu'a
+  ///   partir du moment ou le colis est cree. Or le choix du livreur se fait
+  ///   AVANT : on prepare une tournee, on repartit les commandes entre deux
+  ///   societes, puis on expedie. Sans ce champ, ce choix n'avait nulle part ou
+  ///   se poser et l'expedition retombait toujours sur le compte par defaut.
+  ///
+  ///   Une fois le colis cree, c'est `Shipment.carrierAccountId` qui fait foi :
+  ///   ce champ-ci enregistre une INTENTION, celui-la un fait.
+  carrierAccountId     String? @map("carrier_account_id") @db.Uuid
   assignedMembershipId String? @map("assigned_membership_id") @db.Uuid
   preparedByMembershipId String? @map("prepared_by_membership_id") @db.Uuid
   notes         String?
@@ -1246,6 +1258,7 @@ model Order {
   tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customer Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
   address  Address?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  carrierAccount CarrierAccount? @relation(fields: [carrierAccountId], references: [id], onDelete: SetNull)
   assignee Membership? @relation("OrderAssignee", fields: [assignedMembershipId], references: [id], onDelete: SetNull)
   preparedBy Membership? @relation("OrderPreparedBy", fields: [preparedByMembershipId], references: [id], onDelete: SetNull)
 
@@ -1270,6 +1283,7 @@ model Order {
   @@index([tenantId, wilayaCodeSnapshot])
   @@index([tenantId, phoneSnapshot])
   @@index([tenantId, deliveredAt])
+  @@index([tenantId, carrierAccountId, status])
   @@map("orders")
 }
 
@@ -1497,6 +1511,7 @@ model CarrierAccount {
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   carrier   Carrier    @relation(fields: [carrierId], references: [id], onDelete: Restrict)
   shipments Shipment[]
+  orders    Order[]
 
   @@unique([tenantId, carrierId, label])
   @@index([tenantId, status])

@@ -16,6 +16,8 @@ import type { PrismaClient } from '@prisma/client';
 import { PERMISSIONS, type OrderStatus } from '@ecomflow/shared';
 import { OrderWorkflowService } from '../../src/modules/orders/workflow/order-workflow.service';
 import { OrdersService } from '../../src/modules/orders/orders.service';
+import { ShipmentsService } from '../../src/modules/shipments/shipments.service';
+import { ShipmentsModule } from '../../src/modules/shipments/shipments.module';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { RequestContextStore } from '../../src/infra/context/request-context';
 import {
@@ -37,13 +39,15 @@ describe('workflow des commandes', () => {
   let context: TestContext;
   let workflow: OrderWorkflowService;
   let orders: OrdersService;
+  let shipments: ShipmentsService;
   let inventory: InventoryService;
 
   beforeAll(async () => {
     prisma = rawPrisma();
-    context = await buildTestModule();
+    context = await buildTestModule({ imports: [ShipmentsModule] });
     workflow = context.get(OrderWorkflowService);
     orders = context.get(OrdersService);
+    shipments = context.get(ShipmentsService);
     inventory = context.get(InventoryService);
   });
 
@@ -532,6 +536,161 @@ describe('workflow des commandes', () => {
       await move(tenant, order.orderId, 'IN_PREPARATION');
 
       await expect(move(tenant, order.orderId, 'READY_TO_SHIP')).rejects.toThrow();
+    });
+  });
+
+  // ==========================================================================
+  describe('dispatch : de confirmee a expediee en un geste', () => {
+    it('refuse une commande sans transporteur choisi', async () => {
+      // Le prerequis dur. Avant ce champ, l'expedition retombait
+      // silencieusement sur le compte par defaut de la boutique : une commande
+      // partait chez un livreur que personne n'avait choisi.
+      const { tenant, order } = await scenario();
+      await move(tenant, order.orderId, 'CONFIRMED');
+
+      const result = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        shipments.dispatchOrders({
+          tenantId: tenant.tenantId,
+          orderIds: [order.orderId],
+          membershipId: tenant.ownerMembershipId,
+          permissions: ALL_TENANT_PERMISSIONS,
+        }),
+      );
+
+      expect(result.archived).toBe(0);
+      expect(result.skipped).toHaveLength(1);
+      expect(result.skipped[0]?.message).toContain('transporteur');
+
+      // La commande n'a pas bouge : un refus ne laisse pas d'etat intermediaire.
+      const row = await prisma.order.findUniqueOrThrow({
+        where: { id: order.orderId },
+        select: { status: true },
+      });
+      expect(row.status).toBe('CONFIRMED');
+    });
+
+    it('traverse les etapes intermediaires au lieu de les sauter', async () => {
+      // L'ecran ne montre plus « en preparation » ni « prete a expedier », mais
+      // la machine a etats les traverse toujours : c'est ce qui garde
+      // l'historique exact et tout indicateur de duree utilisable.
+      const { tenant, order } = await scenario();
+      const carrier = await createCarrierAccount(prisma, tenant.tenantId);
+
+      await move(tenant, order.orderId, 'CONFIRMED');
+      await prisma.order.update({
+        where: { id: order.orderId },
+        data: { carrierAccountId: carrier.carrierAccountId },
+      });
+
+      const result = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        shipments.dispatchOrders({
+          tenantId: tenant.tenantId,
+          orderIds: [order.orderId],
+          membershipId: tenant.ownerMembershipId,
+          permissions: ALL_TENANT_PERMISSIONS,
+        }),
+      );
+
+      expect(result.archived).toBe(1);
+      expect(result.skipped).toHaveLength(0);
+
+      const row = await prisma.order.findUniqueOrThrow({
+        where: { id: order.orderId },
+        select: { status: true },
+      });
+      expect(row.status).toBe('SHIPPED');
+
+      const history = await prisma.orderStatusHistory.findMany({
+        where: { orderId: order.orderId },
+        select: { newStatus: true },
+      });
+      expect(history.map((entry) => entry.newStatus)).toEqual(
+        expect.arrayContaining(['IN_PREPARATION', 'READY_TO_SHIP', 'SHIPPED']),
+      );
+    });
+
+    it('enregistre les lignes preparees au lieu de contourner le garde', async () => {
+      // Le garde `REQUIRE_PREPARATION_COMPLETED` reste ACTIF. Cocher les lignes
+      // puis dispatcher EST l'affirmation qu'elles sont pretes ; le dispatch
+      // l'ecrit, et le garde la verifie.
+      const { tenant, order } = await scenario({ quantity: 4 });
+      const carrier = await createCarrierAccount(prisma, tenant.tenantId);
+
+      await move(tenant, order.orderId, 'CONFIRMED');
+      await prisma.order.update({
+        where: { id: order.orderId },
+        data: { carrierAccountId: carrier.carrierAccountId },
+      });
+
+      await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        shipments.dispatchOrders({
+          tenantId: tenant.tenantId,
+          orderIds: [order.orderId],
+          membershipId: tenant.ownerMembershipId,
+          permissions: ALL_TENANT_PERMISSIONS,
+        }),
+      );
+
+      const items = await prisma.orderItem.findMany({
+        where: { orderId: order.orderId },
+        select: { quantity: true, preparedQuantity: true },
+      });
+      for (const item of items) {
+        expect(item.preparedQuantity).toBe(item.quantity);
+      }
+    });
+
+    it('cree le colis chez le transporteur CHOISI, pas chez celui par defaut', async () => {
+      const { tenant, order } = await scenario();
+      const chosen = await createCarrierAccount(prisma, tenant.tenantId);
+
+      await move(tenant, order.orderId, 'CONFIRMED');
+      await prisma.order.update({
+        where: { id: order.orderId },
+        data: { carrierAccountId: chosen.carrierAccountId },
+      });
+
+      await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        shipments.dispatchOrders({
+          tenantId: tenant.tenantId,
+          orderIds: [order.orderId],
+          membershipId: tenant.ownerMembershipId,
+          permissions: ALL_TENANT_PERMISSIONS,
+        }),
+      );
+
+      const shipment = await prisma.shipment.findFirstOrThrow({
+        where: { orderId: order.orderId },
+        select: { carrierAccountId: true },
+      });
+      expect(shipment.carrierAccountId).toBe(chosen.carrierAccountId);
+    });
+
+    it('rend compte ligne par ligne sur une selection melangee', async () => {
+      // Une selection partiellement traitee est le cas NORMAL : l'agent doit
+      // savoir laquelle est passee et pourquoi l'autre ne l'est pas.
+      const { tenant, order: withCarrier } = await scenario();
+      const other = await scenario();
+      const carrier = await createCarrierAccount(prisma, tenant.tenantId);
+
+      await move(tenant, withCarrier.orderId, 'CONFIRMED');
+      await prisma.order.update({
+        where: { id: withCarrier.orderId },
+        data: { carrierAccountId: carrier.carrierAccountId },
+      });
+      await move(other.tenant, other.order.orderId, 'CONFIRMED');
+
+      const result = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        shipments.dispatchOrders({
+          tenantId: tenant.tenantId,
+          orderIds: [withCarrier.orderId],
+          membershipId: tenant.ownerMembershipId,
+          permissions: ALL_TENANT_PERMISSIONS,
+        }),
+      );
+
+      expect(result.archived).toBe(1);
+      expect(result.skipped).toHaveLength(0);
     });
   });
 
