@@ -84,6 +84,9 @@ export const GLOBAL_MODELS = [
   // `CarrierAccount`, lui bien scope.
   'CarrierCapability',
   'CarrierWilayaCoverage',
+  // Referentiel geographique national : identique pour toutes les boutiques,
+  // et lu avant meme qu'un tenant soit resolu (generation de gabarits, imports).
+  'Commune',
   // Deduplication des webhooks : doit avoir lieu AVANT la resolution du tenant.
   'ProcessedWebhook',
   // Fils de conversation WhatsApp : portes par WhatsappThread, deja scope.

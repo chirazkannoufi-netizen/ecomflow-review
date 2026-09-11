@@ -92,7 +92,11 @@
     "newOrder": "طلب جديد",
     "carriers": "شركات التوصيل",
     "collapseSidebar": "طيّ القائمة",
-    "expandSidebar": "بسط القائمة"
+    "expandSidebar": "بسط القائمة",
+    "processing": "المعالجة",
+    "followUp": "المتابعة",
+    "inDelivery": "قيد التوصيل",
+    "delivered": "مُسلَّم"
   },
   "orderStatus": {
     "NEW": "جديد",
@@ -455,7 +459,9 @@
     "failed": "تعذّر الإنشاء.",
     "customerNamePlaceholder": "سارة بن علي",
     "communePlaceholder": "باب الزوار",
-    "addressPlaceholder": "حي 1200 مسكن، عمارة ب4، الطابق الثالث"
+    "addressPlaceholder": "حي 1200 مسكن، عمارة ب4، الطابق الثالث",
+    "communePickWilayaFirst": "اختر الولاية أولاً",
+    "communeCount": "{count, plural, zero {لا بلدية مقترحة} one {بلدية واحدة مقترحة} two {بلديتان مقترحتان} few {# بلديات مقترحة} many {# بلدية مقترحة} other {# بلدية مقترحة}}"
   },
   "confirmation": {
     "title": "مركز التأكيد",

@@ -41,6 +41,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Package,
+  PackageCheck,
   Phone,
   Plug,
   PlusCircle,
@@ -55,6 +56,7 @@ import {
   UserCog,
   Users,
   Warehouse,
+  Workflow,
   type LucideIcon,
 } from 'lucide-react';
 import { PERMISSIONS } from '@ecomflow/shared';
@@ -80,14 +82,24 @@ interface NavEntry {
   /** Permission requise pour afficher l'entree. */
   readonly permission?: string;
   /** Cle du compteur d'alerte a afficher en pastille. */
-  readonly alertKey?:
-    | 'pendingConfirmation'
-    | 'lowStock'
-    | 'failedImports'
-    | 'pendingDuplicates'
-    | 'inPreparation'
-    | 'inReturn';
+  readonly alertKey?: AlertKey;
+  /**
+   * Sous-entrees, pour les regroupements par etape de flux.
+   *
+   * Chaque enfant garde SA permission : le parent n'en impose aucune et
+   * s'affiche des qu'un enfant au moins est autorise. C'est ce qui permet de
+   * regrouper des ecrans sans retirer l'acces a un role qui n'en voit qu'un.
+   */
+  readonly children?: readonly NavEntry[];
 }
+
+type AlertKey =
+  | 'pendingConfirmation'
+  | 'lowStock'
+  | 'failedImports'
+  | 'pendingDuplicates'
+  | 'inPreparation'
+  | 'inReturn';
 
 /**
  * Navigation, dans les quatre groupes du systeme de design (Suite UI/UX v1.0,
@@ -97,13 +109,27 @@ interface NavEntry {
  * c'est ce qui permet a la barre laterale de basculer en arabe sans dupliquer
  * la structure du menu.
  *
- * QUATRE ECRANS SONT ENCORE A CONSTRUIRE — `href: null`.
- *   Suivi, Statistiques, Notifications et Journal d'audit figurent au systeme
- *   de design mais n'ont pas encore de route. Ils sont listes ICI plutot
+ * DES ENTREES A DEUX NIVEAUX, ET POURQUOI PAS DES ONGLETS
+ *   « Traitement » et « Suivi » regroupent des ecrans par ETAPE DU FLUX, ce que
+ *   la liste plate ne disait pas. Mais le regroupement est une affaire
+ *   d'AFFICHAGE : chaque enfant garde sa route et SA PERMISSION.
+ *
+ *   Les fondre en onglets d'un seul ecran aurait coute l'acces a un role
+ *   entier. Un preparateur a `PREPARATION_MANAGE` sans `CONFIRMATION_MANAGE` :
+ *   des onglets sous un parent « Centre de confirmation » lui auraient fait
+ *   disparaitre le seul ecran ou il travaille. Ici, le parent s'affiche des
+ *   qu'UN enfant est autorise, et ne montre que ceux-la.
+ *
+ *   C'est aussi pourquoi les parents ne s'appellent pas « Centre de
+ *   confirmation » : un intitule qui nomme l'etape d'un seul enfant ment aux
+ *   autres.
+ *
+ * LES ECRANS NON CONSTRUITS RESTENT LISTES — `href: null`.
+ *   Suivi, Livre, Statistiques, Notifications et Journal d'audit figurent au
+ *   systeme de design sans avoir encore de route. Ils sont listes ICI plutot
  *   qu'omis : la place qu'ils occupent dans la hierarchie fait partie de la
- *   maquette, et un menu qui se reorganise a chaque ecran livre desoriente
- *   plus qu'il n'aide. Ils s'affichent estompes et non cliquables ; il suffira
- *   de renseigner `href` le jour ou la page existe.
+ *   maquette, et un menu qui se reorganise a chaque ecran livre desoriente plus
+ *   qu'il n'aide. Ils s'affichent estompes et non cliquables.
  */
 const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEntry[] }[] = [
   {
@@ -111,13 +137,6 @@ const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEntry[] }[
     entries: [
       { href: '/', labelKey: 'dashboard', icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD_VIEW },
       { href: '/commandes', labelKey: 'orders', icon: ClipboardList, permission: PERMISSIONS.ORDERS_READ },
-      {
-        href: '/confirmation',
-        labelKey: 'confirmation',
-        icon: Phone,
-        permission: PERMISSIONS.CONFIRMATION_MANAGE,
-        alertKey: 'pendingConfirmation',
-      },
       { href: '/clients', labelKey: 'customers', icon: Users, permission: PERMISSIONS.CUSTOMERS_READ },
     ],
   },
@@ -133,31 +152,67 @@ const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEntry[] }[
         alertKey: 'lowStock',
       },
       {
-        href: '/preparation',
-        labelKey: 'preparation',
-        icon: Package,
-        permission: PERMISSIONS.PREPARATION_MANAGE,
-        alertKey: 'inPreparation',
+        // Parent SANS permission propre : il apparait des qu'un enfant est
+        // autorise. Un preparateur y verra « Preparation » et « Expeditions »,
+        // un agent de confirmation y verra « Confirmation », et ni l'un ni
+        // l'autre ne perd son ecran.
+        href: null,
+        labelKey: 'processing',
+        icon: Workflow,
+        children: [
+          {
+            href: '/confirmation',
+            labelKey: 'confirmation',
+            icon: Phone,
+            permission: PERMISSIONS.CONFIRMATION_MANAGE,
+            alertKey: 'pendingConfirmation',
+          },
+          {
+            href: '/preparation',
+            labelKey: 'preparation',
+            icon: Package,
+            permission: PERMISSIONS.PREPARATION_MANAGE,
+            alertKey: 'inPreparation',
+          },
+          {
+            href: '/expeditions',
+            labelKey: 'shipments',
+            icon: Truck,
+            permission: PERMISSIONS.SHIPMENTS_READ,
+          },
+        ],
       },
       {
-        href: '/expeditions',
-        labelKey: 'shipments',
-        icon: Truck,
-        permission: PERMISSIONS.SHIPMENTS_READ,
+        href: null,
+        labelKey: 'followUp',
+        icon: MapPin,
+        children: [
+          {
+            href: null,
+            labelKey: 'inDelivery',
+            icon: MapPin,
+            permission: PERMISSIONS.SHIPMENTS_TRACK,
+          },
+          {
+            href: null,
+            labelKey: 'delivered',
+            icon: PackageCheck,
+            permission: PERMISSIONS.SHIPMENTS_TRACK,
+          },
+          {
+            href: '/retours',
+            labelKey: 'returns',
+            icon: Undo2,
+            permission: PERMISSIONS.RETURNS_READ,
+            alertKey: 'inReturn',
+          },
+        ],
       },
       {
         href: '/transporteurs',
         labelKey: 'carriers',
         icon: Truck,
         permission: PERMISSIONS.SHIPMENTS_READ,
-      },
-      { href: null, labelKey: 'tracking', icon: MapPin, permission: PERMISSIONS.SHIPMENTS_TRACK },
-      {
-        href: '/retours',
-        labelKey: 'returns',
-        icon: Undo2,
-        permission: PERMISSIONS.RETURNS_READ,
-        alertKey: 'inReturn',
       },
     ],
   },
@@ -316,6 +371,181 @@ function StoreSwitcher({ tenant }: { tenant: SessionTenant | null }) {
 }
 
 /**
+ * Une entree de navigation, avec ses enfants eventuels.
+ *
+ * POURQUOI UN COMPOSANT PLUTOT QU'UNE BOUCLE IMBRIQUEE
+ *   Le rendu d'une entree porte huit decisions — actif, pastille, repli,
+ *   infobulle, ecran non construit, indentation... Les recopier pour le second
+ *   niveau ferait diverger les deux, et le premier defaut visible serait
+ *   l'etat actif : un enfant selectionne sans que son parent le montre.
+ *
+ * REPLIEE, LA HIERARCHIE S'APLATIT
+ *   A 4 rem, un parent inerte et un retrait ne veulent plus rien dire. Les
+ *   enfants remontent donc au meme rang que les autres icones : ce qui compte
+ *   alors est d'atteindre l'ecran, pas de lire l'organigramme.
+ */
+function NavItem({
+  entry,
+  depth,
+  pathname,
+  alerts,
+  collapsed,
+  onNavigate,
+}: {
+  entry: NavEntry;
+  depth: number;
+  pathname: string;
+  alerts: AlertCounts | undefined;
+  collapsed: boolean;
+  onNavigate: () => void;
+}) {
+  const tNav = useTranslations('nav');
+
+  const active =
+    entry.href === null
+      ? false
+      : entry.href === '/'
+        ? pathname === '/'
+        : pathname.startsWith(entry.href);
+
+  const count = entry.alertKey ? (alerts?.[entry.alertKey] ?? 0) : 0;
+  const Icon = entry.icon;
+  const label = tNav(entry.labelKey);
+
+  // Un parent replie n'a plus de role : ses enfants deviennent des entrees de
+  // premier rang, et lui-meme disparait pour ne pas occuper une ligne muette.
+  if (entry.children) {
+    const childAlerts = entry.children.reduce(
+      (total, child) => total + (child.alertKey ? (alerts?.[child.alertKey] ?? 0) : 0),
+      0,
+    );
+
+    return (
+      <>
+        <li className={collapsed ? 'lg:hidden' : undefined}>
+          <div className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-ink-2">
+            <Icon className="h-4 w-4 shrink-0 text-muted" strokeWidth={1.6} aria-hidden="true" />
+            <span className="flex-1 truncate">{label}</span>
+            {/* Le parent porte la SOMME des alertes de ses enfants : replie ou
+                non, il doit dire qu'il y a quelque chose a voir dessous. */}
+            {childAlerts > 0 ? (
+              <span className="tabular rounded-full bg-peach px-1.5 py-0.5 text-[11px] font-bold text-peach-deep">
+                {childAlerts > 99 ? '99+' : childAlerts}
+              </span>
+            ) : null}
+          </div>
+        </li>
+
+        {entry.children.map((child) => (
+          <NavItem
+            key={child.labelKey}
+            entry={child}
+            depth={depth + 1}
+            pathname={pathname}
+            alerts={alerts}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+          />
+        ))}
+      </>
+    );
+  }
+
+  const inner = (
+    <>
+      <span className="relative shrink-0">
+        <Icon
+          className={clsx('h-4 w-4', active ? 'text-lime' : 'text-muted')}
+          strokeWidth={1.6}
+          aria-hidden="true"
+        />
+        {/* Repliee, la pastille chiffree n'a plus de place a cote du libelle :
+            elle devient un point pose sur l'icone. Le NOMBRE se perd, mais
+            l'existence d'une alerte se voit — et c'est elle qui decide si l'on
+            deplie. Le compte exact reste dans l'infobulle. */}
+        {collapsed && count > 0 ? (
+          <span
+            className="absolute -end-1 -top-1 hidden h-2 w-2 rounded-full bg-peach ring-2 ring-surface lg:block"
+            aria-hidden="true"
+          />
+        ) : null}
+      </span>
+
+      <span className={clsx('flex-1 truncate', collapsed && 'lg:hidden')}>{label}</span>
+
+      {entry.href === null ? (
+        <span
+          className={clsx(
+            'rounded-full bg-canvas px-1.5 py-0.5 text-[10px] font-bold text-muted',
+            collapsed && 'lg:hidden',
+          )}
+        >
+          {tNav('soon')}
+        </span>
+      ) : count > 0 ? (
+        <span
+          className={clsx(
+            'tabular rounded-full px-1.5 py-0.5 text-[11px] font-bold',
+            active ? 'bg-lime text-ink' : 'bg-peach text-peach-deep',
+            collapsed && 'lg:hidden',
+          )}
+        >
+          {count > 99 ? '99+' : count}
+        </span>
+      ) : null}
+    </>
+  );
+
+  // Repliee, l'icone seule ne dit pas ou elle mene : l'infobulle native porte
+  // le libelle, et le compte quand il y en a un.
+  const collapsedTitle =
+    entry.href === null
+      ? `${label} — ${tNav('soon')}`
+      : count > 0
+        ? `${label} (${count})`
+        : label;
+
+  // Le retrait des enfants disparait au repli : `ps-*` n'aurait plus de sens
+  // sur une colonne de 4 rem, ou les icones sont centrees.
+  const indent = depth > 0 && !collapsed ? 'ps-7' : undefined;
+
+  return (
+    <li>
+      {entry.href === null ? (
+        // Ecran pas encore construit : rendu en <span> et non en <a> desactive.
+        // Un lien sans destination reste focusable au clavier et annonce
+        // « lien » aux lecteurs d'ecran, promettant une navigation qui n'existe
+        // pas.
+        <span
+          className={clsx(
+            'flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-muted opacity-60',
+            indent,
+            collapsed && 'lg:justify-center lg:px-0',
+          )}
+          title={collapsed ? collapsedTitle : tNav('soonHint')}
+        >
+          {inner}
+        </span>
+      ) : (
+        <Link
+          href={entry.href}
+          onClick={onNavigate}
+          title={collapsed ? collapsedTitle : undefined}
+          className={clsx(
+            'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors',
+            active ? 'bg-ink text-white' : 'text-ink-2 hover:bg-canvas',
+            indent,
+            collapsed && 'lg:justify-center lg:px-0',
+          )}
+        >
+          {inner}
+        </Link>
+      )}
+    </li>
+  );
+}
+
+/**
  * Mot-symbole EcomFlow, en deux tons.
  *
  * POURQUOI DEUX SPANS ET NON UNE CHAINE
@@ -416,14 +646,34 @@ export function AppShell({ children }: { children: ReactNode }) {
     refetchInterval: 60_000,
   });
 
-  const sections = useMemo(
-    () =>
-      NAVIGATION.map((section) => ({
-        ...section,
-        entries: section.entries.filter((entry) => !entry.permission || can(entry.permission)),
-      })).filter((section) => section.entries.length > 0),
-    [can],
-  );
+  /**
+   * Navigation filtree par les permissions, EN PROFONDEUR.
+   *
+   * Un parent de regroupement n'a pas de permission propre : il survit tant
+   * qu'au moins un de ses enfants est autorise, et ne porte que ceux-la. C'est
+   * ce qui permet a « Traitement » de s'afficher a la fois pour un agent de
+   * confirmation et pour un preparateur, sans montrer a l'un l'ecran de
+   * l'autre. Un parent dont tous les enfants tombent disparait entierement :
+   * une rubrique vide promettrait un contenu inaccessible.
+   */
+  const sections = useMemo(() => {
+    const keep = (entry: NavEntry): NavEntry | null => {
+      if (entry.children) {
+        const children = entry.children.filter(
+          (child) => !child.permission || can(child.permission),
+        );
+        return children.length > 0 ? { ...entry, children } : null;
+      }
+      return !entry.permission || can(entry.permission) ? entry : null;
+    };
+
+    return NAVIGATION.map((section) => ({
+      ...section,
+      entries: section.entries
+        .map(keep)
+        .filter((entry): entry is NavEntry => entry !== null),
+    })).filter((section) => section.entries.length > 0);
+  }, [can]);
 
   // Le motif de blocage vient du serveur EN FRANCAIS : il est retraduit a
   // partir du statut, sans quoi le bandeau le plus visible de l'application
@@ -521,108 +771,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <div className="mx-auto mb-2 hidden h-px w-6 bg-line lg:block" aria-hidden="true" />
               ) : null}
               <ul className="space-y-0.5">
-                {section.entries.map((entry) => {
-                  const active =
-                    entry.href === null
-                      ? false
-                      : entry.href === '/'
-                        ? pathname === '/'
-                        : pathname.startsWith(entry.href);
-                  const count = entry.alertKey ? (alerts?.[entry.alertKey] ?? 0) : 0;
-                  const Icon = entry.icon;
-
-                  const label = tNav(entry.labelKey);
-
-                  const inner = (
-                    <>
-                      <span className="relative shrink-0">
-                        <Icon
-                          className={clsx('h-4 w-4', active ? 'text-lime' : 'text-muted')}
-                          strokeWidth={1.6}
-                          aria-hidden="true"
-                        />
-                        {/* Repliee, la pastille chiffree n'a plus de place a
-                            cote du libelle : elle devient un point pose sur
-                            l'icone. Le NOMBRE se perd, mais l'existence d'une
-                            alerte se voit — et c'est elle qui decide si l'on
-                            deplie. Le compte exact reste dans le titre. */}
-                        {collapsed && count > 0 ? (
-                          <span
-                            className="absolute -end-1 -top-1 hidden h-2 w-2 rounded-full bg-peach ring-2 ring-surface lg:block"
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                      </span>
-
-                      <span className={clsx('flex-1 truncate', collapsed && 'lg:hidden')}>
-                        {label}
-                      </span>
-
-                      {entry.href === null ? (
-                        <span
-                          className={clsx(
-                            'rounded-full bg-canvas px-1.5 py-0.5 text-[10px] font-bold text-muted',
-                            collapsed && 'lg:hidden',
-                          )}
-                        >
-                          {tNav('soon')}
-                        </span>
-                      ) : count > 0 ? (
-                        <span
-                          className={clsx(
-                            'tabular rounded-full px-1.5 py-0.5 text-[11px] font-bold',
-                            active ? 'bg-lime text-ink' : 'bg-peach text-peach-deep',
-                            collapsed && 'lg:hidden',
-                          )}
-                        >
-                          {count > 99 ? '99+' : count}
-                        </span>
-                      ) : null}
-                    </>
-                  );
-
-                  // Repliee, l'icone seule ne dit pas ou elle mene : l'infobulle
-                  // native porte le libelle, et le compte quand il y en a un.
-                  const collapsedTitle =
-                    entry.href === null
-                      ? `${label} — ${tNav('soon')}`
-                      : count > 0
-                        ? `${label} (${count})`
-                        : label;
-
-                  return (
-                    <li key={entry.labelKey}>
-                      {entry.href === null ? (
-                        // Ecran pas encore construit : rendu en <span> et non en
-                        // <a> desactive. Un lien sans destination reste focusable
-                        // au clavier et annonce « lien » aux lecteurs d'ecran,
-                        // promettant une navigation qui n'existe pas.
-                        <span
-                          className={clsx(
-                            'flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-muted opacity-60',
-                            collapsed && 'lg:justify-center lg:px-0',
-                          )}
-                          title={collapsed ? collapsedTitle : tNav('soonHint')}
-                        >
-                          {inner}
-                        </span>
-                      ) : (
-                        <Link
-                          href={entry.href}
-                          onClick={() => setSidebarOpen(false)}
-                          title={collapsed ? collapsedTitle : undefined}
-                          className={clsx(
-                            'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors',
-                            active ? 'bg-ink text-white' : 'text-ink-2 hover:bg-canvas',
-                            collapsed && 'lg:justify-center lg:px-0',
-                          )}
-                        >
-                          {inner}
-                        </Link>
-                      )}
-                    </li>
-                  );
-                })}
+                {section.entries.map((entry) => (
+                  <NavItem
+                    key={entry.labelKey}
+                    entry={entry}
+                    depth={0}
+                    pathname={pathname}
+                    alerts={alerts}
+                    collapsed={collapsed}
+                    onNavigate={() => setSidebarOpen(false)}
+                  />
+                ))}
               </ul>
             </div>
           ))}

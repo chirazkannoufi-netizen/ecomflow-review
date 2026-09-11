@@ -30,6 +30,7 @@ import {
   isPlatformPermission,
 } from '@ecomflow/shared';
 import { seedDemoTenant } from './seed-demo';
+import { COMMUNES } from './data/communes';
 
 const ARGON2_OPTIONS = {
   algorithm: Algorithm.Argon2id,
@@ -177,6 +178,9 @@ export async function runSeed(
 
   const plans = await seedPlans(prisma);
   log(`  Plans tarifaires      : ${plans} disponibles`);
+
+  const communes = await seedCommunes(prisma);
+  log(`  Communes              : ${communes} rattachees a leur wilaya`);
 
   let demoSlug: string | null = null;
   if (options.withDemo) {
@@ -617,6 +621,35 @@ const PLANS = [
     sortOrder: 3,
   },
 ] as const;
+
+/**
+ * Referentiel des communes.
+ *
+ * ECRITURE EN LOT, ET IDEMPOTENTE
+ *   Mille cinq cent quarante et un `upsert` successifs prendraient plusieurs
+ *   dizaines de secondes a chaque amorcage — donc a chaque suite de tests
+ *   d'integration. On procede en une lecture + un `createMany` du complement :
+ *   le seed reste rejouable, et ne coute plus rien des la seconde fois.
+ *
+ *   `skipDuplicates` protege la course entre deux amorcages concurrents ; la
+ *   contrainte unique `(wilaya_code, search_name)` reste l'autorite.
+ */
+async function seedCommunes(prisma: PrismaClient): Promise<number> {
+  const existing = await prisma.commune.findMany({
+    select: { wilayaCode: true, searchName: true },
+  });
+
+  const known = new Set(existing.map((row) => `${row.wilayaCode}:${row.searchName}`));
+  const missing = COMMUNES.filter(
+    (commune) => !known.has(`${commune.wilayaCode}:${commune.searchName}`),
+  );
+
+  if (missing.length > 0) {
+    await prisma.commune.createMany({ data: [...missing], skipDuplicates: true });
+  }
+
+  return COMMUNES.length;
+}
 
 async function seedPlans(prisma: PrismaClient): Promise<number> {
   for (const plan of PLANS) {

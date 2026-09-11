@@ -92,7 +92,11 @@
     "newOrder": "Nouvelle commande",
     "carriers": "Transporteurs",
     "collapseSidebar": "Replier le menu",
-    "expandSidebar": "Déplier le menu"
+    "expandSidebar": "Déplier le menu",
+    "processing": "Traitement",
+    "followUp": "Suivi",
+    "inDelivery": "En livraison",
+    "delivered": "Livré"
   },
   "orderStatus": {
     "NEW": "Nouvelle",
@@ -455,7 +459,9 @@
     "failed": "Création impossible.",
     "customerNamePlaceholder": "Sara Benali",
     "communePlaceholder": "Bab Ezzouar",
-    "addressPlaceholder": "Cite 1200 Logements, Bat B4, 3e étage"
+    "addressPlaceholder": "Cite 1200 Logements, Bat B4, 3e étage",
+    "communePickWilayaFirst": "Choisissez d'abord la wilaya",
+    "communeCount": "{count, plural, one {# commune proposée} other {# communes proposées}}"
   },
   "confirmation": {
     "title": "Centre de confirmation",

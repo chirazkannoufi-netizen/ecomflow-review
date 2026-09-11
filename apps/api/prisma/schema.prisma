@@ -1351,6 +1351,53 @@ model OrderDuplicateFlag {
 
 /// Transporteur supporte par la plateforme. Le catalogue est global ; chaque
 /// boutique active les transporteurs qu'elle utilise via `CarrierAccount`.
+/// Commune algerienne, rattachee a sa wilaya par le code administratif.
+///
+/// POURQUOI EN BASE, ALORS QUE LES WILAYAS SONT EN CODE
+///   Les deux referentiels n'ont pas le meme usage, et c'est l'usage qui decide
+///   ou ils vivent.
+///
+///   Les 58 wilayas sont lues a CHAQUE ligne d'import, pour resoudre
+///   « Algiers », « BBA » ou « Bejaia » en un code. Ce travail doit etre
+///   synchrone et local : le faire passer par une requete transformerait chaque
+///   import de mille lignes en mille allers-retours. Elles restent donc dans
+///   `@ecomflow/shared` (D-018).
+///
+///   Les 1541 communes, elles, servent a CHOISIR dans une liste et a retrouver
+///   un libelle. Embarquees dans le paquet partage — qui est compile en
+///   CommonJS, donc mal elague — elles partiraient dans le bundle de CHAQUE
+///   page du produit, y compris celles qui n'ont pas de champ adresse.
+///
+/// CE MODELE NE VALIDE RIEN
+///   D-018 refuse de rejeter une commande parce que sa commune ne figure pas
+///   dans une liste : les transliterations varient trop d'un transporteur a
+///   l'autre pour qu'une absence signifie une erreur. Ce referentiel ASSISTE la
+///   saisie (il remplit une liste deroulante) ; il ne ferme pas la porte a une
+///   commune qu'il ne connait pas.
+model Commune {
+  id         String  @id @default(uuid(7)) @db.Uuid
+  /// Code administratif de la wilaya de rattachement, 1 a 58.
+  wilayaCode Int     @map("wilaya_code")
+  /// Libelle affichable : « Ouled Djellal ».
+  name       String
+  /// Forme normalisee, produite par `normalizeGeoName` de `@ecomflow/shared` :
+  /// minuscules, sans accents ni separateurs — « Ouled Djellal » devient
+  /// « ouleddjellal ».
+  ///
+  /// C'est la MEME fonction qui normalise le libelle saisi avant la recherche.
+  /// Deux regles differentes — l'une a la generation, l'autre a la lecture — ne
+  /// se rencontreraient jamais, et la table paraitrait vide alors qu'elle est
+  /// pleine.
+  searchName String  @map("search_name")
+  isActive   Boolean @default(true) @map("is_active")
+
+  /// Un meme libelle normalise ne peut pas exister deux fois dans une wilaya —
+  /// mais le meme nom dans DEUX wilayas est frequent et legitime.
+  @@unique([wilayaCode, searchName])
+  @@index([wilayaCode, name])
+  @@map("communes")
+}
+
 model Carrier {
   id          String   @id @default(uuid(7)) @db.Uuid
   /// Code du connecteur (YALIDINE, ZR_EXPRESS, ECOTRACK, MOCK...).
