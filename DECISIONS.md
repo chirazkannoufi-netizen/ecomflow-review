@@ -2458,6 +2458,41 @@ où elles recevront leur route, pas avant.
 
 ---
 
+## D-066 — Une capacité déclarée n'est pas une capacité vérifiée
+
+**Date** : 13/09/2026 · **Statut** : appliquée
+
+**Contexte** — Le catalogue contient quatre transporteurs, dont deux au statut
+`PLANNED` : Ecotrack et ZR Express. Leur matrice de capacités (D-049) était
+rendue à l'identique de celle des transporteurs implémentés — mêmes pastilles
+vertes, même typographie.
+
+**Le problème, chiffré** — Ecotrack déclare **douze** capacités, dont la poussée
+temps réel des tentatives, des livraisons et des échecs. Yalidine — le seul
+transporteur réellement implémenté et utilisé — n'en pousse **aucune** : tout son
+suivi passe par le relevé périodique. À l'écran, Ecotrack paraissait donc *mieux
+intégré* que le seul connecteur qui fonctionne.
+
+Or aucune ligne de cette matrice n'a été confrontée à l'API d'Ecotrack, pour une
+raison simple : **aucun adaptateur n'existe**. Ce sont des déclarations de
+documentation, recopiées.
+
+**Ce qui protégeait déjà, et ce qui ne protégeait pas** — Le back-end refusait
+déjà explicitement : `CarrierRegistry.get()` lève `NOT_IMPLEMENTED` pour un code
+sans adaptateur, plutôt que de laisser croire à une intégration. Rien ne pouvait
+donc être *tenté* avec un transporteur prévu. Mais l'écran, lui, le *promettait*
+— et c'est sur l'écran que se décide le choix d'un transporteur.
+
+**Décision** — La matrice rend désormais **trois** états et non deux : supporté
+et vérifié (pastille pleine), supporté mais seulement **déclaré** (pastille
+creuse, mention « (déclaré) », texte estompé), non supporté. Un bandeau au-dessus
+dit explicitement qu'aucun connecteur n'existe et que rien n'a été vérifié.
+
+La distinction n'est pas reléguée au badge « Prévu » de l'en-tête : elle est
+portée par la matrice elle-même, là où la question se pose vraiment. C'est le
+principe de D-049 poussé d'un cran — ne jamais afficher une action non supportée
+devient : **ne jamais afficher comme acquis ce qui n'a pas été mesuré**.
+
 ---
 
 *Ce journal est mis à jour à chaque décision structurante. Les entrées ne sont

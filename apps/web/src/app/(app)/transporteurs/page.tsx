@@ -184,7 +184,10 @@ export default function CarriersPage() {
 
                   {expanded === carrier.id ? (
                     <div className="space-y-3 border-t border-line bg-slate-50/60 px-3 py-3">
-                      <CapabilityMatrix capabilities={carrier.capabilities} />
+                      <CapabilityMatrix
+                        capabilities={carrier.capabilities}
+                        implemented={carrier.implementationStatus === 'AVAILABLE'}
+                      />
                       <CoveragePanel carrierId={carrier.id} canManage={canManage} />
                       {accounts.map((account) => (
                         <AccountSettings
@@ -207,7 +210,28 @@ export default function CarriersPage() {
 
 // ---------------------------------------------------------------------------
 
-function CapabilityMatrix({ capabilities }: { capabilities: Record<string, boolean> | null }) {
+/**
+ * La matrice de capacites — et ce qu'elle vaut selon le transporteur.
+ *
+ * DECLARE N'EST PAS MESURE
+ *   Pour un transporteur PREVU, aucun connecteur n'existe : sa matrice reprend
+ *   ce que sa documentation annonce, sans qu'une seule ligne ait ete confrontee
+ *   a son API. Ecotrack declare ainsi douze capacites, dont la poussee temps
+ *   reel des tentatives — davantage que Yalidine, qui est le seul transporteur
+ *   reellement implemente.
+ *
+ *   Les rendre avec la meme pastille verte reviendrait a promettre une parite
+ *   qui n'a jamais ete verifiee. La difference n'est donc pas releguee au seul
+ *   badge « Prevu » du bandeau : elle est portee par la matrice elle-meme, ou
+ *   la question se pose vraiment.
+ */
+function CapabilityMatrix({
+  capabilities,
+  implemented,
+}: {
+  capabilities: Record<string, boolean> | null;
+  implemented: boolean;
+}) {
   const t = useTranslations('carriers');
 
   if (!capabilities) {
@@ -219,7 +243,9 @@ function CapabilityMatrix({ capabilities }: { capabilities: Record<string, boole
       <h4 className="text-xs font-medium uppercase tracking-wide text-slate-500">
         {t('capabilities')}
       </h4>
-      <p className="mb-1.5 text-xs text-slate-500">{t('capabilityHint')}</p>
+      <p className="mb-1.5 text-xs text-slate-500">
+        {implemented ? t('capabilityHint') : t('capabilityDeclaredHint')}
+      </p>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {CAPABILITY_GROUPS.map((group) => (
@@ -230,18 +256,28 @@ function CapabilityMatrix({ capabilities }: { capabilities: Record<string, boole
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const supported = capabilities[item] ?? false;
+                // Trois rendus, pas deux : supporte et verifie, supporte mais
+                // seulement DECLARE, non supporte. Le deuxieme prend une
+                // pastille creuse — visible, mais jamais lue comme un acquis.
+                const dot = !supported
+                  ? 'bg-slate-300'
+                  : implemented
+                    ? 'bg-success'
+                    : 'border border-slate-400 bg-transparent';
                 return (
                   <li key={item} className="flex items-center gap-1.5 text-xs">
                     <span
                       aria-hidden
-                      className={
-                        supported
-                          ? 'inline-block h-1.5 w-1.5 rounded-full bg-success'
-                          : 'inline-block h-1.5 w-1.5 rounded-full bg-slate-300'
-                      }
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${dot}`}
                     />
-                    <span className={supported ? 'text-slate-800' : 'text-slate-400'}>
+                    <span
+                      className={supported && implemented ? 'text-slate-800' : 'text-slate-400'}
+                      title={supported && !implemented ? t('capabilityDeclaredOnly') : undefined}
+                    >
                       {t(`capabilityNames.${item}`)}
+                      {supported && !implemented ? (
+                        <span className="ms-1 text-slate-400">{t('declaredMark')}</span>
+                      ) : null}
                     </span>
                   </li>
                 );

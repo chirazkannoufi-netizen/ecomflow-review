@@ -1527,7 +1527,10 @@
     "stockHeldByCourier": "Le transporteur détient le stock",
     "stockHeldByCourierHint": "La marchandise est déjà chez lui : il n'y a pas d'enlèvement à organiser.",
     "lastCheck": "Dernière vérification : {date}",
-    "capabilityHint": "Une action que le transporteur ne sait pas faire n'est pas proposée ailleurs dans le produit."
+    "capabilityHint": "Une action que le transporteur ne sait pas faire n'est pas proposée ailleurs dans le produit.",
+    "capabilityDeclaredHint": "Aucun connecteur n'existe encore pour ce transporteur : cette matrice reprend ce que sa documentation annonce, sans qu'aucune ligne ait été confrontée à son API. Rien n'y est vérifié.",
+    "capabilityDeclaredOnly": "Capacité annoncée par le transporteur, jamais testée chez nous.",
+    "declaredMark": "(déclaré)"
   },
   "bulk": {
     "selectAll": "Tout sélectionner sur cette page",
