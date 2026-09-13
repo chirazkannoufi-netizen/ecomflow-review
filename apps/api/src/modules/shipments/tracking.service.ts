@@ -37,6 +37,7 @@ import type { PrismaTransactionClient } from '../../infra/prisma/prisma.service'
 import { isUniqueConstraintError } from '../../infra/prisma/prisma.service';
 import { OutboxService, DOMAIN_EVENTS } from '../events/outbox.service';
 import { OrderWorkflowService } from '../orders/workflow/order-workflow.service';
+import { ReturnsService } from '../returns/returns.service';
 import { CarrierRegistry } from './carriers/carrier.registry';
 import type { TrackingEvent } from './carriers/carrier-adapter.interface';
 
@@ -78,6 +79,7 @@ export class TrackingService {
     @InjectPrisma() private readonly prisma: PrismaClientExtended,
     private readonly registry: CarrierRegistry,
     private readonly workflow: OrderWorkflowService,
+    private readonly returns: ReturnsService,
     private readonly outbox: OutboxService,
     private readonly encryption: EncryptionService,
     private readonly clock: ClockService,
@@ -341,6 +343,12 @@ export class TrackingService {
     await this.prisma.$transaction(async (rawTx) => {
       const tx = rawTx as PrismaTransactionClient;
 
+      // L'ENCAISSEMENT VIENT DU DERNIER EVENEMENT QUI EN PORTE UN, pas du
+      // dernier evenement tout court : le reversement est souvent annonce
+      // AVANT une mise a jour de statut sans rapport, et prendre le dernier
+      // evenement effacerait le montant deja connu.
+      const collection = [...ordered].reverse().find((event) => event.collection)?.collection;
+
       await tx.shipment.update({
         where: { id: shipmentId },
         data: {
@@ -350,6 +358,13 @@ export class TrackingService {
           lastSyncedAt: this.clock.now(),
           errorCode: null,
           errorMessage: null,
+          ...(collection
+            ? {
+                collectedCentimes: collection.amountCentimes,
+                collectedAt: collection.collectedAt,
+                remittanceReference: collection.reference ?? null,
+              }
+            : {}),
         },
       });
 
@@ -380,6 +395,39 @@ export class TrackingService {
               },
             });
             orderTransition = { from: transition.from, to: transition.to };
+
+            // UN RETOUR SIGNALE PAR LE TRANSPORTEUR DOIT EXISTER COMME RETOUR.
+            //   Jusqu'ici, l'evenement faisait passer la commande en RETOURNEE
+            //   et s'arretait la : l'ecran /retours restait vide pendant que la
+            //   commande affichait « retournee ». La marchandise revenait
+            //   physiquement sans que personne n'ait a decider de son sort —
+            //   remise en vente ou quarantaine — parce qu'aucun dossier ne le
+            //   demandait.
+            //
+            //   `createReturn` est idempotent : il rend le retour ouvert
+            //   existant plutot que d'en creer un second. Un webhook rejoue,
+            //   ou un sondage qui repasse sur le meme evenement, reste donc
+            //   inoffensif.
+            if (transition.to === 'RETURNED') {
+              await this.returns.createReturn(
+                {
+                  tenantId,
+                  orderId: shipment.orderId,
+                  shipmentId,
+                  // `OTHER` et non un motif precis : le transporteur signale
+                  // QU'IL rend le colis, rarement POURQUOI. Choisir
+                  // « client absent » ou « client a refuse » a sa place
+                  // inventerait une cause, et fausserait la repartition des
+                  // motifs de retour — que le commercant lit pour decider quoi
+                  // corriger. Le libelle brut du transporteur est conserve, et
+                  // un humain affinera au controle.
+                  reason: 'OTHER',
+                  reasonDetail: `Signale par ${shipment.carrierCode} : ${latest.providerStatus}`,
+                  membershipId: null,
+                },
+                tx,
+              );
+            }
           } catch (error) {
             // Une transition refusee n'est pas une anomalie : le transporteur
             // peut annoncer « livre » sur une commande deja annulee cote

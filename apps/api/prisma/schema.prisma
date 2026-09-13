@@ -1693,6 +1693,31 @@ model Shipment {
   costCentimes     Int?           @map("cost_centimes")
   weightGrams      Int?           @map("weight_grams")
 
+  // --- Encaissement (paiement a la livraison) ------------------------------
+  //
+  // « LIVRE » NE VEUT PAS DIRE « PAYE ».
+  //   C'est la distinction la plus couteuse du commerce en paiement a la
+  //   livraison : un colis remis au client ne devient de l'argent qu'au moment
+  //   ou le transporteur reverse la somme. Entre les deux, il peut s'ecouler
+  //   des semaines — et c'est la que disparaissent les montants qu'une boutique
+  //   ne reclame jamais, faute de savoir lesquels manquent.
+  //
+  // TROIS ETATS, ET LE TROISIEME COMPTE AUTANT QUE LES DEUX AUTRES
+  //   `collectedCentimes` non nul  : le transporteur a reverse, on sait combien.
+  //   `collectedCentimes` nul      : pas encore reverse — a reclamer.
+  //   Capacite absente             : ce transporteur ne publie PAS cette
+  //                                  donnee. L'ecran doit le dire au lieu
+  //                                  d'afficher un vide qui se lit comme
+  //                                  « impaye ».
+  //   Le troisieme etat se lit sur `CarrierCapability.realtimeCollectionVouchers`,
+  //   pas ici : l'absence de valeur ne dit pas d'elle-meme laquelle des deux
+  //   raisons s'applique.
+  /// Montant REELLEMENT reverse par le transporteur, en centimes.
+  collectedCentimes Int?          @map("collected_centimes")
+  collectedAt      DateTime?      @map("collected_at") @db.Timestamptz(3)
+  /// Reference du bon d'encaissement chez le transporteur, pour reclamer.
+  remittanceReference String?     @map("remittance_reference")
+
   errorCode        String?        @map("error_code")
   errorMessage     String?        @map("error_message")
   attemptCount     Int            @default(0) @map("attempt_count")

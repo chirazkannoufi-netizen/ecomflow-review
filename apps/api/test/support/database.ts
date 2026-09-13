@@ -160,8 +160,21 @@ export async function applySeed(databaseUrl: string): Promise<void> {
 /**
  * Tables de REFERENTIEL, seedees une seule fois et preservees entre les tests.
  * Les vider obligerait a rejouer le seed avant chaque cas, pour rien.
+ *
+ * `carrier_capabilities` EN FAIT PARTIE, et son absence etait un piege : la
+ * matrice de capacites (D-049) est seedee en meme temps que les transporteurs
+ * et n'a de sens qu'avec eux. En preservant `carriers` sans elle, chaque
+ * `resetDatabase()` laissait le catalogue debout mais MUET — et tout code qui
+ * lit une capacite retombait sur son defaut le plus restrictif. Un test aurait
+ * alors verifie l'absence de matrice, pas le comportement reel.
  */
-const PRESERVED_TABLES = ['_prisma_migrations', 'permissions', 'carriers', 'plans'];
+const PRESERVED_TABLES = [
+  '_prisma_migrations',
+  'permissions',
+  'carriers',
+  'carrier_capabilities',
+  'plans',
+];
 
 /**
  * Vide toutes les tables metier.

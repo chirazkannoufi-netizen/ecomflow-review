@@ -230,6 +230,32 @@ export class ListShipmentsQueryDto extends PaginationQueryDto {
   search?: string;
 }
 
+export class DeliveryQueueQueryDto extends PaginationQueryDto {
+  @ApiProperty({ enum: ['IN_DELIVERY', 'DELIVERED'] })
+  @IsIn(['IN_DELIVERY', 'DELIVERED'])
+  stage!: 'IN_DELIVERY' | 'DELIVERED';
+
+  @ApiPropertyOptional({ minimum: 1, maximum: WILAYA_COUNT })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(WILAYA_COUNT)
+  wilayaCode?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID('7')
+  carrierAccountId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+}
+
 export class AssignCarrierDto extends BulkArchiveDto {
   @ApiProperty({ description: 'Compte transporteur a affecter a la selection.' })
   @IsUUID('7')
@@ -320,6 +346,35 @@ export class ShipmentsController {
   })
   listCarriers() {
     return this.registry.describeAll();
+  }
+
+  @Get('delivery-queue')
+  @RequirePermissions(PERMISSIONS.SHIPMENTS_READ)
+  @ApiOperation({
+    summary: 'Commandes en livraison ou livrees',
+    description:
+      'Deux etapes du meme flux, distinguees par `stage`. Chaque ligne porte ' +
+      'son etat d ENCAISSEMENT, calcule en croisant le colis et la capacite du ' +
+      'transporteur : un montant absent ne veut pas dire « impaye », il peut ' +
+      'vouloir dire « ce transporteur ne publie pas cette donnee ». Les deux ' +
+      'sont distingues, parce que l un est une creance et l autre une ' +
+      'ignorance. Les tentatives ECHOUEES sont comptees une par une, jamais ' +
+      'ecrasees par le dernier evenement.',
+  })
+  async deliveryQueue(
+    @TenantId() tenantId: string,
+    @Query() query: DeliveryQueueQueryDto,
+  ) {
+    return this.shipments.listDeliveryQueue(
+      tenantId,
+      {
+        stage: query.stage,
+        wilayaCode: query.wilayaCode,
+        carrierAccountId: query.carrierAccountId,
+        search: query.search,
+      },
+      { page: query.page, pageSize: query.pageSize },
+    );
   }
 
   @Get('carrier-catalogue')

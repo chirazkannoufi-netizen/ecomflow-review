@@ -91,6 +91,24 @@ export interface TrackingEvent {
    */
   readonly fingerprint: string;
   readonly rawPayload?: Record<string, unknown> | null;
+
+  /**
+   * Encaissement declare par le transporteur, quand il le publie.
+   *
+   * « LIVRE » NE VEUT PAS DIRE « PAYE » : en paiement a la livraison, le
+   * reversement est un evenement SEPARE, souvent posterieur de plusieurs
+   * semaines. Un connecteur qui ne publie pas cette donnee laisse ce champ
+   * absent — et la matrice de capacites
+   * (`CarrierCapability.realtimeCollectionVouchers`) dit s'il s'agit d'une
+   * absence definitive ou d'une attente.
+   */
+  readonly collection?: {
+    /** Montant reellement reverse, en centimes. */
+    readonly amountCentimes: number;
+    readonly collectedAt: Date;
+    /** Reference du bon d'encaissement, pour reclamer. */
+    readonly reference?: string | null;
+  } | null;
 }
 
 /** Echec declare par un connecteur. */

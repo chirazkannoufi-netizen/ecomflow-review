@@ -27,9 +27,12 @@ import type { CarrierAccountKind, Prisma } from '@prisma/client';
 import {
   ACTIVE_SHIPMENT_STATUSES,
   ERROR_CODES,
+  buildPageMeta,
   getWilayaByCode,
+  toSkipTake,
   type BulkArchiveResult,
   type BulkArchiveSkip,
+  type Paginated,
   type ShipmentStatus,
 } from '@ecomflow/shared';
 import { createHash } from 'node:crypto';
@@ -120,6 +123,67 @@ const PRE_SHIPMENT_STATUSES: readonly string[] = [
   'IN_PREPARATION',
   'READY_TO_SHIP',
 ];
+
+/**
+ * Etat d'encaissement d'une commande livree.
+ *
+ * `UNSUPPORTED` n'est pas un cas d'erreur : c'est la reponse honnete quand le
+ * transporteur ne publie pas la donnee. Le confondre avec `PENDING` ferait
+ * lire une creance la ou il n'y a qu'une ignorance — et inversement, masquer
+ * `PENDING` ferait perdre de l'argent.
+ */
+export type CollectionState =
+  | { readonly kind: 'COLLECTED'; readonly amountCentimes: number; readonly collectedAt: Date; readonly reference: string | null }
+  | { readonly kind: 'PENDING' }
+  | { readonly kind: 'UNSUPPORTED' }
+  | { readonly kind: 'UNKNOWN' };
+
+export interface DeliveryQueueItem {
+  readonly id: string;
+  readonly reference: string;
+  readonly status: string;
+  readonly customerName: string;
+  readonly phone: string;
+  readonly wilayaCode: number | null;
+  readonly commune: string | null;
+  readonly totalCentimes: number;
+  readonly shippedAt: Date | null;
+  readonly deliveredAt: Date | null;
+  readonly carrierName: string | null;
+  readonly trackingNumber: string | null;
+  readonly providerStatus: string | null;
+  /** Nombre de tentatives de livraison ECHOUEES, conservees une par une. */
+  readonly failedAttempts: number;
+  readonly lastAttemptAt: Date | null;
+  readonly collection: CollectionState;
+}
+
+function resolveCollectionState(
+  shipment:
+    | {
+        collectedCentimes: number | null;
+        collectedAt: Date | null;
+        remittanceReference: string | null;
+      }
+    | undefined,
+  carrierPublishes: boolean,
+): CollectionState {
+  // Sans colis, on ne sait rien — et le dire vaut mieux que de supposer.
+  if (!shipment) return { kind: 'UNKNOWN' };
+
+  if (shipment.collectedCentimes !== null && shipment.collectedAt !== null) {
+    return {
+      kind: 'COLLECTED',
+      amountCentimes: shipment.collectedCentimes,
+      collectedAt: shipment.collectedAt,
+      reference: shipment.remittanceReference,
+    };
+  }
+
+  // LA DISTINCTION QUI COMPTE : rien a encaisser parce que le transporteur ne
+  // publie pas, ou rien encaisse ALORS QU'il publie — donc une creance.
+  return carrierPublishes ? { kind: 'PENDING' } : { kind: 'UNSUPPORTED' };
+}
 
 export interface CreateShipmentInput {
   readonly tenantId: string;
@@ -918,6 +982,134 @@ export class ShipmentsService {
     }
 
     return { archived: shipped.length, skipped };
+  }
+
+  /**
+   * File de livraison : les commandes parties, et ou elles en sont.
+   *
+   * POURQUOI CES DEUX ECRANS NE SONT PAS UN FILTRE DE `/shipments`
+   *   `/expeditions` repond a « qu'est-ce qui est parti ? » — une question de
+   *   COLIS, tournee vers le transporteur. « En livraison » et « Livre »
+   *   repondent a « ou en est ma commande ? » et « ai-je ete paye ? » — deux
+   *   questions de COMMANDE, tournees vers le client et vers la caisse.
+   *
+   *   La seconde est invisible sur un ecran de colis, parce qu'elle ne porte
+   *   pas sur le colis : elle porte sur l'argent qu'il transportait.
+   *
+   * TROIS ETATS D'ENCAISSEMENT, JAMAIS DEUX
+   *   Un montant absent ne veut pas dire « impaye ». Il peut vouloir dire
+   *   « ce transporteur ne publie pas cette donnee », et confondre les deux
+   *   ferait lire une creance la ou il n'y a qu'une ignorance. L'etat est donc
+   *   calcule ICI, en croisant le colis et la capacite du transporteur — pas
+   *   deduit d'un champ nul cote ecran.
+   */
+  async listDeliveryQueue(
+    tenantId: string,
+    filters: {
+      stage: 'IN_DELIVERY' | 'DELIVERED';
+      wilayaCode?: number;
+      carrierAccountId?: string;
+      search?: string;
+    },
+    options: { page?: number; pageSize?: number } = {},
+  ): Promise<Paginated<DeliveryQueueItem>> {
+    const { skip, take } = toSkipTake(options);
+    const page = Math.max(1, Math.trunc(options.page ?? 1));
+
+    const where: Prisma.OrderWhereInput = {
+      tenantId,
+      archivedAt: null,
+      status: filters.stage,
+      ...(filters.wilayaCode ? { wilayaCodeSnapshot: filters.wilayaCode } : {}),
+      ...(filters.carrierAccountId ? { carrierAccountId: filters.carrierAccountId } : {}),
+      ...(filters.search?.trim()
+        ? {
+            OR: [
+              { reference: { contains: filters.search.trim(), mode: 'insensitive' } },
+              { customerNameSnapshot: { contains: filters.search.trim(), mode: 'insensitive' } },
+              { phoneSnapshot: { contains: filters.search.trim() } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, rows] = await Promise.all([
+      this.prisma.order.count({ where }),
+      this.prisma.order.findMany({
+        where,
+        skip,
+        take,
+        orderBy: filters.stage === 'DELIVERED' ? { deliveredAt: 'desc' } : { shippedAt: 'asc' },
+        select: {
+          id: true,
+          reference: true,
+          status: true,
+          customerNameSnapshot: true,
+          phoneSnapshot: true,
+          wilayaCodeSnapshot: true,
+          communeSnapshot: true,
+          totalCentimes: true,
+          shippedAt: true,
+          deliveredAt: true,
+          shipments: {
+            where: { status: { notIn: ['CANCELLED', 'ERROR'] } },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              trackingNumber: true,
+              status: true,
+              providerStatus: true,
+              collectedCentimes: true,
+              collectedAt: true,
+              remittanceReference: true,
+              carrier: {
+                select: {
+                  name: true,
+                  capability: { select: { realtimeCollectionVouchers: true } },
+                },
+              },
+              // Les TENTATIVES sont des faits distincts, conserves un par un.
+              // Un colis peut avoir echoue trois fois avant d'aboutir, et
+              // n'afficher que le dernier evenement effacerait precisement ce
+              // qui explique un delai ou un retour.
+              events: {
+                where: { normalizedStatus: 'FAILED_ATTEMPT' },
+                orderBy: { occurredAt: 'desc' },
+                select: { occurredAt: true, description: true },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data: rows.map((row) => {
+        const shipment = row.shipments[0];
+        const publishes = shipment?.carrier.capability?.realtimeCollectionVouchers ?? false;
+
+        return {
+          id: row.id,
+          reference: row.reference,
+          status: row.status,
+          customerName: row.customerNameSnapshot,
+          phone: row.phoneSnapshot,
+          wilayaCode: row.wilayaCodeSnapshot,
+          commune: row.communeSnapshot,
+          totalCentimes: row.totalCentimes,
+          shippedAt: row.shippedAt,
+          deliveredAt: row.deliveredAt,
+          carrierName: shipment?.carrier.name ?? null,
+          trackingNumber: shipment?.trackingNumber ?? null,
+          providerStatus: shipment?.providerStatus ?? null,
+          failedAttempts: shipment?.events.length ?? 0,
+          lastAttemptAt: shipment?.events[0]?.occurredAt ?? null,
+          collection: resolveCollectionState(shipment, publishes),
+        };
+      }),
+      meta: buildPageMeta(page, take, total),
+    };
   }
 
   /** Comptes transporteur configures pour la boutique. */
