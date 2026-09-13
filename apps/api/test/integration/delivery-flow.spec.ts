@@ -438,7 +438,7 @@ describe('flux entrant : livraison, encaissement, retour', () => {
 
       const created = await prisma.return.findFirst({
         where: { orderId },
-        select: { reason: true, reasonDetail: true, shipmentId: true, status: true },
+        select: { id: true, reason: true, reasonDetail: true, shipmentId: true, status: true },
       });
       expect(created).not.toBeNull();
       // `OTHER` et non un motif invente : le transporteur signale QU'IL rend le
@@ -447,6 +447,16 @@ describe('flux entrant : livraison, encaissement, retour', () => {
       expect(created?.reason).toBe('OTHER');
       expect(created?.reasonDetail).toContain('retourne a l expediteur');
       expect(created?.shipmentId).toBe(shipmentId);
+
+      // Le retour porte les LIGNES de la commande. Un retour vide s'afficherait
+      // sur /retours sans dire ce qui revient, et le magasinier n'aurait rien a
+      // controler : c'est tout le colis qui rentre, donc toute la commande.
+      const lines = await prisma.returnItem.findMany({
+        where: { returnId: created!.id },
+        select: { quantity: true },
+      });
+      expect(lines).toHaveLength(1);
+      expect(lines[0]?.quantity).toBe(1);
     });
 
     it('ne cree pas un second retour si l evenement est rejoue', async () => {
