@@ -6,6 +6,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -23,6 +24,7 @@ import {
   IsArray,
   IsBoolean,
   IsDate,
+  IsObject,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -344,6 +346,109 @@ export class UpdateCarrierAccountSettingsDto {
   @IsOptional()
   @IsBoolean()
   stockHeldByCourier?: boolean;
+
+  @ApiPropertyOptional({ description: 'Nom de ce compte, tel qu il apparait dans les listes.' })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'Le nom du compte ne peut pas etre vide.' })
+  @MaxLength(120)
+  label?: string;
+
+  @ApiPropertyOptional({ description: 'Compte propose par defaut au Dispatcher.' })
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Actif ou inactif. C est une INTENTION du commercant, distincte du ' +
+      'diagnostic : « connecte », « degrade » et « en erreur » decrivent ce ' +
+      'qu a donne la derniere tentative de connexion ; « inactif » dit qu on ' +
+      'ne veut plus s en servir. Un controle de sante ne le reactive donc pas.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+}
+
+/**
+ * Identifiants d'API, tels qu'un formulaire les envoie.
+ *
+ * Le dictionnaire est libre parce que les CLES sont declarees par le connecteur
+ * (`adapter.credentialFields`), pas par ce DTO : Yalidine attend `apiId` et
+ * `apiToken`, un autre transporteur attendra autre chose. Les valider ici
+ * figerait le formulaire sur un transporteur, exactement ce que le contrat
+ * `CarrierAdapter` existe pour eviter. La validation reelle — cles connues,
+ * champs requis presents — se fait donc dans le service, contre l'adaptateur.
+ */
+const credentialsRecord = ({ value }: { value: unknown }): unknown => {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const result: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    // Une valeur non textuelle est ECARTEE plutot que convertie : un
+    // « [object Object] » chiffre en base ne se diagnostiquerait jamais.
+    if (typeof entry === 'string') result[key] = entry;
+    else if (typeof entry === 'number' || typeof entry === 'boolean') result[key] = String(entry);
+  }
+  return result;
+};
+
+export class CarrierCredentialsDto {
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: { type: 'string' },
+    description:
+      'Identifiants attendus par le connecteur, par cle. Un champ secret laisse ' +
+      'vide conserve sa valeur actuelle : l ecran ne recoit jamais les secrets, ' +
+      'il ne peut donc pas les renvoyer.',
+  })
+  @Transform(credentialsRecord)
+  @IsObject({ message: 'Les identifiants doivent etre un objet cle/valeur.' })
+  credentials!: Record<string, string>;
+}
+
+export class CreateCarrierAccountDto extends CarrierCredentialsDto {
+  @ApiProperty({ description: 'Transporteur du catalogue auquel ce compte appartient.' })
+  @IsUUID('7')
+  carrierId!: string;
+
+  @ApiProperty({
+    description:
+      'Nom de CE compte, pas du transporteur : une boutique peut avoir ' +
+      'plusieurs comptes chez le meme reseau (agences, contrats, wilayas).',
+  })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'Donnez un nom a ce compte.' })
+  @MaxLength(120)
+  label!: string;
+
+  @ApiPropertyOptional({ enum: CARRIER_ACCOUNT_KINDS })
+  @IsOptional()
+  @IsIn(CARRIER_ACCOUNT_KINDS)
+  kind?: CarrierAccountKind;
+
+  @ApiPropertyOptional({ description: 'Le transporteur detient le stock de la boutique.' })
+  @IsOptional()
+  @IsBoolean()
+  stockHeldByCourier?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  sendOrderNumberInsteadOfReference?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Compte propose par defaut au Dispatcher. Le premier compte cree le ' +
+      'devient d office : une boutique qui n en a qu un n a pas a le decider.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
 }
 
 @ApiTags('Expedition, suivi et retours')
@@ -463,6 +568,76 @@ export class ShipmentsController {
     @Body() dto: UpdateCarrierAccountSettingsDto,
   ) {
     await this.shipments.updateCarrierAccountSettings(tenantId, id, dto);
+    return { acknowledged: true as const };
+  }
+
+  @Get('carrier-connectors')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  @ApiOperation({
+    summary: 'Transporteurs selectionnables, et champs d identifiants attendus',
+    description:
+      'Alimente le formulaire de compte. Les champs viennent du connecteur ' +
+      'lui-meme (`credentialFields`), pas d une liste ecrite cote serveur : ' +
+      'ajouter un transporteur change le formulaire sans toucher a un ecran. ' +
+      '`selectable: false` signale un transporteur PREVU — capacites declarees ' +
+      'par sa documentation, jamais verifiees, et aucun connecteur derriere ' +
+      '(D-066). Creer un compte chez lui est refuse.',
+  })
+  async carrierConnectors() {
+    return this.shipments.listCarrierConnectors();
+  }
+
+  @Post('carrier-accounts')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  @ApiOperation({
+    summary: 'Declarer un compte chez un transporteur',
+    description:
+      'Les identifiants sont chiffres au repos (AES-256-GCM, lie au tenant par ' +
+      'l AAD) et ne ressortent jamais. Le connecteur est interroge dans la ' +
+      'foulee : le statut rendu decrit une tentative REELLE de connexion, pas ' +
+      'une intention. Sans cela le compte resterait en « configuration en ' +
+      'cours », donc invisible du Dispatcher, sans que rien ne le dise.',
+  })
+  async createCarrierAccount(
+    @TenantId() tenantId: string,
+    @Body() dto: CreateCarrierAccountDto,
+  ) {
+    return this.shipments.createCarrierAccount(tenantId, dto);
+  }
+
+  @Put('carrier-accounts/:id/credentials')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  @ApiOperation({
+    summary: 'Remplacer les identifiants d un compte',
+    description:
+      'Un champ secret laisse vide CONSERVE sa valeur : l ecran ne recoit ' +
+      'jamais les secrets, il ne peut donc pas les renvoyer, et traiter le ' +
+      'vide comme un effacement deconnecterait la boutique au premier reglage ' +
+      'modifie. Le connecteur est reinterroge apres enregistrement.',
+  })
+  async updateCarrierCredentials(
+    @TenantId() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CarrierCredentialsDto,
+  ) {
+    return this.shipments.updateCarrierCredentials(tenantId, id, dto.credentials);
+  }
+
+  @Delete('carrier-accounts/:id')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  @ApiOperation({
+    summary: 'Supprimer un compte transporteur',
+    description:
+      'Refuse des que le compte a porte un colis : `Shipment.carrierAccountId` ' +
+      'est en `Restrict`, et effacer le compte emporterait la tracabilite des ' +
+      'expeditions. La liste annonce `deletable` AVANT le clic. Un compte qui a ' +
+      'servi se DESACTIVE.',
+  })
+  async deleteCarrierAccount(
+    @TenantId() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    await this.shipments.deleteCarrierAccount(tenantId, id);
     return { acknowledged: true as const };
   }
 

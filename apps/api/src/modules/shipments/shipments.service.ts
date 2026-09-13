@@ -52,7 +52,11 @@ import { OutboxService, DOMAIN_EVENTS } from '../events/outbox.service';
 import { OrderWorkflowService } from '../orders/workflow/order-workflow.service';
 import { OrdersService } from '../orders/orders.service';
 import { CarrierRegistry } from './carriers/carrier.registry';
-import type { CarrierContext, ShipmentRequest } from './carriers/carrier-adapter.interface';
+import type {
+  CarrierContext,
+  CarrierHealth,
+  ShipmentRequest,
+} from './carriers/carrier-adapter.interface';
 
 /**
  * Cles de la matrice de capacites, dans l'ordre d'affichage.
@@ -137,6 +141,30 @@ export type CollectionState =
   | { readonly kind: 'PENDING' }
   | { readonly kind: 'UNSUPPORTED' }
   | { readonly kind: 'UNKNOWN' };
+
+/** Un transporteur du catalogue, tel que le formulaire de compte le presente. */
+export interface CarrierConnectorOption {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly implementationStatus: string;
+  /**
+   * Peut-on creer un compte chez lui ?
+   *
+   * Faux pour les transporteurs PREVUS : leurs capacites sont declarees par
+   * leur documentation, pas verifiees, et `CarrierRegistry` refuserait tout
+   * appel a l'execution. Voir D-066.
+   */
+  readonly selectable: boolean;
+  /** Champs a saisir, declares par le connecteur lui-meme. */
+  readonly credentialFields: readonly {
+    key: string;
+    label: string;
+    secret: boolean;
+    required: boolean;
+    helpText?: string;
+  }[];
+}
 
 export interface DeliveryQueueItem {
   readonly id: string;
@@ -749,33 +777,6 @@ export class ShipmentsService {
   }
 
   /** Reglages d'exploitation d'un compte transporteur. */
-  async updateCarrierAccountSettings(
-    tenantId: string,
-    carrierAccountId: string,
-    changes: {
-      kind?: CarrierAccountKind;
-      sendOrderNumberInsteadOfReference?: boolean;
-      stockHeldByCourier?: boolean;
-    },
-  ): Promise<void> {
-    const updated = await this.prisma.carrierAccount.updateMany({
-      where: { tenantId, id: carrierAccountId },
-      data: {
-        ...(changes.kind !== undefined ? { kind: changes.kind } : {}),
-        ...(changes.sendOrderNumberInsteadOfReference !== undefined
-          ? { sendOrderNumberInsteadOfReference: changes.sendOrderNumberInsteadOfReference }
-          : {}),
-        ...(changes.stockHeldByCourier !== undefined
-          ? { stockHeldByCourier: changes.stockHeldByCourier }
-          : {}),
-      },
-    });
-
-    if (updated.count === 0) {
-      throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Compte transporteur introuvable.');
-    }
-  }
-
   /**
    * DISPATCHER : un clic, de « confirmee » a « expediee ».
    *
@@ -1131,9 +1132,16 @@ export class ShipmentsService {
     };
   }
 
-  /** Comptes transporteur configures pour la boutique. */
+  /**
+   * Comptes transporteur configures pour la boutique.
+   *
+   * Chaque ligne porte de quoi decider SANS cliquer : combien de colis elle a
+   * portes — donc si elle est encore supprimable —, et quels champs
+   * d'identifiants sont renseignes. Les VALEURS, elles, ne sortent jamais : un
+   * jeton d'API n'a aucune raison de traverser le reseau une seconde fois.
+   */
   async listCarrierAccounts(tenantId: string) {
-    return this.prisma.carrierAccount.findMany({
+    const accounts = await this.prisma.carrierAccount.findMany({
       where: { tenantId },
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
       select: {
@@ -1146,8 +1154,11 @@ export class ShipmentsService {
         lastErrorMessage: true,
         config: true,
         kind: true,
+        credentialsEncrypted: true,
         sendOrderNumberInsteadOfReference: true,
         stockHeldByCourier: true,
+        createdAt: true,
+        _count: { select: { shipments: true } },
         carrier: {
           select: {
             id: true,
@@ -1161,16 +1172,459 @@ export class ShipmentsService {
         },
       },
     });
+
+    return accounts.map(({ credentialsEncrypted, _count, ...account }) => {
+      let configuredKeys: string[] = [];
+      if (credentialsEncrypted) {
+        try {
+          configuredKeys = Object.entries(
+            this.encryption.decryptJson<Record<string, string>>(credentialsEncrypted, tenantId),
+          )
+            .filter(([, value]) => typeof value === 'string' && value.length > 0)
+            .map(([key]) => key);
+        } catch {
+          // Chiffre illisible — cle tournee, blob altere. On ne masque pas le
+          // compte pour autant : le dire vaut mieux que de le faire disparaitre
+          // d'une liste ou le commercant le cherchera.
+          configuredKeys = [];
+        }
+      }
+
+      return {
+        ...account,
+        shipmentCount: _count.shipments,
+        credentialKeys: configuredKeys,
+        // `Shipment.carrierAccountId` est en `Restrict` : la base refuserait la
+        // suppression apres coup. Autant l'annoncer avant.
+        deletable: _count.shipments === 0,
+      };
+    });
   }
 
-  /** Verifie qu'un compte transporteur repond (V2 §16 : `healthCheck`). */
+  // ==========================================================================
+  // Comptes transporteur — le CRUD qui manquait
+  //
+  // CE QU'UN COMPTE EST, ET CE QU'IL N'EST PAS
+  //   Un « livreur » au sens de l'exploitation, c'est un COMPTE chez un
+  //   transporteur catalogue : les identifiants avec lesquels cette boutique
+  //   parle a Yalidine. Ce n'est ni une personne ni un utilisateur du produit —
+  //   aucun login, aucun mot de passe, aucun telephone de connexion. Stocker de
+  //   quoi authentifier quelqu un qui n a nulle part ou se connecter creerait
+  //   un secret orphelin.
+  //
+  // LES IDENTIFIANTS SONT LA SEULE RAISON D'ETRE DE CE FORMULAIRE
+  //   Toute la chaine d'expedition lisait deja `credentialsEncrypted` — creation
+  //   de colis, sondage de suivi, webhooks. RIEN ne l'ecrivait. La colonne
+  //   existait, chiffree, lue par quatre chemins, et restait vide : aucune
+  //   boutique reelle ne pouvait expedier. C'est le trou que ces methodes
+  //   ferment.
+  // ==========================================================================
+
+  /**
+   * Transporteurs selectionnables, avec les champs d'identifiants a saisir.
+   *
+   * Les champs viennent de `adapter.credentialFields` et non d'une liste ecrite
+   * ici : un connecteur qui change ses identifiants change le formulaire, sans
+   * qu'aucun ecran ne soit touche.
+   */
+  listCarrierConnectors(): Promise<readonly CarrierConnectorOption[]> {
+    // Les transporteurs PREVUS sont LISTES, pas masques : un commercant qui
+    // cherche ZR Express doit lire pourquoi il ne peut pas le choisir, plutot
+    // que de conclure a une omission et de le redemander. Meme principe que le
+    // catalogue de `/transporteurs`.
+    return this.prisma.carrier
+      .findMany({
+        orderBy: [{ implementationStatus: 'asc' }, { name: 'asc' }],
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          isActive: true,
+          implementationStatus: true,
+        },
+      })
+      .then((carriers) =>
+        carriers.map((carrier) => {
+          // D-066 : un transporteur PREVU n'a pas d'adaptateur. Le registre le
+          // refuserait a l'execution ; l'ecran doit le refuser AVANT la saisie,
+          // plutot que de laisser remplir un formulaire pour rien.
+          const connected = this.registry.has(carrier.code);
+          return {
+            id: carrier.id,
+            code: carrier.code,
+            name: carrier.name,
+            implementationStatus: carrier.implementationStatus,
+            selectable:
+              connected && carrier.isActive && carrier.implementationStatus === 'AVAILABLE',
+            credentialFields: connected
+              ? this.registry.get(carrier.code).credentialFields.map((field) => ({ ...field }))
+              : [],
+          };
+        }),
+      );
+  }
+
+  /**
+   * Cree un compte transporteur, identifiants compris.
+   *
+   * LE COMPTE EST VERIFIE DANS LA FOULEE
+   *   `resolveCarrierAccount` n'accepte qu'un compte `CONNECTED` ou `DEGRADED`.
+   *   Un compte cree en `PENDING_SETUP` serait donc invisible du Dispatcher, et
+   *   le commercant decouvrirait le refus a la premiere expedition sans savoir
+   *   qu'il lui manquait un geste. On appelle donc le `healthCheck` du
+   *   connecteur immediatement : le statut affiche decrit une tentative REELLE
+   *   de connexion, pas une intention.
+   */
+  async createCarrierAccount(
+    tenantId: string,
+    input: {
+      carrierId: string;
+      label: string;
+      kind?: CarrierAccountKind;
+      credentials: Record<string, string>;
+      stockHeldByCourier?: boolean;
+      sendOrderNumberInsteadOfReference?: boolean;
+      isDefault?: boolean;
+    },
+  ): Promise<{ id: string; status: string; health: CarrierHealth }> {
+    const carrier = await this.prisma.carrier.findUnique({
+      where: { id: input.carrierId },
+      select: { id: true, code: true, name: true, implementationStatus: true },
+    });
+
+    if (!carrier) {
+      throw new NotFoundException(ERROR_CODES.CARRIER_NOT_CONFIGURED, 'Transporteur introuvable.');
+    }
+
+    const adapter = this.requireSelectableCarrier(carrier);
+    const credentials = this.validateCredentials(adapter.credentialFields, input.credentials, {});
+
+    const label = input.label.trim();
+
+    const created = await this.prisma
+      .$transaction(async (rawTx) => {
+        const tx = rawTx as PrismaTransactionClient;
+
+        // UN SEUL COMPTE PAR DEFAUT. `resolveCarrierAccount` prend le premier
+        // `isDefault` venu quand aucun compte n'est precise : deux defauts
+        // rendraient le transporteur choisi dependant de l'ordre des lignes.
+        if (input.isDefault) {
+          await tx.carrierAccount.updateMany({
+            where: { tenantId, isDefault: true },
+            data: { isDefault: false },
+          });
+        }
+
+        const existing = await tx.carrierAccount.count({ where: { tenantId } });
+
+        return tx.carrierAccount.create({
+          data: {
+            tenantId,
+            carrierId: carrier.id,
+            label,
+            kind: input.kind ?? 'DELIVERY_COMPANY',
+            status: 'PENDING_SETUP',
+            credentialsEncrypted: this.encryption.encryptJson(credentials, tenantId),
+            config: {},
+            // Le PREMIER compte devient le defaut sans qu'on ait a le demander :
+            // une boutique qui n'en a qu'un n'a pas a decider qu'il est celui-la.
+            isDefault: input.isDefault ?? existing === 0,
+            stockHeldByCourier: input.stockHeldByCourier ?? false,
+            sendOrderNumberInsteadOfReference: input.sendOrderNumberInsteadOfReference ?? false,
+          },
+          select: { id: true },
+        });
+      })
+      .catch((error: unknown) => {
+        if (isUniqueConstraintError(error)) {
+          throw new ConflictException(
+            ERROR_CODES.CARRIER_NOT_CONFIGURED,
+            `Un compte « ${label} » existe deja chez ${carrier.name}.`,
+          );
+        }
+        throw error;
+      });
+
+    const health = await this.checkCarrierHealth(tenantId, created.id);
+    const status = await this.prisma.carrierAccount.findUniqueOrThrow({
+      where: { id: created.id },
+      select: { status: true },
+    });
+
+    return { id: created.id, status: status.status, health };
+  }
+
+  /**
+   * Reglages d'exploitation d'un compte.
+   *
+   * `enabled` est une INTENTION du commercant, distincte du diagnostic porte
+   * par les autres statuts : `CONNECTED`, `DEGRADED` et `ERROR` decrivent ce
+   * que la derniere tentative de connexion a donne, `DISABLED` dit qu'on ne
+   * veut plus s'en servir. Reactiver repart donc de `PENDING_SETUP` — l'etat
+   * « on ne sait pas encore » — plutot que de restaurer un diagnostic perime.
+   */
+  async updateCarrierAccountSettings(
+    tenantId: string,
+    carrierAccountId: string,
+    changes: {
+      label?: string;
+      kind?: CarrierAccountKind;
+      sendOrderNumberInsteadOfReference?: boolean;
+      stockHeldByCourier?: boolean;
+      isDefault?: boolean;
+      enabled?: boolean;
+    },
+  ): Promise<void> {
+    const account = await this.prisma.carrierAccount.findFirst({
+      where: { tenantId, id: carrierAccountId },
+      select: { id: true, status: true, carrier: { select: { name: true } } },
+    });
+
+    if (!account) {
+      throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Compte transporteur introuvable.');
+    }
+
+    const label = changes.label?.trim();
+    if (label !== undefined && label.length === 0) {
+      throw new ValidationException('Le nom du compte ne peut pas etre vide.');
+    }
+
+    await this.prisma
+      .$transaction(async (rawTx) => {
+        const tx = rawTx as PrismaTransactionClient;
+
+        if (changes.isDefault === true) {
+          await tx.carrierAccount.updateMany({
+            where: { tenantId, isDefault: true, id: { not: carrierAccountId } },
+            data: { isDefault: false },
+          });
+        }
+
+        await tx.carrierAccount.update({
+          where: { id: carrierAccountId },
+          data: {
+            ...(label !== undefined ? { label } : {}),
+            ...(changes.kind !== undefined ? { kind: changes.kind } : {}),
+            ...(changes.sendOrderNumberInsteadOfReference !== undefined
+              ? { sendOrderNumberInsteadOfReference: changes.sendOrderNumberInsteadOfReference }
+              : {}),
+            ...(changes.stockHeldByCourier !== undefined
+              ? { stockHeldByCourier: changes.stockHeldByCourier }
+              : {}),
+            ...(changes.isDefault !== undefined ? { isDefault: changes.isDefault } : {}),
+            ...(changes.enabled === false ? { status: 'DISABLED' as const } : {}),
+            ...(changes.enabled === true && account.status === 'DISABLED'
+              ? { status: 'PENDING_SETUP' as const, lastErrorMessage: null }
+              : {}),
+          },
+        });
+      })
+      .catch((error: unknown) => {
+        if (isUniqueConstraintError(error)) {
+          throw new ConflictException(
+            ERROR_CODES.CARRIER_NOT_CONFIGURED,
+            `Un compte « ${label} » existe deja chez ${account.carrier.name}.`,
+          );
+        }
+        throw error;
+      });
+  }
+
+  /**
+   * Remplace les identifiants d'un compte, puis verifie qu'ils repondent.
+   *
+   * UN SECRET LAISSE VIDE N'EST PAS UN SECRET EFFACE
+   *   L'ecran ne peut pas reafficher un jeton — il ne le recoit jamais. Un
+   *   champ secret laisse vide signifie donc « je n'y touche pas », et la
+   *   valeur existante est conservee. L'interpreter comme un effacement
+   *   deconnecterait la boutique au premier changement de wilaya d'expedition.
+   */
+  async updateCarrierCredentials(
+    tenantId: string,
+    carrierAccountId: string,
+    submitted: Record<string, string>,
+  ): Promise<{ status: string; health: CarrierHealth }> {
+    const account = await this.prisma.carrierAccount.findFirst({
+      where: { tenantId, id: carrierAccountId },
+      select: {
+        id: true,
+        credentialsEncrypted: true,
+        carrier: { select: { id: true, code: true, name: true, implementationStatus: true } },
+      },
+    });
+
+    if (!account) {
+      throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Compte transporteur introuvable.');
+    }
+
+    const adapter = this.requireSelectableCarrier(account.carrier);
+    const current = account.credentialsEncrypted
+      ? this.encryption.decryptJson<Record<string, string>>(account.credentialsEncrypted, tenantId)
+      : {};
+
+    const credentials = this.validateCredentials(adapter.credentialFields, submitted, current);
+
+    await this.prisma.carrierAccount.update({
+      where: { id: carrierAccountId },
+      data: { credentialsEncrypted: this.encryption.encryptJson(credentials, tenantId) },
+    });
+
+    const health = await this.checkCarrierHealth(tenantId, carrierAccountId);
+    const after = await this.prisma.carrierAccount.findUniqueOrThrow({
+      where: { id: carrierAccountId },
+      select: { status: true },
+    });
+
+    return { status: after.status, health };
+  }
+
+  /**
+   * Supprime un compte — uniquement s'il n'a jamais servi.
+   *
+   * `Shipment.carrierAccountId` est en `Restrict` : un compte ayant expedie ne
+   * peut pas disparaitre sans emporter la tracabilite des colis qu'il a portes.
+   * On le dit AVANT le clic (`deletable` / `blockedReason` sur chaque ligne)
+   * plutot que de laisser la base refuser apres coup — meme principe qu'en
+   * D-063 pour la restauration.
+   */
+  async deleteCarrierAccount(tenantId: string, carrierAccountId: string): Promise<void> {
+    const account = await this.prisma.carrierAccount.findFirst({
+      where: { tenantId, id: carrierAccountId },
+      select: { id: true, _count: { select: { shipments: true } } },
+    });
+
+    if (!account) {
+      throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Compte transporteur introuvable.');
+    }
+
+    if (account._count.shipments > 0) {
+      throw new ConflictException(
+        ERROR_CODES.CARRIER_NOT_CONFIGURED,
+        `Ce compte a deja porte ${account._count.shipments} colis : il ne peut plus etre ` +
+          'supprime sans effacer leur tracabilite. Desactivez-le plutot.',
+      );
+    }
+
+    // `Order.carrierAccountId` est en `SetNull` : les commandes qui l'avaient
+    // choisi sans encore partir perdent leur transporteur, et le Dispatcher le
+    // redemandera. C'est voulu — l'alternative serait de les bloquer sur un
+    // compte qui n'existe plus.
+    await this.prisma.carrierAccount.delete({ where: { id: carrierAccountId } });
+  }
+
+  /** Refuse un transporteur sans connecteur — D-066, applique a la creation. */
+  private requireSelectableCarrier(carrier: {
+    code: string;
+    name: string;
+    implementationStatus: string;
+  }) {
+    if (carrier.implementationStatus !== 'AVAILABLE' || !this.registry.has(carrier.code)) {
+      throw new BusinessException(
+        ERROR_CODES.CARRIER_NOT_CONFIGURED,
+        `Aucun connecteur n est implemente pour ${carrier.name} : ses capacites sont ` +
+          'declarees par sa documentation, pas verifiees. Un compte ne pourrait rien ' +
+          'authentifier.',
+        HttpStatus.NOT_IMPLEMENTED,
+      );
+    }
+    return this.registry.get(carrier.code);
+  }
+
+  /**
+   * Valide la saisie contre les champs declares par le connecteur.
+   *
+   * Une cle inconnue est REFUSEE plutot qu'ignoree : une faute de frappe sur
+   * `apiToken` produirait sinon un compte qui se cree sans erreur, echoue a la
+   * premiere expedition, et dont rien n'indique ce qui manque.
+   */
+  private validateCredentials(
+    fields: readonly { key: string; label: string; secret: boolean; required: boolean }[],
+    submitted: Record<string, string>,
+    current: Record<string, string>,
+  ): Record<string, string> {
+    const known = new Set(fields.map((field) => field.key));
+    const unknown = Object.keys(submitted).filter((key) => !known.has(key));
+
+    if (unknown.length > 0) {
+      throw new ValidationException(
+        `Champs d identifiants inconnus pour ce transporteur : ${unknown.join(', ')}.`,
+        { details: { unknown, expected: [...known] } },
+      );
+    }
+
+    const result: Record<string, string> = {};
+    const missing: string[] = [];
+
+    for (const field of fields) {
+      const value = submitted[field.key]?.trim();
+      const kept = current[field.key];
+
+      if (value) {
+        result[field.key] = value;
+      } else if (kept !== undefined) {
+        result[field.key] = kept;
+      } else if (field.required) {
+        missing.push(field.label);
+      }
+    }
+
+    if (missing.length > 0) {
+      throw new ValidationException(
+        `Identifiants incomplets : ${missing.join(', ')}.`,
+        { details: { missing } },
+      );
+    }
+
+    return result;
+  }
+
+  /**
+   * Verifie qu'un compte transporteur repond (V2 §16 : `healthCheck`).
+   *
+   * CHARGE LE COMPTE DIRECTEMENT, ET NON VIA `resolveCarrierAccount`
+   *   Les deux questions se ressemblent mais ne sont pas la meme :
+   *   `resolveCarrierAccount` repond a « avec quel compte puis-je EXPEDIER ? »
+   *   et n'accepte donc qu'un compte deja `CONNECTED` ou `DEGRADED`. Ici la
+   *   question est « ce compte repond-il ? », et elle se pose justement pour
+   *   les comptes dont on ne sait encore rien.
+   *
+   *   Les confondre creait une impasse : un compte nait `PENDING_SETUP`, le
+   *   controle de sante est le seul chemin vers `CONNECTED`, et ce chemin
+   *   refusait `PENDING_SETUP`. Aucun compte ne pouvait donc devenir
+   *   utilisable — ce qui explique qu'il n'en ait jamais existe un seul.
+   *
+   *   Un compte DESACTIVE reste testable, lui aussi : savoir s'il repondrait
+   *   est precisement ce qu'on veut avant de le remettre en service.
+   */
   async checkCarrierHealth(
     tenantId: string,
     carrierAccountId: string,
   ): Promise<{ ok: boolean; latencyMs?: number; message?: string }> {
-    const account = await this.resolveCarrierAccount(tenantId, carrierAccountId);
-    const adapter = this.registry.get(account.carrierCode);
-    const context = this.buildCarrierContext(account, tenantId);
+    const account = await this.prisma.carrierAccount.findFirst({
+      where: { tenantId, id: carrierAccountId },
+      select: {
+        id: true,
+        status: true,
+        credentialsEncrypted: true,
+        config: true,
+        carrier: { select: { code: true, name: true, implementationStatus: true } },
+      },
+    });
+
+    if (!account) {
+      throw new NotFoundException(ERROR_CODES.NOT_FOUND, 'Compte transporteur introuvable.');
+    }
+
+    // Un transporteur sans connecteur ne peut rien repondre : le registre leve
+    // NOT_IMPLEMENTED plutot que de simuler une verification (D-066).
+    const adapter = this.registry.get(account.carrier.code);
+    const context = this.buildCarrierContext(
+      {
+        credentialsEncrypted: account.credentialsEncrypted,
+        config: account.config as Record<string, unknown>,
+      },
+      tenantId,
+    );
 
     const health = await adapter.healthCheck(context);
 
@@ -1180,7 +1634,14 @@ export class ShipmentsService {
         lastHealthCheckAt: this.clock.now(),
         lastHealthCheckOk: health.ok,
         lastErrorMessage: health.ok ? null : (health.message ?? 'Verification en echec.'),
-        status: health.ok ? 'CONNECTED' : 'DEGRADED',
+        // `DISABLED` est une INTENTION, pas un diagnostic : le commercant a
+        // decide de ne plus se servir de ce compte. Ecrire `CONNECTED` par
+        // dessus le remettrait silencieusement en service, et le Dispatcher le
+        // reproposerait sans que personne ne l'ait redemande. Le RESULTAT est
+        // enregistre quand meme : on saura qu'il repondrait.
+        ...(account.status === 'DISABLED'
+          ? {}
+          : { status: health.ok ? ('CONNECTED' as const) : ('DEGRADED' as const) }),
       },
     });
 
