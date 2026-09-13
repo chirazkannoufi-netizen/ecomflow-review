@@ -125,25 +125,37 @@ describe('parcours complet d une commande', () => {
   }
 
   /** Configure un compte transporteur de test. */
-  async function setupCarrier(currentTenantId: string): Promise<string> {
+  /**
+   * Declare un compte transporteur PAR LA ROUTE REELLE.
+   *
+   * Cette fixture ecrivait la ligne directement en base, avec un
+   * `status: 'CONNECTED'` pose a la main — parce qu'aucune route ne savait
+   * creer un compte. Elle contournait donc precisement ce qui manquait au
+   * produit, et le parcours nominal restait vert alors qu'aucune boutique
+   * reelle n'aurait pu expedier. Passer par HTTP fait du scenario une preuve.
+   */
+  async function setupCarrier(token: string): Promise<string> {
     const carrier = await prisma.carrier.findUniqueOrThrow({
       where: { code: 'MOCK_CARRIER' },
       select: { id: true },
     });
 
-    const account = await prisma.carrierAccount.create({
-      data: {
-        tenantId: currentTenantId,
+    const response = await request(api.server)
+      .post(url('/carrier-accounts'))
+      .set('authorization', `Bearer ${token}`)
+      .send({
         carrierId: carrier.id,
         label: 'Transporteur de test',
-        status: 'CONNECTED',
+        credentials: { apiKey: 'cle-de-test' },
         isDefault: true,
-        config: {},
-      },
-      select: { id: true },
-    });
+      })
+      .expect(201);
 
-    return account.id;
+    // Le compte est utilisable IMMEDIATEMENT : le connecteur a ete interroge
+    // dans la foulee, et le statut decrit cette tentative reelle.
+    expect(response.body.status).toBe('CONNECTED');
+
+    return response.body.id as string;
   }
 
   async function createOrder(token: string, sku: string, quantity = 2): Promise<string> {
@@ -276,6 +288,85 @@ describe('parcours complet d une commande', () => {
   });
 
   // ==========================================================================
+  describe('comptes transporteur', () => {
+    beforeEach(async () => {
+      const owner = await registerOwner('carrier');
+      accessToken = owner.token;
+      tenantId = owner.tenantId;
+    });
+
+    it('chiffre les identifiants, et ne les renvoie jamais dans la liste', async () => {
+      await setupCarrier(accessToken);
+
+      const listed = await request(api.server)
+        .get(url('/carrier-accounts'))
+        .set('authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      // La liste dit QUELLES cles sont renseignees, jamais leurs valeurs.
+      expect(listed.body[0].credentialKeys).toEqual(['apiKey']);
+      expect(JSON.stringify(listed.body)).not.toContain('cle-de-test');
+      expect(listed.body[0].credentialsEncrypted).toBeUndefined();
+      expect(listed.body[0].deletable).toBe(true);
+    });
+
+    it('refuse un compte chez un transporteur sans connecteur', async () => {
+      const ecotrack = await prisma.carrier.findUniqueOrThrow({
+        where: { code: 'ECOTRACK' },
+        select: { id: true },
+      });
+
+      const response = await request(api.server)
+        .post(url('/carrier-accounts'))
+        .set('authorization', `Bearer ${accessToken}`)
+        .send({
+          carrierId: ecotrack.id,
+          label: 'Ecotrack',
+          credentials: {},
+        })
+        .expect(501);
+
+      expect(response.body.code).toBe('CARRIER_NOT_CONFIGURED');
+    });
+
+    it('annonce les transporteurs non selectionnables et leurs champs', async () => {
+      const response = await request(api.server)
+        .get(url('/carrier-connectors'))
+        .set('authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const byCode = new Map<string, { selectable: boolean; credentialFields: unknown[] }>(
+        response.body.map((entry: { code: string }) => [entry.code, entry]),
+      );
+
+      expect(byCode.get('YALIDINE')?.selectable).toBe(true);
+      expect(byCode.get('YALIDINE')?.credentialFields).toHaveLength(3);
+      expect(byCode.get('ECOTRACK')?.selectable).toBe(false);
+    });
+
+    it('refuse un champ non declare dans le DTO', async () => {
+      const carrier = await prisma.carrier.findUniqueOrThrow({
+        where: { code: 'MOCK_CARRIER' },
+        select: { id: true },
+      });
+
+      const response = await request(api.server)
+        .post(url('/carrier-accounts'))
+        .set('authorization', `Bearer ${accessToken}`)
+        .send({
+          carrierId: carrier.id,
+          label: 'Compte',
+          credentials: { apiKey: 'x' },
+          // Champ non declare : doit etre REFUSE, pas ignore.
+          status: 'CONNECTED',
+        })
+        .expect(400);
+
+      expect(response.body.code).toBe('VALIDATION_FAILED');
+    });
+  });
+
+  // ==========================================================================
   describe('parcours nominal : de la commande a la livraison', () => {
     beforeEach(async () => {
       const owner = await registerOwner('b');
@@ -286,7 +377,7 @@ describe('parcours complet d une commande', () => {
       variantId = product.variantId;
       productSku = product.sku;
 
-      await setupCarrier(tenantId);
+      await setupCarrier(accessToken);
     });
 
     it('mene une commande jusqu a LIVREE, avec un stock coherent', async () => {
@@ -461,7 +552,7 @@ describe('parcours complet d une commande', () => {
     it('cree le retour, l inspecte et remet la marchandise en stock', async () => {
       const owner = await registerOwner('c');
       const product = await createProduct(owner.token, 10);
-      await setupCarrier(owner.tenantId);
+      await setupCarrier(owner.token);
 
       const orderId = await createOrder(owner.token, product.sku, 1);
 
