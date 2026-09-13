@@ -17,6 +17,7 @@ import {
   Boxes,
   Building2,
   ClipboardList,
+  Contact,
   CreditCard,
   FileText,
   LayoutDashboard,
@@ -206,6 +207,18 @@ export const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEnt
         href: '/transporteurs',
         labelKey: 'carriers',
         icon: Building2,
+        permission: PERMISSIONS.SHIPMENTS_READ,
+      },
+      {
+        // DISTINCTE de « Transporteurs », et la distinction est celle de deux
+        // questions : le catalogue dit ce qu'un RESEAU sait faire — identique
+        // pour toutes les boutiques —, celle-ci dit avec quels COMPTES cette
+        // boutique-la travaille, et si la connexion repond. C'est aussi le
+        // niveau auquel travaille le reste du produit : `Order.carrierAccountId`
+        // designe un compte, pas un transporteur.
+        href: '/livreurs',
+        labelKey: 'couriers',
+        icon: Contact,
         permission: PERMISSIONS.SHIPMENTS_READ,
       },
     ],

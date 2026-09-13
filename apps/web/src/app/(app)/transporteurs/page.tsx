@@ -24,15 +24,11 @@
  *   incapacite constatee la ou il n'y a qu'une saisie manquante.
  */
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  CARRIER_ACCOUNT_KINDS,
-  PERMISSIONS,
-  WILAYAS,
-  type CarrierAccountKind,
-} from '@ecomflow/shared';
+import { PERMISSIONS, WILAYAS, type CarrierAccountKind } from '@ecomflow/shared';
 import { api, ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 import { PageHeader } from '@/components/app-shell';
@@ -43,8 +39,6 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
-  Select,
-  formatDateTime,
 } from '@/components/ui';
 
 /**
@@ -189,13 +183,23 @@ export default function CarriersPage() {
                         implemented={carrier.implementationStatus === 'AVAILABLE'}
                       />
                       <CoveragePanel carrierId={carrier.id} canManage={canManage} />
-                      {accounts.map((account) => (
-                        <AccountSettings
-                          key={account.id}
-                          account={account}
-                          canManage={canManage}
-                        />
-                      ))}
+
+                      {/* LES COMPTES NE S'EDITENT PLUS ICI.
+                          Ils avaient leur panneau replie sous chaque
+                          transporteur, avant que « Livreurs » n'existe. Deux
+                          endroits pour le meme reglage finissent par diverger,
+                          et le second reste celui que personne ne pense a
+                          mettre a jour. Cet ecran garde ce qui est une
+                          propriete du RESEAU — capacites, couverture — et
+                          renvoie vers l'ecran des comptes pour le reste. */}
+                      <p className="text-xs text-slate-500">
+                        {accounts.length > 0
+                          ? t('accountsElsewhere', { count: accounts.length })
+                          : t('noAccountYet')}{' '}
+                        <Link href="/livreurs" className="text-brand-700 underline">
+                          {t('manageAccounts')}
+                        </Link>
+                      </p>
                     </div>
                   ) : null}
                 </li>
@@ -404,103 +408,3 @@ function CoveragePanel({ carrierId, canManage }: { carrierId: string; canManage:
   );
 }
 
-// ---------------------------------------------------------------------------
-
-function AccountSettings({
-  account,
-  canManage,
-}: {
-  account: CarrierAccount;
-  canManage: boolean;
-}) {
-  const t = useTranslations('carriers');
-  const tCommon = useTranslations('common');
-  const queryClient = useQueryClient();
-
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const mutation = useMutation({
-    mutationFn: (changes: Record<string, unknown>) =>
-      api.patch(`/carrier-accounts/${account.id}/settings`, changes),
-    onSuccess: () => {
-      setError(null);
-      void queryClient.invalidateQueries({ queryKey: ['carrier-accounts'] });
-    },
-    onError: (caught) =>
-      setError(caught instanceof ApiError ? caught.userMessage : tCommon('actionFailed')),
-  });
-
-  return (
-    <section className="rounded-md border border-line bg-white p-2">
-      <button
-        className="flex w-full items-center justify-between text-start"
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span className="text-xs font-medium text-slate-700">
-          {t('accountSettings', { label: account.label })}
-        </span>
-        <span className="flex items-center gap-1.5">
-          {account.isDefault ? <Badge tone="info">{t('defaultAccount')}</Badge> : null}
-          <span className="text-slate-400">{open ? '−' : '+'}</span>
-        </span>
-      </button>
-
-      {open ? (
-        <div className="mt-2 space-y-2">
-          {error ? <Alert tone="danger">{error}</Alert> : null}
-
-          <Select
-            label={t('accountKind')}
-            hint={t('accountKindHint')}
-            value={account.kind}
-            disabled={!canManage || mutation.isPending}
-            onChange={(event) => mutation.mutate({ kind: event.target.value })}
-          >
-            {CARRIER_ACCOUNT_KINDS.map((kind) => (
-              <option key={kind} value={kind}>
-                {t(`accountKinds.${kind}`)}
-              </option>
-            ))}
-          </Select>
-
-          <label className="flex items-start gap-2 text-xs text-slate-700">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={account.sendOrderNumberInsteadOfReference}
-              disabled={!canManage || mutation.isPending}
-              onChange={(event) =>
-                mutation.mutate({ sendOrderNumberInsteadOfReference: event.target.checked })
-              }
-            />
-            <span>
-              <span className="block font-medium text-slate-800">{t('sendOrderNumber')}</span>
-              <span className="text-slate-500">{t('sendOrderNumberHint')}</span>
-            </span>
-          </label>
-
-          <label className="flex items-start gap-2 text-xs text-slate-700">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={account.stockHeldByCourier}
-              disabled={!canManage || mutation.isPending}
-              onChange={(event) => mutation.mutate({ stockHeldByCourier: event.target.checked })}
-            />
-            <span>
-              <span className="block font-medium text-slate-800">{t('stockHeldByCourier')}</span>
-              <span className="text-slate-500">{t('stockHeldByCourierHint')}</span>
-            </span>
-          </label>
-
-          {account.lastHealthCheckAt ? (
-            <p className="text-xs text-slate-400">
-              {t('lastCheck', { date: formatDateTime(account.lastHealthCheckAt) })}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
-  );
-}

@@ -2495,6 +2495,137 @@ devient : **ne jamais afficher comme acquis ce qui n'a pas été mesuré**.
 
 ---
 
+## D-067 — Un « livreur » est un compte, pas une personne
+
+**Date** : 13/09/2026 · **Statut** : appliquée
+
+**Contexte** — Le formulaire « Livreur » d'Ecomanager devait trouver son
+équivalent. Il porte : agent / société, stock géré, nom, actif / inactif,
+téléphone **(login)**, mot de passe, QR code, boutiques.
+
+**Ce que le mot recouvre chez nous** — Un `CarrierAccount` : les identifiants
+avec lesquels **cette** boutique parle à Yalidine. Ni une personne, ni un
+utilisateur du produit.
+
+| Champ Ecomanager | Chez nous |
+|---|---|
+| Agent / Société de livraison | `CarrierAccountKind` — existait déjà |
+| Stock géré ? | `stockHeldByCourier` — existait déjà |
+| Nom | `label` — le nom de **ce compte**, une boutique pouvant en avoir plusieurs chez le même réseau |
+| Actif / Inactif | `status` — voir D-068, le mapping n'était pas gratuit |
+| Téléphone (login), Mot de passe | **exclus** |
+| QR Code | **pas d'équivalent** |
+| Boutiques | **pas d'équivalent, et c'est structurel** |
+
+**Pourquoi le login est exclu** — Il ouvre l'application mobile d'Ecomanager.
+Nous n'avons pas d'interface livreur : ni rôle `COURIER`, ni écran mobile.
+Stocker de quoi authentifier quelqu'un qui n'a nulle part où se connecter
+produirait un secret orphelin — le risque sans le service.
+
+**QR Code** — Même chose : il sert au livreur à s'identifier ou à scanner ses
+colis dans leur application. Sans cette application, c'est un identifiant sans
+serrure.
+
+**« Boutiques » n'a pas d'équivalent parce que la question ne se pose pas** —
+Chez eux, un compte livreur peut servir plusieurs boutiques du même commerçant,
+d'où une case à cocher. Chez nous une boutique **est** un tenant, et
+`CarrierAccount` est scopé par `(tenant_id, id)` (D-004). Le rattachement est
+donc déjà répondu par la structure, et l'exposer comme un choix reviendrait à
+proposer de traverser l'isolation multi-tenant — la seule garantie que ce
+produit ne négocie pas.
+
+**Ce qu'Ecomanager n'a pas à demander, et nous si** — Leur formulaire ne connaît
+qu'une plateforme : la leur. Le nôtre doit d'abord faire choisir **lequel**
+transporteur catalogué ce compte concerne, puis recueillir les **identifiants
+d'API** — sans lesquels le compte ne peut rien authentifier, et n'a donc aucune
+raison d'exister. Les champs sont générés depuis `adapter.credentialFields` :
+Yalidine demande `apiId`, `apiToken` et une wilaya d'expédition ; un autre
+transporteur demandera autre chose, et le formulaire suivra sans qu'un écran
+soit touché.
+
+**Le trou que cela ferme** — `credentialsEncrypted` était **lue** par quatre
+chemins — création de colis, sondage de suivi, webhooks, contrôle de santé — et
+écrite par **aucun**. La colonne existait, chiffrée, et restait vide : aucune
+boutique réelle ne pouvait expédier. Aucune migration n'a été nécessaire, le
+schéma était déjà complet. Ce sont les chemins d'écriture qui n'existaient pas.
+
+**Une liste plate, et non une sous-vue par transporteur** — `/transporteurs`
+répond à « que sait faire ce réseau, et jusqu'où livre-t-il ? », une propriété
+identique pour toutes les boutiques. `/livreurs` répond à « avec qui je
+travaille, et est-ce que ça répond ? ». La seconde se lit en balayant une
+liste ; imbriquée sous quatre entrées de catalogue à déplier, elle demanderait
+quatre clics pour une réponse qui doit tenir en un coup d'œil. C'est aussi le
+niveau auquel travaille le reste du produit : `Order.carrierAccountId` désigne
+un **compte**.
+
+Conséquence assumée : le panneau de réglages replié sous chaque transporteur
+**disparaît**. Deux endroits pour le même réglage finissent par diverger, et le
+second est celui que personne ne pense à mettre à jour.
+
+**D-066 appliqué à la création** — Un transporteur `PLANNED` n'a pas
+d'adaptateur ; le registre le refuse à l'exécution. Le formulaire le refuse
+maintenant **avant** la saisie. Il reste **listé**, non sélectionnable, avec sa
+raison : un commerçant qui cherche ZR Express doit lire pourquoi il ne peut pas
+le choisir, plutôt que de conclure à une omission.
+
+---
+
+## D-068 — « Actif / inactif » est une intention, pas un diagnostic
+
+**Date** : 13/09/2026 · **Statut** : appliquée
+
+**Contexte** — La case « Actif / Inactif » du formulaire livreur semblait mapper
+directement sur `CarrierAccount.status`, puisque `IntegrationStatus` porte déjà
+`DISABLED`. Le mapping existe bien, mais il n'était pas gratuit.
+
+**Deux natures dans une seule colonne** — `CONNECTED`, `DEGRADED` et `ERROR`
+décrivent ce qu'a donné la **dernière tentative de connexion** : ce sont des
+mesures. `DISABLED` dit que le commerçant **ne veut plus** se servir de ce
+compte : c'est une décision. Les loger dans la même colonne est acceptable — il
+n'y a qu'un état effectif — à condition que l'un n'écrase jamais l'autre.
+
+**Le défaut concret** — `checkCarrierHealth` écrivait
+`status: health.ok ? 'CONNECTED' : 'DEGRADED'` **sans condition**. Un compte
+volontairement mis de côté serait revenu en service au premier contrôle, et le
+Dispatcher l'aurait reproposé sans que personne ne l'ait redemandé. Le résultat
+du contrôle est désormais enregistré — on sait qu'il **répondrait** — sans que
+le statut soit touché.
+
+**Réactiver repart de `PENDING_SETUP`** — et non du diagnostic d'avant la mise
+en sommeil. Un compte désactivé six semaines a pu perdre ses droits d'API ;
+restaurer un `CONNECTED` vieux de six semaines affirmerait quelque chose que
+personne n'a vérifié.
+
+**L'impasse trouvée par le premier test** — `checkCarrierHealth` passait par
+`resolveCarrierAccount`, qui n'accepte qu'un compte déjà `CONNECTED` ou
+`DEGRADED`. Or un compte naît `PENDING_SETUP`, et le contrôle de santé est le
+**seul** chemin vers `CONNECTED` — chemin qui refusait `PENDING_SETUP`.
+
+**Aucun compte ne pouvait donc devenir utilisable.** C'est l'explication de ce
+qui avait été constaté plusieurs tours plus tôt sans être compris : zéro
+`CarrierAccount` existait, et rien n'en créait.
+
+Les deux questions se ressemblent sans être la même — « avec quel compte
+puis-je **expédier** ? » et « ce compte **répond**-il ? ». La seconde se pose
+justement pour les comptes dont on ne sait encore rien, et pour ceux qu'on
+envisage de remettre en service. `checkCarrierHealth` charge donc le compte
+directement.
+
+**Trois règles que les tests figent, au passage** —
+
+1. Un secret laissé vide à la modification **conserve** sa valeur. L'écran ne
+   reçoit jamais les secrets, il ne peut donc pas les renvoyer ; traiter le vide
+   comme un effacement déconnecterait la boutique au premier réglage modifié.
+2. **Un seul compte par défaut.** `resolveCarrierAccount` prend le premier
+   `isDefault` venu : deux défauts rendraient le transporteur choisi dépendant
+   de l'ordre des lignes. Le premier compte créé le devient d'office — une
+   boutique qui n'en a qu'un n'a pas à décider qu'il est celui-là.
+3. **La suppression est refusée dès qu'un colis a été porté**
+   (`Restrict` sur `Shipment.carrierAccountId`), et la liste l'annonce **avant**
+   le clic — même principe qu'en D-063.
+
+---
+
 *Ce journal est mis à jour à chaque décision structurante. Les entrées ne sont
 jamais supprimées : une décision revenue sur est marquée « remplacée par D-XXX »
 avec sa justification, afin que l'historique du raisonnement reste lisible.*
