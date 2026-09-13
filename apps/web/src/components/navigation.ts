@@ -94,11 +94,15 @@ export type AlertKey =
  *   autres.
  *
  * LES ECRANS NON CONSTRUITS RESTENT LISTES — `href: null`.
- *   Suivi, Livre, Statistiques, Notifications et Journal d'audit figurent au
+ *   Statistiques, Rapports, Notifications et Journal d'audit figurent au
  *   systeme de design sans avoir encore de route. Ils sont listes ICI plutot
  *   qu'omis : la place qu'ils occupent dans la hierarchie fait partie de la
  *   maquette, et un menu qui se reorganise a chaque ecran livre desoriente plus
  *   qu'il n'aide. Ils s'affichent estompes et non cliquables.
+ *
+ *   « En livraison » et « Livre » en faisaient partie ; elles ont desormais
+ *   leurs routes. Les parents « Traitement » et « Suivi » gardent, eux, un
+ *   `href: null` DEFINITIF : ce sont des regroupements, pas des ecrans.
  */
 export const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEntry[] }[] = [
   {
@@ -156,17 +160,28 @@ export const NAVIGATION: readonly { sectionKey: string; entries: readonly NavEnt
         labelKey: 'followUp',
         icon: MapPin,
         children: [
+          // `SHIPMENTS_READ` et non `SHIPMENTS_TRACK`, qui les gardait tant
+          // qu'elles n'avaient pas de route.
+          //
+          //   `SHIPMENTS_TRACK` est une permission d'ACTION — « declencher une
+          //   synchronisation et appliquer les statuts ». Deux ecrans en
+          //   lecture seule n'en declenchent aucune, et l'endpoint qui les
+          //   alimente exige `SHIPMENTS_READ`. Un preparateur, qui a la
+          //   seconde sans la premiere, voyait « Expeditions » — plus riche —
+          //   mais pas ces deux-ci, pourtant strictement moins privilegiees.
+          //   Personne n'avait eu a reconcilier les deux tant que l'entree ne
+          //   menait nulle part. Voir D-065.
           {
-            href: null,
+            href: '/livraison',
             labelKey: 'inDelivery',
             icon: MapPin,
-            permission: PERMISSIONS.SHIPMENTS_TRACK,
+            permission: PERMISSIONS.SHIPMENTS_READ,
           },
           {
-            href: null,
+            href: '/livre',
             labelKey: 'delivered',
             icon: PackageCheck,
-            permission: PERMISSIONS.SHIPMENTS_TRACK,
+            permission: PERMISSIONS.SHIPMENTS_READ,
           },
           {
             href: '/retours',

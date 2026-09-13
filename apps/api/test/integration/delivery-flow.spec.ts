@@ -585,5 +585,45 @@ describe('flux entrant : livraison, encaissement, retour', () => {
       );
       expect(nothing.data).toEqual([]);
     });
+
+    it('filtre par periode sur la date de l ETAPE demandee', async () => {
+      // Le point delicat : « en livraison » se filtre par date de DEPART,
+      // « livre » par date de LIVRAISON. Les deux dates different, et un filtre
+      // unique rendrait l'un des deux ecrans inutilisable.
+      const { tenant, orderId, shipmentId } = await shipped();
+      await feed(tenant.tenantId, shipmentId, [
+        {
+          providerStatus: 'livre au client',
+          normalizedStatus: 'DELIVERED',
+          occurredAt: new Date('2026-09-01T14:00:00Z'),
+        },
+      ]);
+
+      // La commande est livree MAINTENANT (horloge de test) ; on encadre donc
+      // la periode autour d'aujourd'hui plutot qu'autour de l'evenement.
+      const { shippedAt, deliveredAt } = await prisma.order.findUniqueOrThrow({
+        where: { id: orderId },
+        select: { shippedAt: true, deliveredAt: true },
+      });
+      expect(shippedAt).not.toBeNull();
+      expect(deliveredAt).not.toBeNull();
+
+      const inRange = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        shipments.listDeliveryQueue(tenant.tenantId, {
+          stage: 'DELIVERED',
+          from: new Date(deliveredAt!.getTime() - 1_000),
+          to: new Date(deliveredAt!.getTime() + 1_000),
+        }),
+      );
+      expect(inRange.data.map((item) => item.id)).toEqual([orderId]);
+
+      const outOfRange = await RequestContextStore.runWithTenant(tenant.tenantId, () =>
+        shipments.listDeliveryQueue(tenant.tenantId, {
+          stage: 'DELIVERED',
+          from: new Date(deliveredAt!.getTime() + 86_400_000),
+        }),
+      );
+      expect(outOfRange.data).toEqual([]);
+    });
   });
 });

@@ -1010,16 +1010,35 @@ export class ShipmentsService {
       wilayaCode?: number;
       carrierAccountId?: string;
       search?: string;
+      from?: Date;
+      to?: Date;
     },
     options: { page?: number; pageSize?: number } = {},
   ): Promise<Paginated<DeliveryQueueItem>> {
     const { skip, take } = toSkipTake(options);
     const page = Math.max(1, Math.trunc(options.page ?? 1));
 
+    // LA DATE FILTREE EST CELLE DE L'ETAPE, pas une date unique pour les deux
+    // ecrans. « En livraison » se lit par date de DEPART — c'est elle qui dit
+    // depuis combien de temps un colis roule ; « Livre » se lit par date de
+    // LIVRAISON — c'est elle qui delimite une periode d'encaissement. Filtrer
+    // les deux sur le meme champ rendrait l'un des deux ecrans inutilisable.
+    const dateField = filters.stage === 'DELIVERED' ? 'deliveredAt' : 'shippedAt';
+    const dateRange =
+      filters.from || filters.to
+        ? {
+            [dateField]: {
+              ...(filters.from ? { gte: filters.from } : {}),
+              ...(filters.to ? { lte: filters.to } : {}),
+            },
+          }
+        : {};
+
     const where: Prisma.OrderWhereInput = {
       tenantId,
       archivedAt: null,
       status: filters.stage,
+      ...dateRange,
       ...(filters.wilayaCode ? { wilayaCodeSnapshot: filters.wilayaCode } : {}),
       ...(filters.carrierAccountId ? { carrierAccountId: filters.carrierAccountId } : {}),
       ...(filters.search?.trim()

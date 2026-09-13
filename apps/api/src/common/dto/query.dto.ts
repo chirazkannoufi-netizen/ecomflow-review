@@ -67,7 +67,7 @@ export class SortQueryDto {
 }
 
 /** Convertit une chaine ISO ou `AAAA-MM-JJ` en Date. */
-const toDate = ({ value }: { value: unknown }): unknown => {
+export const toDate = ({ value }: { value: unknown }): unknown => {
   if (value === undefined || value === null || value === '') return undefined;
   // Une valeur non primitive (`?from[gte]=x`) est renvoyee telle quelle : le
   // validateur la refusera avec un message clair, plutot que de la convertir

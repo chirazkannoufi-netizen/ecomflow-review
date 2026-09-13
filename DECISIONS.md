@@ -2332,6 +2332,132 @@ mais il renverse un invariant nommé, et cela se décide, cela ne se déduit pas
 
 ---
 
+## D-064 — « Livré » ne dit pas si l'argent est rentré
+
+**Date** : 13/09/2026 · **Statut** : appliquée
+
+**Contexte** — Fermer le cycle de vie de la commande : les deux écrans manquants
+(« En livraison », « Livré »), la synchronisation transporteur, et le sort de la
+marchandise qui revient.
+
+**Ce que la vérification a montré d'abord : la synchronisation existait déjà en
+entier.** `TrackingService` portait `pollShipment` (relevé), `handleWebhook`
+(poussée), et surtout un `applyEvents` **unique** où les deux aboutissent —
+idempotent par empreinte `(shipment_id, fingerprint)`, avec un cron toutes les
+cinq minutes et une route `POST /webhooks/carriers/:carrierCode`. La machine à
+états acceptait déjà `SHIPPED → IN_DELIVERY → DELIVERED | RETURNED`, avec
+`actors: ['USER', 'SYSTEM']` : aucune transition n'a eu à être ouverte.
+
+Le manque n'était pas la plomberie. C'était ce qu'elle ne transportait pas.
+
+**L'argent est un fait séparé du statut** — En paiement à la livraison, le client
+paie au livreur et le transporteur reverse à la boutique lors d'une remise de
+fonds, souvent plusieurs semaines plus tard. Entre les deux, la somme n'existait
+**nulle part** dans le système. C'est exactement là que disparaissent les
+montants qu'une boutique ne réclame jamais — non par négligence, mais parce que
+rien ne lui dit lesquels manquent. La matrice de capacités (D-049) nommait déjà
+cette donnée (« bons d'encaissement ») sans qu'aucune colonne ne puisse
+l'accueillir.
+
+`Shipment` reçoit donc `collectedCentimes`, `collectedAt`, `remittanceReference`,
+et `TrackingEvent` un bloc `collection` optionnel pour les alimenter.
+
+**Trois états, et le troisième est celui qui compte** —
+
+| Lecture | Ce que voit l'exploitant |
+|---|---|
+| `COLLECTED` | Le montant, sa date, la référence du bon |
+| `PENDING` | Le transporteur publie cette donnée et n'a pas encore reversé — **c'est une créance, et elle vieillit** |
+| `UNSUPPORTED` | Ce transporteur ne publie pas cette donnée — **il n'y a rien à réclamer** |
+| `UNKNOWN` | Aucun colis rattaché |
+
+La colonne seule ne peut pas distinguer les deux du milieu : c'est
+`CarrierCapability.realtimeCollectionVouchers` qui tranche, et les deux sont lues
+ensemble côté serveur — pas déduites d'un champ nul côté écran. Les rendre
+identiques (une case vide, un tiret) transformerait toute une colonne en **fausse
+liste d'impayés**.
+
+**Ce que cette décision ne promet pas** — Sur les quatre connecteurs du
+catalogue, **un seul déclare publier les bons d'encaissement : celui de test**.
+Yalidine — le seul réellement implémenté et utilisé — ne les publie pas, et ne
+pousse rien du tout : son suivi est en relevé seul. Ces colonnes resteront donc
+vides en production tant qu'un connecteur capable n'aura pas été intégré, et
+l'écran l'**annonce** au lieu de laisser un vide.
+
+**Le montant est pris au dernier événement qui en porte un**, pas au dernier
+événement. Le reversement est souvent annoncé *avant* une mise à jour de statut
+sans rapport ; prendre le dernier effacerait une somme déjà connue.
+
+**Trois faits qui ne se recouvrent plus** — Une tentative échouée, une livraison,
+un retour sont trois événements distincts. Ils l'étaient déjà en base ; ils le
+sont désormais **à la lecture** : la file compte les tentatives une par une, et
+une commande livrée après trois passages reste une commande à trois tentatives.
+Le réflexe naturel — n'exposer que le dernier statut connu — aurait effacé
+précisément ce qui explique un délai ou un retour.
+
+**Le retour cesse d'être muet** — La commande passait bien en `RETURNED`, mais
+`/retours` restait vide : la marchandise revenait sans que personne n'ait à
+décider de son sort. Un `Return` est maintenant créé par le même chemin, dans la
+**même transaction** que la transition. Son motif est `OTHER` et non un motif
+précis : le transporteur signale **qu'il** rend le colis, rarement **pourquoi**.
+Le libellé brut est conservé dans `reasonDetail`, et un humain affinera au
+contrôle. Inventer `CUSTOMER_REFUSED` là où le transporteur n'a rien dit
+polluerait les statistiques de motifs avec une supposition.
+
+**Deux écrans plutôt qu'un filtre de `/expeditions`** — `/expeditions` répond à
+« qu'est-ce qui est parti ? », une question de **colis** tournée vers le
+transporteur. Ces deux-ci répondent à « où en est ma commande ? » et « ai-je été
+payé ? », deux questions de **commande**. La seconde est invisible sur un écran
+de colis, parce qu'elle ne porte pas sur le colis : elle porte sur l'argent qu'il
+transportait. Les deux écrans partagent un seul composant (`DeliveryQueue`) : les
+écrire deux fois ferait diverger le compte des tentatives et la lecture de
+l'encaissement.
+
+**La période filtrée porte sur la date de l'étape** — départ du colis pour « en
+livraison », livraison pour « livré ». Un champ unique pour les deux écrans
+rendrait l'un des deux filtres inopérant.
+
+**Un piège trouvé dans le harnais de test** — `carrier_capabilities` était vidée
+à chaque `resetDatabase()` alors que `carriers` était préservée. Le catalogue
+restait debout mais **muet**, et tout code lisant une capacité retombait sur son
+défaut le plus restrictif. Un test aurait alors vérifié l'absence de matrice, pas
+le comportement réel. La table rejoint les référentiels préservés.
+
+---
+
+## D-065 — Une entrée de menu sans route ne confronte jamais sa permission
+
+**Date** : 13/09/2026 · **Statut** : appliquée
+
+**Contexte** — En donnant leurs routes à « En livraison » et « Livré », restées
+`href: null` depuis le début, leur permission a été confrontée pour la première
+fois à celle de l'endpoint qui les alimente.
+
+**L'écart** — Les deux entrées étaient gardées par `SHIPMENTS_TRACK`.
+`GET /delivery-queue` exige `SHIPMENTS_READ`. Or `SHIPMENTS_TRACK` est une
+permission d'**action** — « déclencher une synchronisation de suivi et appliquer
+les statuts » — et deux écrans en lecture seule n'en déclenchent aucune.
+
+**La conséquence concrète** — Le rôle `PREPARER` a `SHIPMENTS_READ` **sans**
+`SHIPMENTS_TRACK`. Il voyait donc `/expeditions` — l'écran le plus riche des
+trois, avec le suivi brut et le bouton de resynchronisation — mais pas ces deux
+vues **strictement moins privilégiées** des mêmes colis.
+
+**Ce que cela dit au-delà du cas** — Une entrée `href: null` est inerte : sa
+permission n'est jamais mise à l'épreuve d'un endpoint, parce qu'aucun appel n'en
+part. Elle peut donc rester fausse pendant toute la durée où l'écran est « à
+venir », et le devenir sans que rien ne le signale. La permission d'une entrée de
+navigation doit être **celle de l'endpoint qui alimente l'écran**, et cette
+correspondance ne se vérifie qu'au moment où la route existe.
+
+**Décision** — Les deux entrées passent à `SHIPMENTS_READ`, alignées sur
+l'endpoint et sur `/expeditions`. Les quatre entrées encore `href: null`
+(Statistiques, Rapports, Notifications, Journal d'audit) portent la même dette
+tant qu'elles ne mènent nulle part : leur permission sera à confronter au moment
+où elles recevront leur route, pas avant.
+
+---
+
 ---
 
 *Ce journal est mis à jour à chaque décision structurante. Les entrées ne sont

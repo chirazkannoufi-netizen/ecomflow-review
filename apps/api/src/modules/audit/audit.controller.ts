@@ -14,21 +14,9 @@ import { Transform } from 'class-transformer';
 import { IsDate, IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { AUDIT_ACTIONS, PERMISSIONS, buildPageMeta, toSkipTake } from '@ecomflow/shared';
 import { PlatformAdminOnly, RequirePermissions, TenantId } from '../../common/decorators';
-import { PaginationQueryDto, toStringArray } from '../../common/dto/query.dto';
+import { PaginationQueryDto, toDate, toStringArray } from '../../common/dto/query.dto';
 import { InjectPrisma, type PrismaClientExtended } from '../../infra/prisma/prisma.service';
 import { RequestContextStore } from '../../infra/context/request-context';
-import { asPrimitiveString } from '../../common/utils/text';
-
-const toDate = ({ value }: { value: unknown }): unknown => {
-  if (value === undefined || value === null || value === '') return undefined;
-  // Une valeur non primitive (`?from[gte]=x`) est renvoyee telle quelle : le
-  // validateur la refusera avec un message clair, plutot que de la convertir
-  // en « [object Object] » puis en date invalide.
-  const raw = asPrimitiveString(value);
-  if (raw === null) return value;
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? value : parsed;
-};
 
 export class AuditQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ isArray: true, enum: AUDIT_ACTIONS })

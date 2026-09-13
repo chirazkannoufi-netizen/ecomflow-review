@@ -22,6 +22,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsDate,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -33,7 +34,6 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { BulkArchiveDto } from '../../common/dto/query.dto';
 import {
   CARRIER_ACCOUNT_KINDS,
   PERMISSIONS,
@@ -53,7 +53,12 @@ import {
   TenantId,
 } from '../../common/decorators';
 import type { RequestContext } from '../../infra/context/request-context';
-import { PaginationQueryDto, toStringArray } from '../../common/dto/query.dto';
+import {
+  BulkArchiveDto,
+  PaginationQueryDto,
+  toDate,
+  toStringArray,
+} from '../../common/dto/query.dto';
 import { ReturnsService } from '../returns/returns.service';
 import { CarrierRegistry } from './carriers/carrier.registry';
 import { ShipmentsService } from './shipments.service';
@@ -254,6 +259,27 @@ export class DeliveryQueueQueryDto extends PaginationQueryDto {
   @IsString()
   @MaxLength(120)
   search?: string;
+
+  // LA PERIODE PORTE SUR LA DATE DE L'ETAPE, choisie par `stage` : depart du
+  // colis pour « en livraison », livraison pour « livre ». Un seul champ pour
+  // les deux ecrans rendrait l'un des deux filtres inoperant.
+  @ApiPropertyOptional({
+    description: 'Debut de periode (ISO 8601), sur la date de l etape demandee.',
+    example: '2026-09-01',
+  })
+  @IsOptional()
+  @Transform(toDate)
+  @IsDate({ message: 'Date de debut invalide.' })
+  from?: Date;
+
+  @ApiPropertyOptional({
+    description: 'Fin de periode (ISO 8601), sur la date de l etape demandee.',
+    example: '2026-09-30',
+  })
+  @IsOptional()
+  @Transform(toDate)
+  @IsDate({ message: 'Date de fin invalide.' })
+  to?: Date;
 }
 
 export class AssignCarrierDto extends BulkArchiveDto {
@@ -372,6 +398,8 @@ export class ShipmentsController {
         wilayaCode: query.wilayaCode,
         carrierAccountId: query.carrierAccountId,
         search: query.search,
+        from: query.from,
+        to: query.to,
       },
       { page: query.page, pageSize: query.pageSize },
     );

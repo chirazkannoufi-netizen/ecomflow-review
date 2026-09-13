@@ -619,6 +619,44 @@
     "noCarrier": "Aucun",
     "missingCarrierWarning": "{count, plural, one {# commande sélectionnée n'a pas de livreur : elle sera refusée au dispatch.} other {# commandes sélectionnées n'ont pas de livreur : elles seront refusées au dispatch.}}"
   },
+  "delivery": {
+    "IN_DELIVERY": {
+      "title": "En livraison",
+      "subtitle": "Les colis qui roulent : depuis combien de temps, et combien de fois le livreur s'est déjà présenté.",
+      "dateColumn": "Expédiée",
+      "fromLabel": "Expédiée depuis le",
+      "toLabel": "Expédiée jusqu'au",
+      "emptyTitle": "Aucun colis en cours de livraison",
+      "empty": "Les commandes apparaissent ici dès que le transporteur annonce la mise en distribution."
+    },
+    "DELIVERED": {
+      "title": "Livré",
+      "subtitle": "Ce qui est arrivé chez le client — et ce que le transporteur a réellement reversé.",
+      "dateColumn": "Livrée",
+      "fromLabel": "Livrée depuis le",
+      "toLabel": "Livrée jusqu'au",
+      "emptyTitle": "Aucune livraison enregistrée",
+      "empty": "Les commandes apparaissent ici dès que le transporteur confirme la remise au client."
+    },
+    "searchPlaceholder": "Référence, client, téléphone…",
+    "carrierColumn": "Transporteur",
+    "columns": {
+      "attempts": "Tentatives",
+      "collection": "Encaissement"
+    },
+    "attempts": "{count, plural, one {# tentative} other {# tentatives}}",
+    "selected": "{count, plural, one {# ligne sélectionnée} other {# lignes sélectionnées}}",
+    "noSelection": "Cochez des lignes pour les exporter.",
+    "export": "Exporter en Excel",
+    "emptyFiltered": "Aucune ligne ne correspond à ces filtres.",
+    "collection": {
+      "pending": "En attente",
+      "pendingHint": "Le transporteur n'a pas encore reversé cette somme.",
+      "unsupported": "Non communiqué",
+      "unsupportedHint": "Ce transporteur ne publie pas les bons d'encaissement : la somme a pu être remise sans que nous le sachions. Ce n'est pas un impayé.",
+      "unknown": "Sans colis rattaché"
+    }
+  },
   "shipments": {
     "title": "Expéditions",
     "subtitle": "Tous vos colis, avec le statut brut du transporteur et sa traduction.",
