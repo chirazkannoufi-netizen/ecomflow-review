@@ -50,7 +50,6 @@ import {
   Field,
   Input,
   LoadingState,
-  Select,
   formatDateTime,
 } from '@/components/ui';
 
@@ -463,7 +462,7 @@ function CreateAccountForm({
         <div className="space-y-3">
           <KindChoice value={kind} onChange={setKind} disabled={mutation.isPending} />
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="sm:max-w-sm">
             <Input
               label={t('label')}
               hint={t('labelHint')}
@@ -471,35 +470,35 @@ function CreateAccountForm({
               onChange={(event) => setLabel(event.target.value)}
               placeholder={t('labelPlaceholder')}
             />
-
-            <Select
-              label={t('carrier')}
-              hint={t('carrierHint')}
-              value={carrierId}
-              onChange={(event) => {
-                setCarrierId(event.target.value);
-                // Les champs d'identifiants changent avec le transporteur :
-                // garder les valeurs precedentes enverrait des cles que le
-                // nouveau connecteur ne reconnait pas, et l'API les refuserait.
-                setCredentials({});
-                setError(null);
-              }}
-            >
-              <option value="">{tCommon('select')}</option>
-              {connectors.map((connector) => (
-                <option key={connector.id} value={connector.id} disabled={!connector.selectable}>
-                  {connector.name}
-                  {connector.selectable ? '' : ` — ${t('notConnected')}`}
-                </option>
-              ))}
-            </Select>
           </div>
 
-          {/* D-066 : un transporteur PREVU reste LISTE mais non selectionnable,
-              et la raison est dite ici plutot que derriere une option grisee
-              muette. */}
-          {selected && !selected.selectable ? (
-            <Alert tone="warning">{t('notConnectedHint', { name: selected.name })}</Alert>
+          <PlatformGrid
+            connectors={connectors}
+            selectedId={carrierId}
+            disabled={mutation.isPending}
+            onSelect={(id) => {
+              setCarrierId(id);
+              // Les champs d'identifiants changent avec le transporteur :
+              // garder les valeurs precedentes enverrait des cles que le
+              // nouveau connecteur ne reconnait pas, et l'API les refuserait.
+              setCredentials({});
+              setError(null);
+            }}
+          />
+
+          {/* Choisir une plateforme REMPLIT le second onglet, qui etait vide
+              jusque-la. Le dire ici, la ou le clic vient d'avoir lieu, evite
+              de laisser croire que le formulaire est fini. */}
+          {selected?.selectable ? (
+            <p className="text-xs text-muted">
+              {t('platformChosen', { name: selected.name })}{' '}
+              <button
+                className="font-medium text-ink underline-offset-2 hover:underline"
+                onClick={() => setTab('credentials')}
+              >
+                {t('goToCredentials')}
+              </button>
+            </p>
           ) : null}
 
           <div className="space-y-1.5">
@@ -575,6 +574,232 @@ function FormTab({
       {children}
     </button>
   );
+}
+
+/**
+ * Le choix de la plateforme — une grille de tuiles, pas un menu deroulant.
+ *
+ * POURQUOI DES TUILES
+ *   Un menu deroulant cache quatorze entrees derriere un clic et les rend
+ *   toutes identiques : on y choisit un LIBELLE. Ici on choisit un
+ *   TRANSPORTEUR, et ce qui compte pour choisir — est-il branchable, ses
+ *   capacites sont-elles verifiees — tient sur la tuile, visible d'un coup
+ *   d'oeil sur les quatorze a la fois.
+ *
+ * LE MEME VOCABULAIRE VISUEL QUE LE RESTE DE L'ECRAN
+ *   Pastille pleine, pastille creuse, pastille grise : exactement les trois
+ *   rendus de la matrice de capacites, et les trois mots de la note de bas de
+ *   tableau (Disponible / Non verifie / Prevu). Rien de nouveau a apprendre —
+ *   un deuxieme langage pour la meme distinction aurait fait douter qu'elle
+ *   soit la meme.
+ *
+ * POURQUOI DES INITIALES ET NON DES LOGOS
+ *   Aucune de ces quatorze societes ne publie de kit de marque sous licence :
+ *   leurs logos sont des marques deposees, reutilisables seulement avec leur
+ *   accord. Embarquer une image recuperee ailleurs ferait porter au produit un
+ *   risque juridique pour un gain decoratif.
+ *
+ *   « UPS » est le cas ou cela irait plus loin qu'un risque : le sigle designe
+ *   ici CONEXLOG, licencie algerien, pas United Parcel Service. Afficher le
+ *   bouclier UPS creerait exactement la confusion que le nom du catalogue
+ *   existe pour empecher.
+ *
+ *   Chaque tuile porte donc les initiales du transporteur sur une teinte
+ *   stable, derivee de son code. Cette teinte n'est PAS la couleur officielle
+ *   de la marque — nous ne l'avons pas verifiee, et pretendre le contraire
+ *   serait une autre facon de se tromper.
+ *
+ * DES RADIOS, ET NON DES BOUTONS
+ *   Choisir une plateforme, c'est choisir UNE valeur parmi plusieurs : le
+ *   navigateur sait deja faire — fleches du clavier, etat coche, champ
+ *   desactive. Reconstruire cela avec des boutons aurait coute du code et
+ *   perdu le clavier en route.
+ */
+function PlatformGrid({
+  connectors,
+  selectedId,
+  disabled,
+  onSelect,
+}: {
+  connectors: readonly Connector[];
+  selectedId: string;
+  disabled: boolean;
+  onSelect: (carrierId: string) => void;
+}) {
+  const t = useTranslations('carriers');
+  const name = useId();
+
+  // Ce qu'on peut brancher d'abord. Le serveur trie par statut alphabetique,
+  // ce qui glisse les transporteurs PREVUS — les seuls inutilisables — au
+  // milieu de la grille.
+  const ordered = useMemo(
+    () =>
+      [...connectors].sort((left, right) => {
+        if (left.selectable !== right.selectable) return left.selectable ? -1 : 1;
+        const byStatus =
+          platformStatusRank(left.implementationStatus) -
+          platformStatusRank(right.implementationStatus);
+        return byStatus !== 0 ? byStatus : left.name.localeCompare(right.name, 'fr');
+      }),
+    [connectors],
+  );
+
+  return (
+    <Field label={t('carrier')} hint={t('carrierHint')}>
+      <div
+        role="radiogroup"
+        aria-label={t('carrier')}
+        className="mt-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
+      >
+        {ordered.map((connector) => (
+          <PlatformTile
+            key={connector.id}
+            connector={connector}
+            groupName={name}
+            selected={selectedId === connector.id}
+            disabled={disabled}
+            onSelect={() => onSelect(connector.id)}
+          />
+        ))}
+      </div>
+    </Field>
+  );
+}
+
+function PlatformTile({
+  connector,
+  groupName,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  connector: Connector;
+  groupName: string;
+  selected: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+}) {
+  const t = useTranslations('carriers');
+  const state = platformStatusKey(connector.implementationStatus);
+  const unavailable = !connector.selectable;
+
+  return (
+    <label
+      // D-066 : la raison est DITE, meme quand la tuile ne se clique pas. Une
+      // case grisee muette laisserait conclure a une omission.
+      title={unavailable ? t('notConnectedHint', { name: connector.name }) : undefined}
+      className={clsx(
+        'flex items-center gap-2.5 rounded-md border p-2.5 transition-colors',
+        unavailable
+          ? 'cursor-not-allowed border-line bg-canvas opacity-60'
+          : 'cursor-pointer hover:bg-canvas',
+        selected ? 'border-ink bg-canvas ring-1 ring-ink' : 'border-line bg-white',
+      )}
+    >
+      <input
+        type="radio"
+        name={groupName}
+        value={connector.id}
+        checked={selected}
+        disabled={disabled || unavailable}
+        onChange={onSelect}
+        className="sr-only"
+      />
+
+      <span
+        aria-hidden
+        className={clsx(
+          'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-xs font-bold',
+          avatarTone(connector.code),
+        )}
+      >
+        {initials(connector.name)}
+      </span>
+
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-ink">{connector.name}</span>
+        <span className="flex items-center gap-1.5 text-xs">
+          <span
+            aria-hidden
+            className={clsx('inline-block h-1.5 w-1.5 shrink-0 rounded-full', PLATFORM_DOTS[state])}
+          />
+          <span className={state === 'AVAILABLE' ? 'text-muted' : 'text-warning'}>
+            {t(`platformStatus.${state}`)}
+          </span>
+          {unavailable ? (
+            <span className="truncate text-muted">· {t('notConnected')}</span>
+          ) : null}
+        </span>
+      </span>
+    </label>
+  );
+}
+
+/**
+ * Les trois pastilles, reprises telles quelles de la matrice de capacites.
+ *
+ * Pleine = constate. Creuse = declare, donc visible mais jamais lu comme un
+ * acquis. Grise = rien derriere.
+ */
+const PLATFORM_DOTS: Record<'AVAILABLE' | 'UNVERIFIED' | 'PLANNED', string> = {
+  AVAILABLE: 'bg-success',
+  UNVERIFIED: 'border border-slate-400 bg-transparent',
+  PLANNED: 'bg-slate-300',
+};
+
+function platformStatusRank(status: string): number {
+  return { AVAILABLE: 0, UNVERIFIED: 1, PLANNED: 2 }[platformStatusKey(status)];
+}
+
+/**
+ * Teintes d'avatar, prises au systeme visuel existant.
+ *
+ * Choisies par le CODE du transporteur et non par son rang dans la liste :
+ * ajouter une societe au catalogue ne doit pas repeindre toutes les autres.
+ */
+const AVATAR_TONES = [
+  'bg-lime-wash text-lime-deep',
+  'bg-sky/30 text-sky-deep',
+  'bg-mint/30 text-mint-deep',
+  'bg-peach/30 text-peach-deep',
+  'bg-lavender/25 text-lavender-deep',
+] as const;
+
+function avatarTone(code: string): string {
+  let hash = 0;
+  for (const character of code) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return AVATAR_TONES[hash % AVATAR_TONES.length] ?? AVATAR_TONES[0];
+}
+
+/** Mots que personne ne lit dans un sigle. */
+const INITIALS_SKIPPED = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'et']);
+
+/**
+ * Les initiales d'un transporteur.
+ *
+ * UN SIGLE COURT EST DEJA SON PROPRE RESUME
+ *   « DHD » et « UPS » ne se resument pas a deux lettres sans perdre le nom
+ *   lui-meme ; « ZR Express » se lit « ZR ». Un premier mot court et tout en
+ *   capitales est donc garde entier.
+ *
+ *   Ce qui est entre parentheses est ecarte : « UPS (Conexlog) » ou
+ *   « ZR Express (v2 · Procolis) » y portent une precision, pas un nom.
+ */
+function initials(name: string): string {
+  const words = name
+    .replace(/\([^)]*\)/g, ' ')
+    .split(/\s+/)
+    .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ''))
+    .filter((word) => word.length > 0 && !INITIALS_SKIPPED.has(word.toLowerCase()));
+
+  const first = words[0] ?? '';
+  if (first.length === 0) return '?';
+  if (first.length >= 2 && first.length <= 3 && first === first.toUpperCase()) return first;
+
+  const second = words[1];
+  return (second ? `${first[0]}${second[0]}` : first.slice(0, 2)).toUpperCase();
 }
 
 /**

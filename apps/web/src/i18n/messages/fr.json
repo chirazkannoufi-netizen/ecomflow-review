@@ -1503,6 +1503,8 @@
     "labelPlaceholder": "Agence Alger, contrat principal…",
     "carrier": "Plateforme",
     "carrierHint": "Le réseau auquel ce compte appartient. Une plateforme sans connecteur ne peut pas être choisie.",
+    "platformChosen": "Les clés attendues par {name} sont dans l'onglet « Clés API ».",
+    "goToCredentials": "Les renseigner",
     "notConnected": "connecteur à venir",
     "notConnectedHint": "Aucun connecteur n'existe encore pour {name} : ses capacités sont annoncées par sa documentation, jamais vérifiées chez nous. Un compte ne pourrait rien authentifier.",
     "statuses": {
