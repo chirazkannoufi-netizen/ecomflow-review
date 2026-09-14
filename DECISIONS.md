@@ -2891,9 +2891,10 @@ source serait une promesse sans rien derrière.
 
 ---
 
-**Impact** — `carriers` passe de 4 à 15 lignes. Onze nouveaux codes, trois
-nouveaux adaptateurs enregistrés (dont deux instanciés plusieurs fois), une
-migration additive. Aucun service métier n'est modifié : c'était le pari de
+**Impact** — `carriers` passe de 4 à 14 lignes : dix nouveaux codes, et deux
+lignes existantes (`ECOTRACK`, `ZR_EXPRESS`) qui cessent d'être de simples
+intentions. Trois adaptateurs enregistrés, dont deux instanciés une fois par
+société, et une migration additive. Aucun service métier n'est modifié : c'était le pari de
 `CarrierAdapter`, et il tient.
 
 **Ce qui reste ouvert, et ne doit pas être oublié** — aucun transporteur du
