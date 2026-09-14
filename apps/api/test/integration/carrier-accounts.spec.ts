@@ -410,6 +410,30 @@ describe('comptes transporteur', () => {
       expect(row.lastHealthCheckAt).not.toBeNull();
     });
 
+    it('cree un compte INACTIF sans que le controle le remette en service', async () => {
+      // Le formulaire fusionne porte « Actif / Inactif » des la creation. Si le
+      // controle de sante qui suit ecrasait ce choix, « inactif » coche a la
+      // saisie serait devenu « connecte » deux secondes plus tard.
+      const tenant = await createTenant(prisma);
+      const account = await create(tenant, { enabled: false });
+
+      expect(account.status).toBe('DISABLED');
+      // Le compte a bien ete interroge : on sait qu'il repondrait.
+      expect(account.health.ok).toBe(true);
+
+      const row = await prisma.carrierAccount.findUniqueOrThrow({
+        where: { id: account.id },
+        select: { status: true, lastHealthCheckOk: true, isDefault: true },
+      });
+      expect(row.status).toBe('DISABLED');
+      expect(row.lastHealthCheckOk).toBe(true);
+      // Premier compte de la boutique : il reste le compte par defaut, meme
+      // inactif. Le rendre actif est un geste, le designer par defaut en est
+      // un autre — les confondre ferait disparaitre le defaut a la premiere
+      // mise en sommeil.
+      expect(row.isDefault).toBe(true);
+    });
+
     it('reactive vers « configuration en cours », pas vers un diagnostic perime', async () => {
       const tenant = await createTenant(prisma);
       const account = await create(tenant);

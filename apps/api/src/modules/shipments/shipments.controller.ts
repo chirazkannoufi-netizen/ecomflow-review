@@ -449,6 +449,17 @@ export class CreateCarrierAccountDto extends CarrierCredentialsDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Actif des la creation, par defaut vrai. Un compte cree INACTIF est ' +
+      'tout de meme interroge : le resultat du controle est enregistre — on ' +
+      'saura qu il repondrait — mais le statut reste « inactif », parce que ' +
+      'c est une INTENTION et non un diagnostic (D-068).',
+  })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
 }
 
 @ApiTags('Expedition, suivi et retours')

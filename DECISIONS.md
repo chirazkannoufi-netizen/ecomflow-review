@@ -2497,7 +2497,7 @@ devient : **ne jamais afficher comme acquis ce qui n'a pas été mesuré**.
 
 ## D-067 — Un « livreur » est un compte, pas une personne
 
-**Date** : 13/09/2026 · **Statut** : appliquée
+**Date** : 13/09/2026 · **Statut** : appliquée, amendée par D-069
 
 **Contexte** — Le formulaire « Livreur » d'Ecomanager devait trouver son
 équivalent. Il porte : agent / société, stock géré, nom, actif / inactif,
@@ -2549,7 +2549,7 @@ chemins — création de colis, sondage de suivi, webhooks, contrôle de santé 
 boutique réelle ne pouvait expédier. Aucune migration n'a été nécessaire, le
 schéma était déjà complet. Ce sont les chemins d'écriture qui n'existaient pas.
 
-**Une liste plate, et non une sous-vue par transporteur** — `/transporteurs`
+**Une liste plate, et non une sous-vue par transporteur** — *amendé par D-069 : la liste plate est conservée et devient l'écran principal de `/transporteurs`, mais elle n'a plus de route à elle.* — `/transporteurs`
 répond à « que sait faire ce réseau, et jusqu'où livre-t-il ? », une propriété
 identique pour toutes les boutiques. `/livreurs` répond à « avec qui je
 travaille, et est-ce que ça répond ? ». La seconde se lit en balayant une
@@ -2623,6 +2623,95 @@ directement.
 3. **La suppression est refusée dès qu'un colis a été porté**
    (`Restrict` sur `Shipment.carrierAccountId`), et la liste l'annonce **avant**
    le clic — même principe qu'en D-063.
+
+---
+
+## D-069 — `/livreurs` fusionne dans `/transporteurs` ; la liste des comptes passe devant le catalogue
+
+**Date** : 14/09/2026 · **Statut** : appliquée · **Amende D-067**
+
+**Contexte** — Deux écrans voisins dans la même section : `/transporteurs`, le
+catalogue des réseaux, et `/livreurs`, les comptes de la boutique. D-067 les
+avait séparés délibérément, au motif que les deux questions diffèrent.
+
+**Le problème que la séparation a produit** — Les deux questions diffèrent, mais
+elles ne se posent pas à des moments différents. Le commerçant qui ouvre cette
+partie du produit vient voir *ses* transporteurs ; il ne sait pas, avant
+d'arriver, si sa question relève du réseau ou de son compte. Deux entrées de
+menu côte à côte lui demandaient donc de trancher une distinction interne au
+produit **avant** de pouvoir chercher. Et le nom n'aidait pas : « Livreurs »
+désignait des comptes, jamais des personnes — exactement ce que D-067 avait dû
+écrire trois paragraphes pour expliquer.
+
+**Décision** — Un seul écran, une seule route : `/transporteurs`. `/livreurs`
+disparaît, entrée de menu comprise.
+
+**La hiérarchie est ce qui change vraiment** — Ce n'est pas une juxtaposition :
+
+| | Avant | Maintenant |
+|---|---|---|
+| Élément principal | Le catalogue des réseaux, en cartes dépliables | La **liste des comptes** — Nom, Plateforme, Statut, Action |
+| Le catalogue | Un écran à lui | Rattaché à chaque ligne par sa **plateforme** : « Disponible / Prévu » et la couverture en ligne grise ; la matrice de capacités au clic |
+| Les comptes | Un second écran | L'écran |
+
+La liste plate que D-067 réclamait est donc **conservée** — c'est elle qu'on
+balaie pour répondre à « lequel de mes comptes est en erreur ? ». Ce qui est
+abandonné, c'est l'idée qu'elle avait besoin d'une route à elle pour exister.
+
+**Où le catalogue reste visible quand aucun compte ne le porte** — Un compte
+n'existe que chez un transporteur `AVAILABLE` (D-066). Rattachée aux seules
+lignes de comptes, la distinction « disponible / prévu » n'aurait donc plus
+jamais eu l'occasion de se montrer : tous les comptes sont chez des
+transporteurs disponibles, par construction. Deux endroits la portent :
+
+1. le sélecteur **Plateforme** du formulaire, où un transporteur prévu reste
+   listé, non sélectionnable, avec sa raison — c'est là que la question se pose ;
+2. une **note de bas de tableau**, une ligne grise nommant chaque plateforme du
+   catalogue et son état, dépliable sur la matrice et la couverture. C'est aussi
+   le seul chemin vers la couverture d'une plateforme qu'on n'utilise pas encore.
+
+Une ligne grise sous le tableau, et non une carte : le catalogue est une
+propriété du **réseau**, identique pour toutes les boutiques, qu'on ne consulte
+qu'en cas de doute.
+
+**Le formulaire suit Ecomanager, et s'arrête où nous n'avons rien à tenir** —
+Bascule visible *Agent de livraison / Société de livraison*, onglets *Essentiel*
+et *Clés API*, radios *Actif / Inactif*. Les exclusions de D-067 tiennent, aux
+mêmes raisons : ni téléphone ni mot de passe (aucune interface livreur à
+ouvrir), ni QR Code (un identifiant sans serrure), ni Boutiques (un
+`CarrierAccount` est scopé par tenant — D-004).
+
+**« Agent de livraison » est montré, désactivé, « bientôt »** — Le masquer
+laisserait croire que la distinction nous a échappé ; l'ouvrir promettrait un
+écran qui n'existe pas. Un agent de livraison n'est pas une variante de compte :
+c'est une **personne**, donc un rôle, des permissions et une interface à elle —
+un chantier, pas un champ. Il prend donc la convention déjà en place dans la
+navigation pour les écrans en attente (`nav.soon`), au lieu d'en inventer une.
+Un compte déjà enregistré comme agent garde son choix affiché et modifiable :
+une valeur qu'on ne peut pas reprendre ne doit pas s'afficher grisée sur
+elle-même.
+
+**« Actif / Inactif » entre dans la création** — Le réglage n'existait qu'après
+coup. `POST /carrier-accounts` accepte désormais `enabled`, et un compte créé
+inactif naît `DISABLED`. Le contrôle de santé est **quand même** lancé et son
+résultat enregistré — on saura qu'il répondrait —, mais il n'écrase pas le
+statut : D-068 vaut dès la création, sans quoi « inactif » coché au formulaire
+serait devenu « connecté » deux secondes plus tard. Le premier compte reste le
+compte par défaut même créé inactif : activer et désigner par défaut sont deux
+gestes distincts.
+
+**Ce qui migre sans être retouché** — Premier compte créé = compte par défaut ;
+suppression refusée dès qu'un colis a été porté, avec le motif affiché avant le
+clic ; cycle `PENDING_SETUP → CONNECTED` par le contrôle de santé, `DISABLED`
+tenu à l'écart des diagnostics ; chiffrement des identifiants lié au tenant.
+Rien de cette logique n'a été réécrit — elle change d'écran, pas de règles.
+
+**Impact** — `/livreurs` n'existe plus : toute référence doit pointer
+`/transporteurs`. Le catalogue de traduction `couriers` est fusionné dans
+`carriers`, et la clé de navigation `nav.couriers` supprimée dans les deux
+langues. Le panneau de réglages de compte replié sous chaque transporteur, que
+D-067 avait supprimé, ne revient pas : il n'y a toujours qu'un seul endroit où
+un réglage de compte s'édite.
 
 ---
 

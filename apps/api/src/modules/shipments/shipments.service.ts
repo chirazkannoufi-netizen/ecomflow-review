@@ -1274,6 +1274,12 @@ export class ShipmentsService {
    *   qu'il lui manquait un geste. On appelle donc le `healthCheck` du
    *   connecteur immediatement : le statut affiche decrit une tentative REELLE
    *   de connexion, pas une intention.
+   *
+   * SAUF S'IL EST CREE INACTIF
+   *   `enabled: false` fait naitre le compte `DISABLED`. Le controle est
+   *   quand meme lance et son resultat enregistre — on saura qu'il
+   *   repondrait —, mais il n'ecrase pas le statut : « inactif » est une
+   *   decision du commercant, pas un diagnostic (D-068).
    */
   async createCarrierAccount(
     tenantId: string,
@@ -1285,6 +1291,7 @@ export class ShipmentsService {
       stockHeldByCourier?: boolean;
       sendOrderNumberInsteadOfReference?: boolean;
       isDefault?: boolean;
+      enabled?: boolean;
     },
   ): Promise<{ id: string; status: string; health: CarrierHealth }> {
     const carrier = await this.prisma.carrier.findUnique({
@@ -1323,7 +1330,11 @@ export class ShipmentsService {
             carrierId: carrier.id,
             label,
             kind: input.kind ?? 'DELIVERY_COMPANY',
-            status: 'PENDING_SETUP',
+            // Un compte cree INACTIF nait DISABLED, et le controle de sante qui
+            // suit ne l'en sortira pas : D-068 vaut des la creation, sans quoi
+            // « inactif » coche au formulaire deviendrait « connecte » deux
+            // secondes plus tard, sans que personne ne l'ait redemande.
+            status: input.enabled === false ? 'DISABLED' : 'PENDING_SETUP',
             credentialsEncrypted: this.encryption.encryptJson(credentials, tenantId),
             config: {},
             // Le PREMIER compte devient le defaut sans qu'on ait a le demander :
