@@ -26,7 +26,7 @@
  *   « efface-le ».
  */
 
-import { Fragment, useId, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
@@ -370,11 +370,16 @@ export default function CarriersPage() {
  * Le formulaire d'ajout, sur le modele d'Ecomanager — moins ce qui n'a pas
  * d'objet chez nous.
  *
- * DEUX ONGLETS, PARCE QUE LES CLES NE SONT PAS UN REGLAGE
- *   « Essentiel » se remplit une fois et se relit ; les cles d'API se
- *   remplacent, se testent, et ne se relisent JAMAIS — l'ecran ne les recoit
- *   pas. Les melanger ferait cohabiter des champs qu'on modifie et des champs
- *   qu'on ne peut que reecrire.
+ * LES CLES VIVENT DANS LA TUILE DE LEUR PLATEFORME
+ *   Elles y ont ete ramenees d'un onglet separe, et c'est la seule facon dont
+ *   elles ne mentent pas : les champs d'identifiants ne sont PAS les memes d'un
+ *   transporteur a l'autre — Yalidine demande un API ID et un token, Ecotrack
+ *   un jeton Bearer, ZR Express un token et une cle. Les loger dans un onglet
+ *   « Cles API » les presentait comme une rubrique du formulaire, alors qu'ils
+ *   sont une propriete de LA PLATEFORME CHOISIE.
+ *
+ *   Et cela coutait un geste pour rien : choisir une tuile, puis aller
+ *   chercher ailleurs ce que ce choix venait de determiner.
  *
  * CE QUE CE FORMULAIRE NE DEMANDE PAS, ET POURQUOI (D-067)
  *   Telephone et mot de passe : ce sont les identifiants de connexion du
@@ -403,7 +408,6 @@ function CreateAccountForm({
   const t = useTranslations('carriers');
   const tCommon = useTranslations('common');
 
-  const [tab, setTab] = useState<'essentials' | 'credentials'>('essentials');
   const [kind, setKind] = useState<CarrierAccountKind>('DELIVERY_COMPANY');
   const [carrierId, setCarrierId] = useState('');
   const [label, setLabel] = useState('');
@@ -441,97 +445,65 @@ function CreateAccountForm({
 
   return (
     <Card className="mb-3" title={t('formTitle')}>
-      <div className="mb-3 flex gap-1.5 border-b border-line">
-        <FormTab active={tab === 'essentials'} onClick={() => setTab('essentials')}>
-          {t('tabEssentials')}
-        </FormTab>
-        <FormTab active={tab === 'credentials'} onClick={() => setTab('credentials')}>
-          {t('tabCredentials')}
-        </FormTab>
-      </div>
-
-      {/* L'erreur reste visible depuis LES DEUX onglets : une cle d'API refusee
-          se lit alors que le champ fautif est peut-etre sur l'autre. */}
+      {/* L'erreur reste EN TETE et non dans la tuile : une cle refusee est
+          souvent refusee pour une raison qui n'est pas dans la tuile — un nom
+          deja pris chez ce transporteur, par exemple. */}
       {error ? (
         <div className="mb-3">
           <Alert tone="danger">{error}</Alert>
         </div>
       ) : null}
 
-      {tab === 'essentials' ? (
-        <div className="space-y-3">
-          <KindChoice value={kind} onChange={setKind} disabled={mutation.isPending} />
+      <div className="space-y-3">
+        <KindChoice value={kind} onChange={setKind} disabled={mutation.isPending} />
 
-          <div className="sm:max-w-sm">
-            <Input
-              label={t('label')}
-              hint={t('labelHint')}
-              value={label}
-              onChange={(event) => setLabel(event.target.value)}
-              placeholder={t('labelPlaceholder')}
-            />
-          </div>
-
-          <PlatformGrid
-            connectors={connectors}
-            selectedId={carrierId}
-            disabled={mutation.isPending}
-            onSelect={(id) => {
-              setCarrierId(id);
-              // Les champs d'identifiants changent avec le transporteur :
-              // garder les valeurs precedentes enverrait des cles que le
-              // nouveau connecteur ne reconnait pas, et l'API les refuserait.
-              setCredentials({});
-              setError(null);
-            }}
+        <div className="sm:max-w-sm">
+          <Input
+            label={t('label')}
+            hint={t('labelHint')}
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
+            placeholder={t('labelPlaceholder')}
           />
-
-          {/* Choisir une plateforme REMPLIT le second onglet, qui etait vide
-              jusque-la. Le dire ici, la ou le clic vient d'avoir lieu, evite
-              de laisser croire que le formulaire est fini. */}
-          {selected?.selectable ? (
-            <p className="text-xs text-muted">
-              {t('platformChosen', { name: selected.name })}{' '}
-              <button
-                className="font-medium text-ink underline-offset-2 hover:underline"
-                onClick={() => setTab('credentials')}
-              >
-                {t('goToCredentials')}
-              </button>
-            </p>
-          ) : null}
-
-          <div className="space-y-1.5">
-            <Toggle
-              checked={sendOrderNumberInsteadOfReference}
-              disabled={mutation.isPending}
-              title={t('sendOrderNumber')}
-              hint={t('sendOrderNumberHint')}
-              onChange={setSendOrderNumber}
-            />
-            <Toggle
-              checked={stockHeldByCourier}
-              disabled={mutation.isPending}
-              title={t('holdsStock')}
-              hint={t('holdsStockHint')}
-              onChange={setStockHeldByCourier}
-            />
-          </div>
-
-          <ActiveChoice value={enabled} onChange={setEnabled} disabled={mutation.isPending} />
-
-          <Alert tone="info">{t('scopeNotice')}</Alert>
         </div>
-      ) : selected?.selectable ? (
-        <CredentialFields
-          fields={selected.credentialFields}
-          values={credentials}
-          onChange={setCredentials}
-          configured={[]}
+
+        <PlatformGrid
+          connectors={connectors}
+          selectedId={carrierId}
+          disabled={mutation.isPending}
+          credentials={credentials}
+          onCredentialsChange={setCredentials}
+          onSelect={(id) => {
+            setCarrierId(id);
+            // Les champs d'identifiants changent avec le transporteur :
+            // garder les valeurs precedentes enverrait des cles que le
+            // nouveau connecteur ne reconnait pas, et l'API les refuserait.
+            setCredentials({});
+            setError(null);
+          }}
         />
-      ) : (
-        <Alert tone="info">{t('credentialsPending')}</Alert>
-      )}
+
+        <div className="space-y-1.5">
+          <Toggle
+            checked={sendOrderNumberInsteadOfReference}
+            disabled={mutation.isPending}
+            title={t('sendOrderNumber')}
+            hint={t('sendOrderNumberHint')}
+            onChange={setSendOrderNumber}
+          />
+          <Toggle
+            checked={stockHeldByCourier}
+            disabled={mutation.isPending}
+            title={t('holdsStock')}
+            hint={t('holdsStockHint')}
+            onChange={setStockHeldByCourier}
+          />
+        </div>
+
+        <ActiveChoice value={enabled} onChange={setEnabled} disabled={mutation.isPending} />
+
+        <Alert tone="info">{t('scopeNotice')}</Alert>
+      </div>
 
       <div className="mt-3 flex gap-2 border-t border-line pt-3">
         <Button
@@ -549,30 +521,6 @@ function CreateAccountForm({
       </div>
       <p className="mt-1.5 text-xs text-muted">{t('createAndTestHint')}</p>
     </Card>
-  );
-}
-
-function FormTab({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? 'true' : undefined}
-      className={clsx(
-        '-mb-px border-b-2 px-2.5 pb-2 text-sm font-semibold transition-colors',
-        active ? 'border-ink text-ink' : 'border-transparent text-muted hover:text-ink-2',
-      )}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -619,11 +567,15 @@ function PlatformGrid({
   connectors,
   selectedId,
   disabled,
+  credentials,
+  onCredentialsChange,
   onSelect,
 }: {
   connectors: readonly Connector[];
   selectedId: string;
   disabled: boolean;
+  credentials: Record<string, string>;
+  onCredentialsChange: (next: Record<string, string>) => void;
   onSelect: (carrierId: string) => void;
 }) {
   const t = useTranslations('carriers');
@@ -658,6 +610,8 @@ function PlatformGrid({
             groupName={name}
             selected={selectedId === connector.id}
             disabled={disabled}
+            credentials={credentials}
+            onCredentialsChange={onCredentialsChange}
             onSelect={() => onSelect(connector.id)}
           />
         ))}
@@ -671,67 +625,106 @@ function PlatformTile({
   groupName,
   selected,
   disabled,
+  credentials,
+  onCredentialsChange,
   onSelect,
 }: {
   connector: Connector;
   groupName: string;
   selected: boolean;
   disabled: boolean;
+  credentials: Record<string, string>;
+  onCredentialsChange: (next: Record<string, string>) => void;
   onSelect: () => void;
 }) {
   const t = useTranslations('carriers');
   const state = platformStatusKey(connector.implementationStatus);
   const unavailable = !connector.selectable;
+  const open = selected && !unavailable;
 
   return (
-    <label
-      // D-066 : la raison est DITE, meme quand la tuile ne se clique pas. Une
-      // case grisee muette laisserait conclure a une omission.
-      title={unavailable ? t('notConnectedHint', { name: connector.name }) : undefined}
+    <div
       className={clsx(
-        'flex items-center gap-2.5 rounded-md border p-2.5 transition-colors',
-        unavailable
-          ? 'cursor-not-allowed border-line bg-canvas opacity-60'
-          : 'cursor-pointer hover:bg-canvas',
-        selected ? 'border-ink bg-canvas ring-1 ring-ink' : 'border-line bg-white',
+        'rounded-md border transition-colors',
+        unavailable ? 'border-line bg-canvas opacity-60' : 'bg-white',
+        selected ? 'border-ink ring-1 ring-ink' : 'border-line',
+        // La tuile ouverte prend toute la largeur de la grille : les champs
+        // d'identifiants ne tiennent pas dans un tiers de ligne, et les
+        // comprimer les rendrait illisibles sur un ecran d'entree de gamme.
+        open ? 'sm:col-span-2 lg:col-span-3' : '',
       )}
     >
-      <input
-        type="radio"
-        name={groupName}
-        value={connector.id}
-        checked={selected}
-        disabled={disabled || unavailable}
-        onChange={onSelect}
-        className="sr-only"
-      />
-
-      <span
-        aria-hidden
+      {/* L'etiquette ne couvre QUE l'en-tete : si elle englobait le panneau,
+          cliquer dans un champ de saisie activerait la radio de la tuile. */}
+      <label
+        // D-066 : la raison est DITE, meme quand la tuile ne se clique pas. Une
+        // case grisee muette laisserait conclure a une omission.
+        title={unavailable ? t('notConnectedHint', { name: connector.name }) : undefined}
         className={clsx(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-xs font-bold',
-          avatarTone(connector.code),
+          'flex items-center gap-2.5 p-2.5',
+          unavailable ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-canvas',
+          open ? 'border-b border-line' : '',
         )}
       >
-        {initials(connector.name)}
-      </span>
+        <input
+          type="radio"
+          name={groupName}
+          value={connector.id}
+          checked={selected}
+          disabled={disabled || unavailable}
+          onChange={onSelect}
+          className="sr-only"
+        />
 
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-ink">{connector.name}</span>
-        <span className="flex items-center gap-1.5 text-xs">
-          <span
-            aria-hidden
-            className={clsx('inline-block h-1.5 w-1.5 shrink-0 rounded-full', PLATFORM_DOTS[state])}
-          />
-          <span className={state === 'AVAILABLE' ? 'text-muted' : 'text-warning'}>
-            {t(`platformStatus.${state}`)}
-          </span>
-          {unavailable ? (
-            <span className="truncate text-muted">· {t('notConnected')}</span>
-          ) : null}
+        <span
+          aria-hidden
+          className={clsx(
+            'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-xs font-bold',
+            avatarTone(connector.code),
+          )}
+        >
+          {initials(connector.name)}
         </span>
-      </span>
-    </label>
+
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-ink">{connector.name}</span>
+          <span className="flex items-center gap-1.5 text-xs">
+            <span
+              aria-hidden
+              className={clsx(
+                'inline-block h-1.5 w-1.5 shrink-0 rounded-full',
+                PLATFORM_DOTS[state],
+              )}
+            />
+            <span className={state === 'AVAILABLE' ? 'text-muted' : 'text-warning'}>
+              {t(`platformStatus.${state}`)}
+            </span>
+            {unavailable ? (
+              <span className="truncate text-muted">· {t('notConnected')}</span>
+            ) : null}
+          </span>
+        </span>
+      </label>
+
+      {/* LES CLES DE CETTE PLATEFORME, ET D'AUCUNE AUTRE.
+          `credentialFields` est genere par le connecteur : ouvrir Yalidine
+          montre un API ID et un token, ouvrir Ecotrack un jeton Bearer. C'est
+          la raison pour laquelle ces champs vivent ici et non dans une rubrique
+          du formulaire — ils ne veulent rien dire sans la plateforme. */}
+      {open ? (
+        <div className="p-2.5">
+          <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">
+            {t('credentials')}
+          </h4>
+          <CredentialFields
+            fields={connector.credentialFields}
+            values={credentials}
+            onChange={onCredentialsChange}
+            configured={[]}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
