@@ -254,13 +254,13 @@ describe('comptes transporteur', () => {
   });
 
   // ==========================================================================
-  describe('transporteurs sans connecteur (D-066)', () => {
+  describe('transporteurs sans connecteur (D-066) et non verifies (D-070)', () => {
     it('refuse la creation d un compte chez un transporteur PREVU', async () => {
       const tenant = await createTenant(prisma);
-      const ecotrack = await carrierId('ECOTRACK');
+      const maystro = await carrierId('MAYSTRO');
 
       await expect(
-        create(tenant, { carrierId: ecotrack, credentials: {} }),
+        create(tenant, { carrierId: maystro, credentials: {} }),
       ).rejects.toThrow(/connecteur/i);
 
       expect(await prisma.carrierAccount.count({ where: { tenantId: tenant.tenantId } })).toBe(0);
@@ -271,12 +271,85 @@ describe('comptes transporteur', () => {
       const byCode = new Map(connectors.map((entry) => [entry.code, entry]));
 
       expect(byCode.get('YALIDINE')?.selectable).toBe(true);
-      expect(byCode.get('ECOTRACK')?.selectable).toBe(false);
-      expect(byCode.get('ZR_EXPRESS')?.selectable).toBe(false);
+      expect(byCode.get('MAYSTRO')?.selectable).toBe(false);
+      expect(byCode.get('COLIVRAISON')?.selectable).toBe(false);
+      expect(byCode.get('ZR_EXPRESS_V3')?.selectable).toBe(false);
 
       // Un transporteur sans connecteur n'a aucun champ a proposer : le
       // formulaire n'a rien a dessiner, et ne le dessine pas.
-      expect(byCode.get('ECOTRACK')?.credentialFields).toEqual([]);
+      expect(byCode.get('MAYSTRO')?.credentialFields).toEqual([]);
+    });
+
+    /**
+     * LE PIEGE CIRCULAIRE QUE D-070 REFERME
+     *
+     * Un adaptateur ecrit d'apres des sources tierces ne peut etre VERIFIE
+     * qu'en tournant contre un compte marchand reel. Si « non verifie »
+     * interdisait de brancher un compte, aucun transporteur ajoute apres
+     * Yalidine ne pourrait jamais devenir disponible : l'etat serait definitif.
+     *
+     * C'est la meme impasse que D-068 avait trouvee sur `PENDING_SETUP`, et
+     * elle se referme de la meme facon — l'etat « on ne sait pas encore » doit
+     * etre traversable.
+     */
+    it('laisse brancher un compte chez un transporteur NON VERIFIE', async () => {
+      const connectors = await shipments.listCarrierConnectors();
+      const byCode = new Map(connectors.map((entry) => [entry.code, entry]));
+
+      expect(byCode.get('ZR_EXPRESS')?.implementationStatus).toBe('UNVERIFIED');
+      expect(byCode.get('ZR_EXPRESS')?.selectable).toBe(true);
+      expect(byCode.get('DHD')?.selectable).toBe(true);
+      expect(byCode.get('GUEPEX')?.selectable).toBe(true);
+    });
+
+    it('demande son domaine a un revendeur, jamais a Yalidine', async () => {
+      const connectors = await shipments.listCarrierConnectors();
+      const field = (code: string) =>
+        connectors
+          .find((entry) => entry.code === code)
+          ?.credentialFields.find((entry) => entry.key === 'baseUrl');
+
+      // Guepex, Yalitec et We Can exposent la MEME API que Yalidine, chacun sur
+      // un domaine qu'ils ne publient pas : il est demande plutot que devine.
+      expect(field('GUEPEX')?.required).toBe(true);
+      expect(field('YALIDINE')?.required).toBe(false);
+      expect(field('DHD')?.required).toBe(false);
+      expect(field('SPEEDMAIL')?.required).toBe(true);
+    });
+
+    it('dit POURQUOI le catalogue en sait si peu, transporteur par transporteur', async () => {
+      const catalogue = await shipments.listCarrierCatalogue();
+      const byCode = new Map(catalogue.map((entry) => [entry.code, entry]));
+
+      // Verifie : rien a expliquer.
+      expect(byCode.get('YALIDINE')?.sourceNote).toBeNull();
+      // Un adaptateur existe, mais ecrit d'apres des tiers.
+      expect(byCode.get('DHD')?.sourceNote).toBe('THIRD_PARTY_SOURCES');
+      // Deux raisons DIFFERENTES d'etre PLANNED, et deux gestes suivants
+      // differents : demander une documentation n'est pas reprendre un
+      // adressage.
+      expect(byCode.get('MAYSTRO')?.sourceNote).toBe('DOCUMENTATION_REQUESTED');
+      expect(byCode.get('ZR_EXPRESS_V3')?.sourceNote).toBe('ADDRESSING_REWORK');
+    });
+
+    it('laisse SANS matrice le transporteur dont on ne sait rien', async () => {
+      const catalogue = await shipments.listCarrierCatalogue();
+      const colivraison = catalogue.find((entry) => entry.code === 'COLIVRAISON');
+
+      // Dix-huit « false » affirmeraient dix-huit incapacites constatees. On
+      // n'a rien constate : `null` dit « non renseignees », et l'ecran l'ecrit.
+      expect(colivraison?.capabilities).toBeNull();
+      expect(catalogue.find((entry) => entry.code === 'DHD')?.capabilities).not.toBeNull();
+    });
+
+    it('n ajoute pas au catalogue un transporteur sans aucune source', async () => {
+      const catalogue = await shipments.listCarrierCatalogue();
+
+      // « Nord & Ouest » n'apparait dans aucune fiche. Une ligne de catalogue
+      // sans source serait une promesse sans rien derriere.
+      expect(catalogue.map((entry) => entry.name)).not.toContain(
+        expect.stringMatching(/nord.*ouest/i),
+      );
     });
 
     it('genere les champs depuis le connecteur, pas depuis une liste ecrite a la main', async () => {
@@ -287,11 +360,14 @@ describe('comptes transporteur', () => {
         'apiId',
         'apiToken',
         'fromWilayaName',
+        'baseUrl',
       ]);
       // Le caractere secret vient du connecteur : c'est lui qui sait lequel de
       // ses champs ne doit jamais etre reaffiche.
       expect(yalidine?.credentialFields.find((f) => f.key === 'apiToken')?.secret).toBe(true);
       expect(yalidine?.credentialFields.find((f) => f.key === 'apiId')?.secret).toBe(false);
+      // L'URL de base n'est pas un secret : elle se relit et se corrige.
+      expect(yalidine?.credentialFields.find((f) => f.key === 'baseUrl')?.secret).toBe(false);
     });
   });
 

@@ -1539,10 +1539,23 @@
     "platformDetail": "Ce que {name} sait faire",
     "catalogue": "Au catalogue :",
     "catalogueHint": "Ce qu'une plateforme sait faire ne dépend pas de vos comptes : c'est une propriété du réseau, identique pour toutes les boutiques.",
-    "statusAvailable": "Disponible",
-    "statusPlanned": "Prévu",
     "wilayaCovered": "{count, plural, one {# wilaya} other {# wilayas}}",
     "wilayaUnknown": "Couverture non renseignée",
+    "platformStatus": {
+      "AVAILABLE": "Disponible",
+      "UNVERIFIED": "Non vérifié",
+      "PLANNED": "Prévu"
+    },
+    "capabilityHints": {
+      "AVAILABLE": "Une action que la plateforme ne sait pas faire n'est pas proposée ailleurs dans le produit.",
+      "UNVERIFIED": "Un connecteur existe pour cette plateforme, mais il a été écrit d'après des intégrations tierces, sans qu'aucune ligne ait été confrontée à un compte marchand réel. Ce tableau décrit ce qui est attendu, pas ce qui a été constaté.",
+      "PLANNED": "Aucun connecteur n'existe encore pour cette plateforme : cette matrice reprend ce que sa documentation annonce, sans qu'aucune ligne ait été confrontée à son API. Rien n'y est vérifié."
+    },
+    "sourceNotes": {
+      "THIRD_PARTY_SOURCES": "Connecteur écrit d'après des SDK communautaires et des connecteurs d'intégrateurs, jamais d'après la documentation du transporteur. Vous pouvez y brancher votre compte : c'est ainsi qu'il se vérifiera. D'ici là, ses capacités restent déclarées.",
+      "DOCUMENTATION_REQUESTED": "Les sources publiques sont trop minces pour coder en confiance : elles se contredisent ou n'existent pas. La prochaine étape n'est pas technique — c'est d'obtenir la documentation réelle auprès de la société, comme NOEST l'a transmise.",
+      "ADDRESSING_REWORK": "Cette génération identifie les territoires par UUID, là où notre référentiel — et la génération précédente — parle en noms de wilaya et de commune. C'est un chantier d'adressage à part, pas une variante du connecteur existant."
+    },
     "capabilities": "Capacités",
     "capabilitiesUnknown": "Les capacités de cette plateforme ne sont pas renseignées. Tant qu'elles ne le sont pas, aucune action n'est masquée ni promise.",
     "capabilityGroups": {
@@ -1577,8 +1590,6 @@
     "coverageHint": "Une wilaya décochée des deux modes signifie « couverture inconnue », pas « non desservie ».",
     "home": "Domicile",
     "pickupPoint": "Bureau",
-    "capabilityHint": "Une action que la plateforme ne sait pas faire n'est pas proposée ailleurs dans le produit.",
-    "capabilityDeclaredHint": "Aucun connecteur n'existe encore pour cette plateforme : cette matrice reprend ce que sa documentation annonce, sans qu'aucune ligne ait été confrontée à son API. Rien n'y est vérifié.",
     "capabilityDeclaredOnly": "Capacité annoncée par le transporteur, jamais testée chez nous.",
     "declaredMark": "(déclaré)"
   },

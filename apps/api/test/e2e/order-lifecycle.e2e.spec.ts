@@ -311,8 +311,10 @@ describe('parcours complet d une commande', () => {
     });
 
     it('refuse un compte chez un transporteur sans connecteur', async () => {
-      const ecotrack = await prisma.carrier.findUniqueOrThrow({
-        where: { code: 'ECOTRACK' },
+      // Maystro : les sources publiques se contredisent jusque sur l'hote, donc
+      // aucun adaptateur n'est ecrit et la route doit le refuser (D-070).
+      const maystro = await prisma.carrier.findUniqueOrThrow({
+        where: { code: 'MAYSTRO' },
         select: { id: true },
       });
 
@@ -320,8 +322,8 @@ describe('parcours complet d une commande', () => {
         .post(url('/carrier-accounts'))
         .set('authorization', `Bearer ${accessToken}`)
         .send({
-          carrierId: ecotrack.id,
-          label: 'Ecotrack',
+          carrierId: maystro.id,
+          label: 'Maystro',
           credentials: {},
         })
         .expect(501);
@@ -340,8 +342,14 @@ describe('parcours complet d une commande', () => {
       );
 
       expect(byCode.get('YALIDINE')?.selectable).toBe(true);
-      expect(byCode.get('YALIDINE')?.credentialFields).toHaveLength(3);
-      expect(byCode.get('ECOTRACK')?.selectable).toBe(false);
+      // API ID, token, wilaya d'expedition, et l'URL de base depuis D-070.
+      expect(byCode.get('YALIDINE')?.credentialFields).toHaveLength(4);
+
+      // NON VERIFIE reste selectionnable : c'est la seule facon de le
+      // confronter un jour a un vrai compte (D-070).
+      expect(byCode.get('ECOTRACK')?.selectable).toBe(true);
+      // SANS ADAPTATEUR, non.
+      expect(byCode.get('MAYSTRO')?.selectable).toBe(false);
     });
 
     it('refuse un champ non declare dans le DTO', async () => {

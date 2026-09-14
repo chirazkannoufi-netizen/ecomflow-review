@@ -82,6 +82,25 @@ const CAPABILITY_GROUPS = [
   { key: 'logistics', items: ['stockAtCarrier'] },
 ] as const;
 
+/**
+ * L'etat d'integration d'une plateforme, en un mot — D-066, D-070.
+ *
+ * TROIS ETATS, ET LA NUANCE EST TOUT L'INTERET
+ *   « Disponible » dit qu'un adaptateur a tourne contre un compte marchand
+ *   reel. « Non verifie » dit qu'il existe et qu'on peut s'en servir, mais que
+ *   rien n'a encore ete confronte a la realite. « Prevu » dit qu'il n'y a pas
+ *   d'adaptateur du tout.
+ *
+ *   Seul le premier est ecrit en gris neutre : les deux autres portent la
+ *   couleur d'un avertissement, parce que les confondre avec le premier est
+ *   exactement l'erreur qui coute un colis.
+ */
+function platformStatusKey(status: string): 'AVAILABLE' | 'UNVERIFIED' | 'PLANNED' {
+  if (status === 'AVAILABLE') return 'AVAILABLE';
+  if (status === 'UNVERIFIED') return 'UNVERIFIED';
+  return 'PLANNED';
+}
+
 const STATUS_TONES: Record<string, 'neutral' | 'info' | 'success' | 'warning' | 'danger'> = {
   CONNECTED: 'success',
   DEGRADED: 'warning',
@@ -114,6 +133,7 @@ interface CarrierEntry {
   readonly name: string;
   readonly isActive: boolean;
   readonly implementationStatus: string;
+  readonly sourceNote: string | null;
   readonly capabilities: Record<string, boolean> | null;
   readonly coveredWilayas: number;
 }
@@ -282,9 +302,11 @@ export default function CarriersPage() {
                                 : 'text-warning',
                             )}
                           >
-                            {account.carrier.implementationStatus === 'AVAILABLE'
-                              ? t('statusAvailable')
-                              : t('statusPlanned')}
+                            {t(
+                              `platformStatus.${platformStatusKey(
+                                account.carrier.implementationStatus,
+                              )}`,
+                            )}
                             {platform
                               ? ` · ${
                                   platform.coveredWilayas > 0
@@ -1020,9 +1042,7 @@ function CatalogueFootnote({
               }
             >
               {' ('}
-              {carrier.implementationStatus === 'AVAILABLE'
-                ? t('statusAvailable')
-                : t('statusPlanned')}
+              {t(`platformStatus.${platformStatusKey(carrier.implementationStatus)}`)}
               {')'}
             </span>
           </Fragment>
@@ -1039,14 +1059,27 @@ function CatalogueFootnote({
   );
 }
 
-/** Ce qu'une plateforme sait faire, et jusqu'ou elle livre. */
+/**
+ * Ce qu'une plateforme sait faire, jusqu'ou elle livre — et sur quoi on se base.
+ *
+ * LA PROVENANCE VIENT AVANT LA MATRICE
+ *   Une matrice se lit comme un fait. Celle d'un transporteur non verifie n'en
+ *   est pas un : elle vient de SDK communautaires que personne n'a confrontes a
+ *   un compte reel. Le dire APRES les dix-huit pastilles serait le dire trop
+ *   tard — l'oeil a deja conclu.
+ */
 function PlatformDetail({ carrier, canManage }: { carrier: CarrierEntry; canManage: boolean }) {
+  const t = useTranslations('carriers');
+  const verified = carrier.implementationStatus === 'AVAILABLE';
+
   return (
     <div className="space-y-3">
-      <CapabilityMatrix
-        capabilities={carrier.capabilities}
-        implemented={carrier.implementationStatus === 'AVAILABLE'}
-      />
+      {carrier.sourceNote ? (
+        <Alert tone={verified ? 'info' : 'warning'}>
+          {t(`sourceNotes.${carrier.sourceNote}`)}
+        </Alert>
+      ) : null}
+      <CapabilityMatrix capabilities={carrier.capabilities} status={carrier.implementationStatus} />
       <CoveragePanel carrierId={carrier.id} canManage={canManage} />
     </div>
   );
@@ -1056,11 +1089,14 @@ function PlatformDetail({ carrier, canManage }: { carrier: CarrierEntry; canMana
  * La matrice de capacites — et ce qu'elle vaut selon le transporteur.
  *
  * DECLARE N'EST PAS MESURE
- *   Pour un transporteur PREVU, aucun connecteur n'existe : sa matrice reprend
- *   ce que sa documentation annonce, sans qu'une seule ligne ait ete confrontee
- *   a son API. Ecotrack declare ainsi douze capacites, dont la poussee temps
- *   reel des tentatives — davantage que Yalidine, qui est le seul transporteur
- *   reellement implemente.
+ *   Deux cas rendent une matrice DECLAREE, et non mesuree. Un transporteur
+ *   PREVU n'a aucun connecteur : sa matrice reprend ce que sa documentation
+ *   annonce. Un transporteur NON VERIFIE en a un, mais ecrit d'apres des
+ *   sources tierces et jamais confronte a un vrai compte (D-070).
+ *
+ *   Dans les deux cas la question est la meme : qu'est-ce qui a ete CONSTATE ?
+ *   ZR Express v3 declare ainsi quatorze capacites — davantage que Yalidine,
+ *   seul transporteur verifie du catalogue.
  *
  *   Les rendre avec la meme pastille verte reviendrait a promettre une parite
  *   qui n'a jamais ete verifiee. La difference n'est donc pas releguee au seul
@@ -1069,12 +1105,22 @@ function PlatformDetail({ carrier, canManage }: { carrier: CarrierEntry; canMana
  */
 function CapabilityMatrix({
   capabilities,
-  implemented,
+  status,
 }: {
   capabilities: Record<string, boolean> | null;
-  implemented: boolean;
+  /**
+   * L'etat d'integration de la plateforme.
+   *
+   * Ce n'est plus « le code existe-t-il ? » : depuis D-070 un connecteur peut
+   * exister sans avoir ete confronte a quoi que ce soit. C'est la VERIFICATION
+   * qui decide si une capacite se lit comme un acquis — et la phrase qui
+   * l'explique n'est pas la meme selon qu'il manque un connecteur ou un essai.
+   */
+  status: string;
 }) {
   const t = useTranslations('carriers');
+  const state = platformStatusKey(status);
+  const verified = state === 'AVAILABLE';
 
   if (!capabilities) {
     return <Alert tone="warning">{t('capabilitiesUnknown')}</Alert>;
@@ -1086,7 +1132,7 @@ function CapabilityMatrix({
         {t('capabilities')}
       </h4>
       <p className="mb-1.5 text-xs text-muted">
-        {implemented ? t('capabilityHint') : t('capabilityDeclaredHint')}
+        {t(`capabilityHints.${state}`)}
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1103,18 +1149,18 @@ function CapabilityMatrix({
                 // pastille creuse — visible, mais jamais lue comme un acquis.
                 const dot = !supported
                   ? 'bg-slate-300'
-                  : implemented
+                  : verified
                     ? 'bg-success'
                     : 'border border-slate-400 bg-transparent';
                 return (
                   <li key={item} className="flex items-center gap-1.5 text-xs">
                     <span aria-hidden className={`inline-block h-1.5 w-1.5 rounded-full ${dot}`} />
                     <span
-                      className={supported && implemented ? 'text-ink' : 'text-muted'}
-                      title={supported && !implemented ? t('capabilityDeclaredOnly') : undefined}
+                      className={supported && verified ? 'text-ink' : 'text-muted'}
+                      title={supported && !verified ? t('capabilityDeclaredOnly') : undefined}
                     >
                       {t(`capabilityNames.${item}`)}
-                      {supported && !implemented ? (
+                      {supported && !verified ? (
                         <span className="ms-1 text-muted">{t('declaredMark')}</span>
                       ) : null}
                     </span>

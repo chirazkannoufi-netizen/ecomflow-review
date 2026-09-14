@@ -399,6 +399,69 @@ async function seedSuperAdmin(
  *   `MOCK_CARRIER` declare tout : c'est un connecteur de test, dont l'interet
  *   est justement de laisser toutes les actions accessibles en developpement.
  */
+const YALIDINE_FAMILY_CAPABILITIES = {
+  addOrder: true,
+  addOrderBulk: true,
+  deleteOrder: true,
+  printableLabel: true,
+  syncAttempted: true,
+  syncDelivered: true,
+  syncFailed: true,
+  // Pas de push : l'adaptateur declare `supportsWebhooks = false`, et tout
+  // le suivi passe par le sondage.
+  realtimeUndeliverableWilayas: false,
+  realtimeAttempted: false,
+  realtimeDelivered: false,
+  realtimeFailed: false,
+  realtimeCollectionVouchers: false,
+  realtimeAddressChange: false,
+  realtimePriceChange: false,
+  stopDesk: true,
+  afterSalesExchange: false,
+  afterSalesPickup: false,
+  stockAtCarrier: false,
+} as const;
+
+/**
+ * Famille Ecotrack — quatre societes, une plateforme, une matrice.
+ *
+ * DEUX LIGNES QUI CORRIGENT CE QUE LA SYNTHESE ANNONCAIT
+ *   `deleteOrder: true` — la fiche de synthese affirmait qu'aucun point
+ *   d'annulation n'existait ; l'integration Vargo appelle pourtant
+ *   `DELETE api/v1/delete/order`. On declare donc la capacite, en sachant que
+ *   « supprimer » pourrait ne valoir qu'avant enlevement : c'est exactement ce
+ *   qu'un premier compte reel dira.
+ *
+ *   `printableLabel: false` — et la, la fiche avait raison. Le bordereau existe
+ *   mais l'API le rend en OCTETS PDF, pas en URL. `Shipment.labelUrl` commande
+ *   un lien dans deux ecrans ; sans route qui serve ces octets, il n'y a aucun
+ *   lien a promettre. Declarer la capacite afficherait un bouton mort — ce que
+ *   D-049 existe pour empecher.
+ */
+const ECOTRACK_FAMILY_CAPABILITIES = {
+  addOrder: true,
+  addOrderBulk: true,
+  deleteOrder: true,
+  printableLabel: false,
+  syncAttempted: true,
+  syncDelivered: true,
+  syncFailed: true,
+  realtimeUndeliverableWilayas: false,
+  realtimeAttempted: false,
+  realtimeDelivered: false,
+  realtimeFailed: false,
+  realtimeCollectionVouchers: false,
+  realtimeAddressChange: false,
+  realtimePriceChange: false,
+  stopDesk: true,
+  // `type` distingue livraison, echange et pick-up a la creation meme.
+  afterSalesExchange: true,
+  afterSalesPickup: true,
+  // `stock` et `quantite` a la creation : la plateforme suit la marchandise
+  // deposee chez le transporteur.
+  stockAtCarrier: true,
+} as const;
+
 const CARRIER_CAPABILITIES = {
   MOCK_CARRIER: {
     addOrder: true,
@@ -420,33 +483,32 @@ const CARRIER_CAPABILITIES = {
     afterSalesPickup: true,
     stockAtCarrier: true,
   },
-  YALIDINE: {
-    addOrder: true,
-    addOrderBulk: true,
-    deleteOrder: true,
-    printableLabel: true,
-    syncAttempted: true,
-    syncDelivered: true,
-    syncFailed: true,
-    // Pas de push : l'adaptateur declare `supportsWebhooks = false`, et tout
-    // le suivi passe par le sondage.
-    realtimeUndeliverableWilayas: false,
-    realtimeAttempted: false,
-    realtimeDelivered: false,
-    realtimeFailed: false,
-    realtimeCollectionVouchers: false,
-    realtimeAddressChange: false,
-    realtimePriceChange: false,
-    stopDesk: true,
-    afterSalesExchange: false,
-    afterSalesPickup: false,
-    stockAtCarrier: false,
-  },
+
+  // --- Famille Yalidine : meme API, quatre domaines -------------------------
+  YALIDINE: YALIDINE_FAMILY_CAPABILITIES,
+  GUEPEX: YALIDINE_FAMILY_CAPABILITIES,
+  YALITEC: YALIDINE_FAMILY_CAPABILITIES,
+  WECAN: YALIDINE_FAMILY_CAPABILITIES,
+
+  // --- Famille Ecotrack : plateforme partagee -------------------------------
+  ECOTRACK: ECOTRACK_FAMILY_CAPABILITIES,
+  DHD: ECOTRACK_FAMILY_CAPABILITIES,
+  UPS_CONEXLOG: ECOTRACK_FAMILY_CAPABILITIES,
+  SPEEDMAIL: ECOTRACK_FAMILY_CAPABILITIES,
+
+  /**
+   * ZR Express v2 (Procolis) — corrigee vers le BAS.
+   *
+   * La ligne precedente declarait suppression et etiquette : elle decrivait une
+   * CIBLE, ecrite avant qu'aucune source ne soit lue. Les deux integrations
+   * open-source consultees declarent les trois explicitement non supportees, et
+   * `lire` ne rend que l'etat courant — donc aucune tentative historisee.
+   */
   ZR_EXPRESS: {
     addOrder: true,
     addOrderBulk: false,
-    deleteOrder: true,
-    printableLabel: true,
+    deleteOrder: false,
+    printableLabel: false,
     syncAttempted: false,
     syncDelivered: true,
     syncFailed: true,
@@ -458,11 +520,41 @@ const CARRIER_CAPABILITIES = {
     realtimeAddressChange: false,
     realtimePriceChange: false,
     stopDesk: true,
-    afterSalesExchange: false,
+    afterSalesExchange: true,
     afterSalesPickup: false,
     stockAtCarrier: false,
   },
-  ECOTRACK: {
+
+  /**
+   * ZR Express v3 — la plus riche du catalogue, et pas une ligne verifiee.
+   *
+   * Aucun adaptateur : son adressage par UUID de territoire ne parle pas le
+   * langage de notre referentiel. Cette matrice reprend ce que la fiche annonce
+   * — webhooks, echange, tresorerie — et l'ecran la rend en pastilles creuses,
+   * parce qu'une capacite annoncee n'est pas une capacite constatee (D-066).
+   */
+  ZR_EXPRESS_V3: {
+    addOrder: true,
+    addOrderBulk: true,
+    deleteOrder: true,
+    printableLabel: true,
+    syncAttempted: true,
+    syncDelivered: true,
+    syncFailed: true,
+    realtimeUndeliverableWilayas: false,
+    realtimeAttempted: true,
+    realtimeDelivered: true,
+    realtimeFailed: true,
+    realtimeCollectionVouchers: true,
+    realtimeAddressChange: true,
+    realtimePriceChange: true,
+    stopDesk: true,
+    afterSalesExchange: true,
+    afterSalesPickup: true,
+    stockAtCarrier: true,
+  },
+
+  MAYSTRO: {
     addOrder: true,
     addOrderBulk: true,
     deleteOrder: true,
@@ -477,38 +569,175 @@ const CARRIER_CAPABILITIES = {
     realtimeCollectionVouchers: false,
     realtimeAddressChange: false,
     realtimePriceChange: false,
+    stopDesk: false,
+    afterSalesExchange: false,
+    afterSalesPickup: false,
+    // Maystro fait aussi du stockage : son API porte un catalogue produits.
+    stockAtCarrier: true,
+  },
+
+  ECOM_DELIVERY: {
+    addOrder: true,
+    addOrderBulk: true,
+    deleteOrder: true,
+    printableLabel: true,
+    syncAttempted: true,
+    syncDelivered: true,
+    syncFailed: true,
+    realtimeUndeliverableWilayas: false,
+    realtimeAttempted: false,
+    realtimeDelivered: false,
+    realtimeFailed: false,
+    realtimeCollectionVouchers: false,
+    realtimeAddressChange: false,
+    realtimePriceChange: false,
+    // `getOffices` figure parmi les fonctions observees.
     stopDesk: true,
     afterSalesExchange: false,
     afterSalesPickup: false,
     stockAtCarrier: false,
   },
+
+  /**
+   * Colivraison — la seule ligne SANS matrice, et c'est volontaire.
+   *
+   * Aucune implementation communautaire n'existe, et la fiche ne liste aucune
+   * fonction : la seule chose connue est une authentification a deux champs et
+   * une API « orientee lot ». Ecrire dix-huit `false` affirmerait dix-huit
+   * incapacites constatees ; ecrire dix-huit `true` promettrait tout. `null`
+   * dit ce qui est vrai — « non renseignees » — et l'ecran l'affiche ainsi.
+   */
+  COLIVRAISON: null,
 } as const;
 
 type CarrierCode = keyof typeof CARRIER_CAPABILITIES;
 
+/**
+ * Le catalogue.
+ *
+ * TROIS ETATS, ET CE QU'ILS AUTORISENT (D-066, D-070)
+ *   AVAILABLE  — adaptateur verifie contre un compte marchand reel.
+ *   UNVERIFIED — adaptateur ecrit d'apres des sources tierces concordantes,
+ *                jamais confronte. Selectionnable, capacites declarees.
+ *   PLANNED    — aucun adaptateur, donc non selectionnable.
+ *
+ * `sourceNote` dit POURQUOI, parce que deux transporteurs PLANNED peuvent
+ * l'etre pour des raisons qui n'appellent pas le meme geste suivant : demander
+ * une documentation n'est pas reprendre un adressage.
+ *
+ * CE QUI N'Y FIGURE PAS
+ *   « Nord & Ouest » n'apparait dans aucune des six fiches, et aucune source
+ *   meme partielle n'a ete trouvee. Une ligne de catalogue sans source serait
+ *   une promesse sans rien derriere : elle attendra.
+ */
 const CARRIERS = [
   {
     code: 'MOCK_CARRIER',
     name: 'Transporteur de test',
     implementationStatus: 'AVAILABLE',
+    sourceNote: null,
     isActive: true,
   },
+
+  // --- Famille Yalidine -----------------------------------------------------
   {
     code: 'YALIDINE',
     name: 'Yalidine Express',
     implementationStatus: 'AVAILABLE',
+    sourceNote: null,
     isActive: true,
   },
   {
-    code: 'ZR_EXPRESS',
-    name: 'ZR Express',
-    implementationStatus: 'PLANNED',
-    isActive: false,
+    code: 'GUEPEX',
+    name: 'Guepex',
+    implementationStatus: 'UNVERIFIED',
+    sourceNote: 'THIRD_PARTY_SOURCES',
+    isActive: true,
   },
+  {
+    code: 'YALITEC',
+    name: 'Yalitec',
+    implementationStatus: 'UNVERIFIED',
+    sourceNote: 'THIRD_PARTY_SOURCES',
+    isActive: true,
+  },
+  {
+    code: 'WECAN',
+    name: 'We Can Services',
+    implementationStatus: 'UNVERIFIED',
+    sourceNote: 'THIRD_PARTY_SOURCES',
+    isActive: true,
+  },
+
+  // --- Famille Ecotrack -----------------------------------------------------
   {
     code: 'ECOTRACK',
     name: 'Ecotrack',
+    implementationStatus: 'UNVERIFIED',
+    sourceNote: 'THIRD_PARTY_SOURCES',
+    isActive: true,
+  },
+  {
+    code: 'DHD',
+    name: 'DHD',
+    implementationStatus: 'UNVERIFIED',
+    sourceNote: 'THIRD_PARTY_SOURCES',
+    isActive: true,
+  },
+  {
+    // « UPS » designe ici CONEXLOG EURL, licencie algerien de la marque, qui
+    // livre sur Ecotrack. Ce n'est PAS l'API mondiale de United Parcel Service,
+    // et le nom du catalogue doit l'empecher d'etre lu ainsi.
+    code: 'UPS_CONEXLOG',
+    name: 'UPS (Conexlog)',
+    implementationStatus: 'UNVERIFIED',
+    sourceNote: 'THIRD_PARTY_SOURCES',
+    isActive: true,
+  },
+  {
+    code: 'SPEEDMAIL',
+    name: 'SpeedMail',
+    implementationStatus: 'UNVERIFIED',
+    sourceNote: 'THIRD_PARTY_SOURCES',
+    isActive: true,
+  },
+
+  // --- ZR Express : deux generations, pas une famille ------------------------
+  {
+    code: 'ZR_EXPRESS',
+    name: 'ZR Express (v2 · Procolis)',
+    implementationStatus: 'UNVERIFIED',
+    sourceNote: 'THIRD_PARTY_SOURCES',
+    isActive: true,
+  },
+  {
+    code: 'ZR_EXPRESS_V3',
+    name: 'ZR Express (v3)',
     implementationStatus: 'PLANNED',
+    sourceNote: 'ADDRESSING_REWORK',
+    isActive: false,
+  },
+
+  // --- Declares, sans adaptateur : la documentation reste a obtenir ---------
+  {
+    code: 'MAYSTRO',
+    name: 'Maystro Delivery',
+    implementationStatus: 'PLANNED',
+    sourceNote: 'DOCUMENTATION_REQUESTED',
+    isActive: false,
+  },
+  {
+    code: 'ECOM_DELIVERY',
+    name: 'E-COM Delivery',
+    implementationStatus: 'PLANNED',
+    sourceNote: 'DOCUMENTATION_REQUESTED',
+    isActive: false,
+  },
+  {
+    code: 'COLIVRAISON',
+    name: 'Colivraison Express',
+    implementationStatus: 'PLANNED',
+    sourceNote: 'DOCUMENTATION_REQUESTED',
     isActive: false,
   },
 ] as const satisfies readonly { code: CarrierCode; [key: string]: unknown }[];
@@ -516,6 +745,28 @@ const CARRIERS = [
 async function seedCarriers(prisma: PrismaClient): Promise<number> {
   for (const carrier of CARRIERS) {
     const capabilities = CARRIER_CAPABILITIES[carrier.code];
+
+    // Une matrice ABSENTE n'est pas une matrice vide : elle signifie « on ne
+    // sait pas », et l'ecran le dit ainsi. La ligne est donc retiree plutot
+    // qu'ecrite a faux — sans quoi un re-seed laisserait dix-huit
+    // « non supporte » la ou il n'y a qu'une ignorance.
+    if (capabilities === null) {
+      const row = await prisma.carrier.upsert({
+        where: { code: carrier.code },
+        create: { ...carrier, supportsWebhooks: false, supportsCancellation: false },
+        update: {
+          name: carrier.name,
+          implementationStatus: carrier.implementationStatus,
+          sourceNote: carrier.sourceNote,
+          isActive: carrier.isActive,
+          supportsWebhooks: false,
+          supportsCancellation: false,
+        },
+        select: { id: true },
+      });
+      await prisma.carrierCapability.deleteMany({ where: { carrierId: row.id } });
+      continue;
+    }
 
     // Les deux colonnes historiques de `Carrier` sont DERIVEES de la matrice :
     // une seule ligne a maintenir, deux projections.
@@ -541,6 +792,7 @@ async function seedCarriers(prisma: PrismaClient): Promise<number> {
       update: {
         name: carrier.name,
         implementationStatus: carrier.implementationStatus,
+        sourceNote: carrier.sourceNote,
         isActive: carrier.isActive,
         ...legacyFlags,
       },

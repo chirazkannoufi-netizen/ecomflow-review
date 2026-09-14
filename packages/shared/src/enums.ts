@@ -263,6 +263,50 @@ export type StockDecision = (typeof STOCK_DECISIONS)[number];
 // ---------------------------------------------------------------------------
 
 /** Statut interne du colis cote EcomFlow (independant du transporteur). */
+/**
+ * Etat d'integration d'un transporteur du catalogue — D-066, etendu par D-070.
+ *
+ * TROIS ETATS, PARCE QUE « UN ADAPTATEUR EXISTE » ET « IL A ETE VERIFIE » SONT
+ * DEUX QUESTIONS DIFFERENTES
+ *
+ *   AVAILABLE  — un adaptateur existe ET il a tourne contre un compte marchand
+ *                reel. C'est le seul etat qui autorise a montrer une capacite
+ *                comme acquise.
+ *   UNVERIFIED — un adaptateur existe, ecrit d'apres des sources tierces
+ *                (SDK communautaires, connecteurs d'integrateurs), jamais
+ *                confronte a un vrai compte. Le transporteur est SELECTIONNABLE
+ *                — sans quoi rien ne pourrait jamais le verifier — mais ses
+ *                capacites restent DECLAREES.
+ *   PLANNED    — aucun adaptateur. Non selectionnable.
+ *
+ * L'etat intermediaire n'est pas un confort : sans lui, un transporteur ne peut
+ * devenir verifie qu'en ayant deja servi, et ne peut servir qu'une fois verifie.
+ */
+export const CARRIER_IMPLEMENTATION_STATUSES = ['AVAILABLE', 'UNVERIFIED', 'PLANNED'] as const;
+export type CarrierImplementationStatus = (typeof CARRIER_IMPLEMENTATION_STATUSES)[number];
+
+/** Un adaptateur existe : le transporteur peut recevoir un compte. */
+export function isCarrierConnectable(status: string): boolean {
+  return status === 'AVAILABLE' || status === 'UNVERIFIED';
+}
+
+/**
+ * Pourquoi le catalogue en sait si peu sur ce transporteur — D-070.
+ *
+ * Le code est stable et TRADUIT a l'ecran : une phrase ecrite en base serait
+ * francaise pour toujours, dans un produit dont l'arabe est une seconde langue
+ * complete et non une traduction partielle.
+ */
+export const CARRIER_SOURCE_NOTES = [
+  /** Adaptateur ecrit d'apres des sources tierces, jamais confronte a un compte reel. */
+  'THIRD_PARTY_SOURCES',
+  /** Sources publiques trop minces pour coder : la documentation est a demander a la societe. */
+  'DOCUMENTATION_REQUESTED',
+  /** L'adressage de cette generation ne parle pas le meme langage que notre referentiel. */
+  'ADDRESSING_REWORK',
+] as const;
+export type CarrierSourceNote = (typeof CARRIER_SOURCE_NOTES)[number];
+
 export const CARRIER_ACCOUNT_KINDS = ['DELIVERY_AGENT', 'DELIVERY_COMPANY'] as const;
 export type CarrierAccountKind = (typeof CARRIER_ACCOUNT_KINDS)[number];
 

@@ -629,14 +629,28 @@ ne l'est pas. Elle est volontairement explicite : un tableau de bord qui affiche
 | **Google Sheets** | Implémentée | OAuth 2.0 (lecture seule par défaut), aperçu avant import, mapping vérifié, quota 429 géré par token bucket + repli exponentiel avec `Retry-After` et reprise au curseur. **Inactive tant que `GOOGLE_CLIENT_ID/SECRET` ne sont pas fournis** — l'interface le dit explicitement. |
 | **Transporteur de test** (`MOCK_CARRIER`) | Implémenté | Connecteur de développement, **nommé « Transporteur de test » dans l'interface**. Il ne prétend à aucun moment être un vrai transporteur. |
 | **Yalidine** | Adaptateur écrit, **non vérifié contre l'API réelle** | Le code de l'adaptateur existe et suit le contrat commun. Il n'a pas pu être confronté à l'API de production faute d'un compte marchand. À valider avant toute mise en service. |
+| **Guepex, Yalitec, We Can** | Adaptateurs écrits, **non vérifiés** | Revendeurs du réseau Yalidine : même API, mêmes champs, même authentification. Une seule implémentation les sert tous, instanciée une fois par société avec son domaine — que le marchand saisit, les revendeurs ne le publiant pas (D-070). |
+| **Ecotrack, DHD, UPS (Conexlog), SpeedMail** | Adaptateur écrit, **non vérifié** | Ecotrack est une plateforme partagée par plus de 80 sociétés : une implémentation, un jeton Bearer, un domaine par société. « UPS » désigne ici **Conexlog EURL**, licencié algérien de la marque — pas l'API mondiale de United Parcel Service. Points d'entrée tirés d'intégrations open-source concordantes, jamais d'une documentation officielle. |
+| **ZR Express (v2 · Procolis)** | Adaptateur écrit, **non vérifié** | L'idempotence passe par notre propre référence, placée dans le champ `Tracking` : un rejeu est refusé par « Double Tracking ». Ni annulation ni bordereau par l'API — la matrice de capacités le dit, et le produit n'affiche donc pas ces actions. |
+| **ZR Express (v3)**, **Maystro**, **E-COM Delivery**, **Colivraison** | Au catalogue, **sans adaptateur** | v3 : adressage par UUID de territoire, chantier séparé. Les trois autres : sources publiques trop minces ou contradictoires — la documentation réelle est à demander à chaque société. Le catalogue dit laquelle des deux raisons s'applique. |
 | **WhatsApp Cloud API** | Passerelle écrite, désactivée par défaut | `isConfigured()` retourne `false` sans les quatre variables requises, et tout envoi échoue alors **explicitement** plutôt que de faire semblant. |
 | **Chargily Pay** | Passerelle écrite, désactivée par défaut | Le paiement par carte n'apparaît dans l'interface que si les clés sont présentes. L'abonnement n'est **jamais** activé par le retour du navigateur : seul le webhook signé l'active. |
 | **E-mail** | `console` par défaut, SMTP disponible | En développement, les e-mails s'affichent dans les journaux ou sont capturés par MailHog. |
 | **OTP par SMS** | Pilote `console` uniquement | Le pilote `sms` **échoue explicitement** au lieu de prétendre avoir envoyé un message. |
 
-Les connecteurs transporteurs exposent un champ `implementationStatus`
-(`AVAILABLE` / `PLANNED`) : l'API ne liste jamais un transporteur planifié comme
-s'il était utilisable.
+Les connecteurs transporteurs exposent un champ `implementationStatus` à **trois**
+valeurs (D-070) :
+
+- `AVAILABLE` — un adaptateur existe **et** a tourné contre un compte marchand
+  réel. Seul cet état autorise à lire une capacité comme acquise ;
+- `UNVERIFIED` — un adaptateur existe, écrit d'après des sources tierces, jamais
+  confronté. Le transporteur est **sélectionnable** — c'est la seule façon de le
+  vérifier un jour — mais ses capacités restent affichées comme **déclarées** ;
+- `PLANNED` — aucun adaptateur. L'API refuse la création d'un compte, et
+  l'interface dit pourquoi.
+
+L'API ne liste jamais un transporteur planifié comme s'il était utilisable, et
+n'affiche jamais une capacité non vérifiée comme si elle l'était.
 
 ---
 

@@ -40,9 +40,38 @@ import {
   type TrackingEvent,
 } from './carrier-adapter.interface';
 import { text } from '../../../common/utils/text';
+import {
+  baseUrlField,
+  resolveBaseUrl,
+  type CarrierFamilyIdentity,
+} from './carrier-family';
 
 const DEFAULT_BASE_URL = 'https://api.yalidine.app/v1';
 const REQUEST_TIMEOUT_MS = 20_000;
+
+/**
+ * Les quatre societes de la famille Yalidine.
+ *
+ * Guepex, Yalitec et We Can Services REVENDENT le reseau Yalidine : memes
+ * points d'entree, memes noms de champs, meme authentification API ID / API
+ * Token. Seuls le domaine et les identifiants changent — et leur domaine n'est
+ * publie nulle part, d'ou l'URL de base demandee au marchand.
+ *
+ * Leurs conditions commerciales, elles, different : tarifs et wilayas couvertes
+ * sont propres a chacune. C'est la couverture par wilaya du catalogue qui porte
+ * cette difference, pas l'adaptateur.
+ */
+export const YALIDINE_IDENTITY: CarrierFamilyIdentity = {
+  code: 'YALIDINE',
+  displayName: 'Yalidine Express',
+  defaultBaseUrl: DEFAULT_BASE_URL,
+};
+
+export const YALIDINE_RESELLERS: readonly CarrierFamilyIdentity[] = [
+  { code: 'GUEPEX', displayName: 'Guepex' },
+  { code: 'YALITEC', displayName: 'Yalitec' },
+  { code: 'WECAN', displayName: 'We Can Services' },
+];
 
 /**
  * Correspondance statuts Yalidine -> statuts EcomFlow.
@@ -106,39 +135,55 @@ const STATUS_MAP: Record<string, ShipmentStatus> = {
   supprime: 'CANCELLED',
 };
 
-@Injectable()
-export class YalidineAdapter implements CarrierAdapter {
-  readonly code = 'YALIDINE';
-  readonly displayName = 'Yalidine Express';
-  // Yalidine ne publie pas de webhook sortant : le suivi passe par sondage.
+export class YalidineFamilyAdapter implements CarrierAdapter {
+  readonly code: string;
+  readonly displayName: string;
+  // Aucune societe de la famille ne publie de webhook sortant : le suivi passe
+  // par sondage.
   readonly supportsWebhooks = false;
   readonly supportsCancellation = true;
 
-  readonly credentialFields = [
-    {
-      key: 'apiId',
-      label: 'API ID',
-      secret: false,
-      required: true,
-      helpText: 'Disponible dans votre espace Yalidine, rubrique Developpeurs.',
-    },
-    {
-      key: 'apiToken',
-      label: 'API Token',
-      secret: true,
-      required: true,
-      helpText: 'Jeton secret. Ne le partagez jamais.',
-    },
-    {
-      key: 'fromWilayaName',
-      label: 'Wilaya d expedition',
-      secret: false,
-      required: true,
-      helpText: 'Wilaya depuis laquelle vos colis sont enleves.',
-    },
-  ] as const;
+  readonly credentialFields: readonly {
+    key: string;
+    label: string;
+    secret: boolean;
+    required: boolean;
+    helpText?: string;
+  }[];
 
-  private readonly logger = new Logger(YalidineAdapter.name);
+  private readonly identity: CarrierFamilyIdentity;
+  private readonly logger: Logger;
+
+  constructor(identity: CarrierFamilyIdentity) {
+    this.identity = identity;
+    this.code = identity.code;
+    this.displayName = identity.displayName;
+    this.logger = new Logger(`${YalidineFamilyAdapter.name}:${identity.code}`);
+    this.credentialFields = [
+      {
+        key: 'apiId',
+        label: 'API ID',
+        secret: false,
+        required: true,
+        helpText: `Disponible dans votre espace ${identity.displayName}, rubrique Developpeurs.`,
+      },
+      {
+        key: 'apiToken',
+        label: 'API Token',
+        secret: true,
+        required: true,
+        helpText: 'Jeton secret. Ne le partagez jamais.',
+      },
+      {
+        key: 'fromWilayaName',
+        label: 'Wilaya d expedition',
+        secret: false,
+        required: true,
+        helpText: 'Wilaya depuis laquelle vos colis sont enleves.',
+      },
+      baseUrlField(identity, 'https://api.exemple.app/v1'),
+    ];
+  }
 
   async createShipment(
     context: CarrierContext,
@@ -184,13 +229,13 @@ export class YalidineAdapter implements CarrierAdapter {
     if (!entry) {
       return carrierFailure(
         'PROVIDER_ERROR',
-        'Reponse Yalidine inexploitable : aucun colis retourne.',
+        `Reponse ${this.displayName} inexploitable : aucun colis retourne.`,
         { retryable: true },
       );
     }
 
     if (entry.success === false) {
-      const message = text(entry.message, 'Creation refusee par Yalidine.');
+      const message = text(entry.message, `Creation refusee par ${this.displayName}.`);
       const duplicate = /existe|already/i.test(message);
       return carrierFailure(
         duplicate ? 'ALREADY_EXISTS' : 'INVALID_ADDRESS',
@@ -203,7 +248,7 @@ export class YalidineAdapter implements CarrierAdapter {
     if (trackingNumber.length === 0) {
       return carrierFailure(
         'PROVIDER_ERROR',
-        'Yalidine n a pas retourne de numero de suivi.',
+        `${this.displayName} n a pas retourne de numero de suivi.`,
         { retryable: true },
       );
     }
@@ -234,7 +279,7 @@ export class YalidineAdapter implements CarrierAdapter {
       if (response.failure.code === 'PROVIDER_ERROR') {
         return carrierFailure(
           'NOT_CANCELLABLE',
-          'Ce colis ne peut plus etre annule chez Yalidine (deja pris en charge).',
+          `Ce colis ne peut plus etre annule chez ${this.displayName} (deja pris en charge).`,
           { retryable: false },
         );
       }
@@ -259,7 +304,7 @@ export class YalidineAdapter implements CarrierAdapter {
     const providerStatus = body.data?.[0]?.last_status;
 
     if (!providerStatus) {
-      return carrierFailure('NOT_FOUND', 'Colis introuvable chez Yalidine.', {
+      return carrierFailure('NOT_FOUND', `Colis introuvable chez ${this.displayName}.`, {
         retryable: false,
       });
     }
@@ -326,7 +371,7 @@ export class YalidineAdapter implements CarrierAdapter {
     }
 
     this.logger.warn(
-      `Statut Yalidine inconnu : « ${providerStatus} ». Normalise en IN_TRANSIT ` +
+      `Statut ${this.displayName} inconnu : « ${providerStatus} ». Normalise en IN_TRANSIT ` +
         'et conserve tel quel pour diagnostic.',
     );
     return 'IN_TRANSIT';
@@ -360,13 +405,16 @@ export class YalidineAdapter implements CarrierAdapter {
         ok: false,
         failure: carrierFailure(
           'AUTHENTICATION_FAILED',
-          'Identifiants Yalidine manquants. Completez la configuration du transporteur.',
+          `Identifiants ${this.displayName} manquants. Completez la configuration du transporteur.`,
           { retryable: false },
         ),
       };
     }
 
-    const baseUrl = text(context.config.baseUrl) || DEFAULT_BASE_URL;
+    const resolved = resolveBaseUrl(context, this.identity);
+    if (!resolved.ok) return { ok: false, failure: resolved.failure };
+
+    const baseUrl = resolved.baseUrl;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
@@ -393,7 +441,7 @@ export class YalidineAdapter implements CarrierAdapter {
           ok: false,
           failure: carrierFailure(
             'AUTHENTICATION_FAILED',
-            'Identifiants Yalidine refuses. Verifiez l API ID et le token.',
+            `Identifiants ${this.displayName} refuses. Verifiez l API ID et le token.`,
             { retryable: false, providerDetail: detail },
           ),
         };
@@ -402,7 +450,7 @@ export class YalidineAdapter implements CarrierAdapter {
       if (response.status === 404) {
         return {
           ok: false,
-          failure: carrierFailure('NOT_FOUND', 'Ressource introuvable chez Yalidine.', {
+          failure: carrierFailure('NOT_FOUND', `Ressource introuvable chez ${this.displayName}.`, {
             retryable: false,
             providerDetail: detail,
           }),
@@ -412,7 +460,7 @@ export class YalidineAdapter implements CarrierAdapter {
       if (response.status === 429) {
         return {
           ok: false,
-          failure: carrierFailure('RATE_LIMITED', 'Quota Yalidine atteint.', {
+          failure: carrierFailure('RATE_LIMITED', `Quota ${this.displayName} atteint.`, {
             retryable: true,
             providerDetail: detail,
           }),
@@ -423,7 +471,7 @@ export class YalidineAdapter implements CarrierAdapter {
         ok: false,
         failure: carrierFailure(
           'PROVIDER_ERROR',
-          `Yalidine a repondu ${response.status}.`,
+          `${this.displayName} a repondu ${response.status}.`,
           { retryable: response.status >= 500, providerDetail: detail },
         ),
       };
@@ -434,8 +482,8 @@ export class YalidineAdapter implements CarrierAdapter {
         failure: carrierFailure(
           aborted ? 'TIMEOUT' : 'PROVIDER_ERROR',
           aborted
-            ? 'Delai depasse lors de l appel a Yalidine.'
-            : `Appel Yalidine impossible : ${(error as Error).message}`,
+            ? `Delai depasse lors de l appel a ${this.displayName}.`
+            : `Appel ${this.displayName} impossible : ${(error as Error).message}`,
           { retryable: true },
         ),
       };
@@ -443,6 +491,25 @@ export class YalidineAdapter implements CarrierAdapter {
       clearTimeout(timeout);
     }
   }
+}
+
+/**
+ * Yalidine — l'operateur d'origine, seul membre de la famille a etre VERIFIE.
+ *
+ * Reste `@Injectable` parce que le module et les tests le designent par son
+ * type. Ses revendeurs, eux, n'ont pas de classe : ils sont la MEME
+ * implementation, instanciee avec une autre identite (D-070).
+ */
+@Injectable()
+export class YalidineAdapter extends YalidineFamilyAdapter {
+  constructor() {
+    super(YALIDINE_IDENTITY);
+  }
+}
+
+/** Les revendeurs du reseau Yalidine, un adaptateur chacun, un seul code. */
+export function createYalidineResellers(): readonly YalidineFamilyAdapter[] {
+  return YALIDINE_RESELLERS.map((identity) => new YalidineFamilyAdapter(identity));
 }
 
 /**

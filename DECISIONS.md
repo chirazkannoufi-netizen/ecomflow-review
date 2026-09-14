@@ -2460,7 +2460,7 @@ où elles recevront leur route, pas avant.
 
 ## D-066 — Une capacité déclarée n'est pas une capacité vérifiée
 
-**Date** : 13/09/2026 · **Statut** : appliquée
+**Date** : 13/09/2026 · **Statut** : appliquée, étendue par D-070 (troisième état « non vérifié »)
 
 **Contexte** — Le catalogue contient quatre transporteurs, dont deux au statut
 `PLANNED` : Ecotrack et ZR Express. Leur matrice de capacités (D-049) était
@@ -2712,6 +2712,178 @@ Rien de cette logique n'a été réécrit — elle change d'écran, pas de règl
 langues. Le panneau de réglages de compte replié sous chaque transporteur, que
 D-067 avait supprimé, ne revient pas : il n'y a toujours qu'un seul endroit où
 un réglage de compte s'édite.
+
+---
+
+## D-070 — « Non vérifié » : le troisième état, et les familles de transporteurs
+
+**Date** : 14/09/2026 · **Statut** : appliquée · **Étend D-066**
+
+**Contexte** — Six fiches API compilées pour onze sociétés de livraison
+algériennes. Aucune n'est une documentation officielle : elles le disent
+elles-mêmes, et sont bâties sur des SDK communautaires, des connecteurs
+d'intégrateurs (Odoo, WooCommerce) et des guides tiers. Les transporteurs
+concernés ne publient pas d'API : elle s'obtient à l'ouverture d'un compte
+marchand, comme NOEST l'a fait.
+
+---
+
+### 1. Le piège circulaire, et l'état qui le referme
+
+**Problème** — D-066 tenait deux états. `AVAILABLE` autorise à expédier **et**
+fait afficher les capacités comme acquises ; `PLANNED` refuse tout. Un
+adaptateur écrit d'après un SDK communautaire n'est ni l'un ni l'autre : il
+existe et peut tourner, mais aucune de ses lignes n'a été confrontée à un vrai
+compte.
+
+Le déclarer `AVAILABLE` promettrait une parité jamais vérifiée. Le laisser
+`PLANNED` le rendrait inutilisable — **et définitivement** : vérifier un
+adaptateur exige de le faire tourner contre un compte marchand réel, ce que
+`PLANNED` interdit. Aucun transporteur ajouté après Yalidine n'aurait jamais pu
+devenir disponible.
+
+C'est exactement l'impasse que D-068 avait trouvée sur `PENDING_SETUP` — un
+compte ne pouvait devenir `CONNECTED` que par un contrôle de santé qui refusait
+les comptes `PENDING_SETUP`. Elle se referme de la même façon : **l'état « on ne
+sait pas encore » doit être traversable.**
+
+**Décision** — Un troisième état, `UNVERIFIED` :
+
+| État | Adaptateur | Sélectionnable | Matrice de capacités |
+|---|---|---|---|
+| `AVAILABLE` | oui, éprouvé contre un compte réel | oui | **vérifiée** (pastille pleine) |
+| `UNVERIFIED` | oui, écrit d'après des sources tierces | **oui** | déclarée (pastille creuse) |
+| `PLANNED` | non | non | déclarée (pastille creuse) |
+
+La distinction vérifié / déclaré / non supporté de D-066 est **conservée
+intacte** : elle change seulement de critère. Ce n'est plus « le code
+existe-t-il ? » mais « a-t-il été confronté à quelque chose ? ».
+
+**Impact** — `requireSelectableCarrier`, `resolveCarrierAccount` et
+`listCarrierConnectors` parlent désormais par `isCarrierConnectable()` et non
+par une comparaison à `'AVAILABLE'`. Seul Yalidine reste vérifié.
+
+---
+
+### 2. `sourceNote` — deux transporteurs `PLANNED` n'appellent pas le même geste
+
+**Problème** — Maystro et ZR Express v3 sont tous deux sans adaptateur, pour des
+raisons qui n'ont rien à voir : pour l'un les sources publiques se contredisent
+et il faut **demander la documentation** ; pour l'autre le blocage est technique
+et connu — l'**adressage par UUID de territoire**. Le même statut confondait les
+deux, et le geste suivant avec.
+
+**Décision** — Une colonne `carriers.source_note`, portant un **code** :
+`THIRD_PARTY_SOURCES`, `DOCUMENTATION_REQUESTED`, `ADDRESSING_REWORK`.
+
+Un code et non une phrase : un texte écrit en base serait français pour
+toujours, alors que l'arabe est une seconde langue **complète** de ce produit.
+La traduction vit donc dans les catalogues de messages, comme tout le reste.
+
+---
+
+### 3. Une implémentation par FAMILLE, pas par société
+
+**Constat vérifié avant de coder** — Deux familles techniques :
+
+- **Yalidine** — Guepex, Yalitec et We Can Services *revendent* le réseau
+  Yalidine : mêmes points d'entrée, mêmes noms de champs, même authentification
+  API ID / API Token. Seuls domaine et identifiants changent.
+- **Ecotrack** — plateforme logistique en marque blanche utilisée par plus de
+  quatre-vingts sociétés indépendantes (DHD, Conexlog, SpeedMail…), chacune sur
+  son sous-domaine, toutes sur la même API et un jeton Bearer.
+
+**Décision** — Un adaptateur par famille, **instancié** une fois par société
+avec son identité et son domaine. Trois fichiers de plus auraient voulu dire
+trois corrections à faire à chaque défaut trouvé — et une oubliée.
+
+L'URL de base devient un **champ d'identifiants** (non secret) plutôt qu'une
+constante : les revendeurs ne publient pas leur domaine, le marchand le lit dans
+son propre tableau de bord. Elle est obligatoire quand le domaine est inconnu,
+facultative quand il est public (Yalidine, DHD, Conexlog).
+
+**Une validation qui n'existait pas ailleurs** — C'est le seul endroit du
+produit où un utilisateur choisit l'hôte que le **serveur** va appeler. HTTPS est
+exigé et le nom d'hôte doit être qualifié : une faute de frappe enverrait sinon
+les identifiants du marchand à un domaine quelconque, et `http://` les enverrait
+en clair.
+
+**« UPS » n'est pas UPS** — Dans l'écosystème algérien, « UPS » désigne
+**CONEXLOG EURL**, licencié algérien de la marque, qui livre sur Ecotrack
+exactement comme DHD. Ce n'est pas l'API mondiale de United Parcel Service. Le
+catalogue le nomme **« UPS (Conexlog) »** pour que ni un commerçant ni un
+développeur ne s'y trompe.
+
+---
+
+### 4. ZR Express : deux générations, pas une famille
+
+**v2 / Procolis** — construite. Adresse par nom de wilaya et de commune, ce que
+notre référentiel parle déjà.
+
+**v3 / zrexpress.app** — `PLANNED`, motif `ADDRESSING_REWORK`. Elle identifie les
+territoires par **UUID**, ce qui exige une table de correspondance entre nos 58
+wilayas, nos communes et ses identifiants, plus un moyen de la tenir à jour. Ce
+n'est pas une variante de l'adaptateur v2, c'est un chantier d'adressage.
+
+**L'idempotence passe par notre propre numéro de suivi** — `Tracking` est un
+champ d'**entrée** facultatif chez Procolis : rempli, un doublon est refusé par
+« Double Tracking ». Nous y plaçons la référence EcomFlow, et ce refus devient
+le mécanisme d'idempotence exigé par le contrat `CarrierAdapter` — le même que
+`order_id` chez Yalidine. Conséquence assumée : le numéro de suivi côté ZR **est**
+notre référence. C'est le point qu'un premier compte réel devra confirmer.
+
+---
+
+### 5. Ce que les sources ont corrigé, dans les deux sens
+
+**Contre la fiche** — elle annonçait qu'aucun point d'annulation n'existait chez
+Ecotrack. L'intégration Vargo appelle pourtant `DELETE api/v1/delete/order`. La
+capacité est donc déclarée, en sachant que « supprimer » pourrait ne valoir
+qu'avant enlèvement.
+
+**Avec la fiche** — le bordereau Ecotrack est bien rendu en **octets PDF** et non
+en URL. `Shipment.labelUrl` commande un lien dans deux écrans ; sans route qui
+serve ces octets, il n'y a aucun lien à promettre. `printableLabel: false`
+jusqu'à ce qu'une route existe — D-049 interdit d'afficher un bouton mort.
+
+**Contre nous-mêmes** — la matrice de ZR Express déclarait suppression,
+étiquette et tentatives synchronisées. Elle décrivait une **cible**, écrite
+avant qu'aucune source ne soit lue ; les deux intégrations consultées les
+déclarent explicitement non supportées, et `lire` ne rend que l'état courant. La
+ligne est corrigée **vers le bas**.
+
+---
+
+### 6. Trois entrées sans code, et une qui n'entre pas
+
+**Maystro, E-COM Delivery, Colivraison** — catalogués `PLANNED`, motif
+`DOCUMENTATION_REQUESTED`. Pour Maystro, les sources se contredisent sur
+l'authentification **et** sur l'hôte lui-même (`backend.maystro-delivery.com`
+contre `b.maystro-delivery.com`, jeton seul contre `access_token` + `store_id`) :
+coder là-dessus reviendrait à parier. Le pas suivant n'est pas technique.
+
+**Colivraison n'a aucune matrice** — `capabilities: null`. Aucune implémentation
+communautaire n'existe et la fiche ne liste aucune fonction. Dix-huit `false`
+affirmeraient dix-huit incapacités constatées ; `null` dit ce qui est vrai —
+« non renseignées » — et l'écran l'affiche ainsi depuis D-049.
+
+**« Nord & Ouest » n'est pas ajouté** — il n'apparaît dans aucune des six fiches,
+et aucune source même partielle n'a été trouvée. Une ligne de catalogue sans
+source serait une promesse sans rien derrière.
+
+---
+
+**Impact** — `carriers` passe de 4 à 15 lignes. Onze nouveaux codes, trois
+nouveaux adaptateurs enregistrés (dont deux instanciés plusieurs fois), une
+migration additive. Aucun service métier n'est modifié : c'était le pari de
+`CarrierAdapter`, et il tient.
+
+**Ce qui reste ouvert, et ne doit pas être oublié** — aucun de ces onze
+transporteurs n'est vérifié. Le premier compte marchand réel branché sur l'un
+d'eux est ce qui fera passer sa ligne à `AVAILABLE`, et les tests unitaires des
+adaptateurs sont écrits pour que cette confrontation soit **lisible** : si un
+champ est refusé, c'est le test qui le fige qui le nommera.
 
 ---
 

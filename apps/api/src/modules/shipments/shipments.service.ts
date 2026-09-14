@@ -29,6 +29,7 @@ import {
   ERROR_CODES,
   buildPageMeta,
   getWilayaByCode,
+  isCarrierConnectable,
   toSkipTake,
   type BulkArchiveResult,
   type BulkArchiveSkip,
@@ -105,6 +106,8 @@ export interface CarrierCatalogueEntry {
   readonly name: string;
   readonly isActive: boolean;
   readonly implementationStatus: string;
+  /** Pourquoi le catalogue en sait si peu — code traduit a l'ecran (D-070). */
+  readonly sourceNote: string | null;
   /** `null` = capacites non renseignees, a distinguer de « tout a faux ». */
   readonly capabilities: Record<string, boolean> | null;
   readonly coveredWilayas: number;
@@ -675,6 +678,7 @@ export class ShipmentsService {
         name: true,
         isActive: true,
         implementationStatus: true,
+        sourceNote: true,
         capability: true,
         _count: { select: { wilayaCoverage: true } },
       },
@@ -686,6 +690,7 @@ export class ShipmentsService {
       name: carrier.name,
       isActive: carrier.isActive,
       implementationStatus: carrier.implementationStatus,
+      sourceNote: carrier.sourceNote,
       // `null` ne veut pas dire « rien ne marche » mais « on ne sait pas » :
       // l'ecran doit le dire ainsi plutot que d'afficher dix-huit croix.
       capabilities: carrier.capability
@@ -1254,8 +1259,13 @@ export class ShipmentsService {
             code: carrier.code,
             name: carrier.name,
             implementationStatus: carrier.implementationStatus,
+            // Selectionnable des qu'un ADAPTATEUR existe, verifie ou non : un
+            // transporteur UNVERIFIED ne peut devenir verifie qu'en tournant
+            // contre un vrai compte, ce que refuser ici rendrait impossible
+            // (D-070). La distinction reste dite — par le statut et par la
+            // matrice, qui s'affiche en capacites declarees.
             selectable:
-              connected && carrier.isActive && carrier.implementationStatus === 'AVAILABLE',
+              connected && carrier.isActive && isCarrierConnectable(carrier.implementationStatus),
             credentialFields: connected
               ? this.registry.get(carrier.code).credentialFields.map((field) => ({ ...field }))
               : [],
@@ -1529,7 +1539,7 @@ export class ShipmentsService {
     name: string;
     implementationStatus: string;
   }) {
-    if (carrier.implementationStatus !== 'AVAILABLE' || !this.registry.has(carrier.code)) {
+    if (!isCarrierConnectable(carrier.implementationStatus) || !this.registry.has(carrier.code)) {
       throw new BusinessException(
         ERROR_CODES.CARRIER_NOT_CONFIGURED,
         `Aucun connecteur n est implemente pour ${carrier.name} : ses capacites sont ` +
@@ -1736,8 +1746,10 @@ export class ShipmentsService {
     }
 
     // Un connecteur non implemente ne doit jamais etre utilisable : le declarer
-    // disponible reviendrait a mentir sur l'etat du produit (cahier §5).
-    if (account.carrier.implementationStatus !== 'AVAILABLE') {
+    // disponible reviendrait a mentir sur l'etat du produit (cahier §5). Un
+    // connecteur NON VERIFIE, lui, passe : il existe, le marchand l'a branche
+    // sur son propre compte, et c'est ainsi qu'il se verifiera (D-070).
+    if (!isCarrierConnectable(account.carrier.implementationStatus)) {
       throw new BusinessException(
         ERROR_CODES.CARRIER_NOT_CONFIGURED,
         `Le connecteur ${account.carrier.name} n est pas encore disponible ` +
