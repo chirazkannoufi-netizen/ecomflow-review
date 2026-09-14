@@ -2752,6 +2752,7 @@ sait pas encore » doit être traversable.**
 | État | Adaptateur | Sélectionnable | Matrice de capacités |
 |---|---|---|---|
 | `AVAILABLE` | oui, éprouvé contre un compte réel | oui | **vérifiée** (pastille pleine) |
+| | *— aujourd'hui, seul `MOCK_CARRIER`* | | |
 | `UNVERIFIED` | oui, écrit d'après des sources tierces | **oui** | déclarée (pastille creuse) |
 | `PLANNED` | non | non | déclarée (pastille creuse) |
 
@@ -2761,7 +2762,23 @@ existe-t-il ? » mais « a-t-il été confronté à quelque chose ? ».
 
 **Impact** — `requireSelectableCarrier`, `resolveCarrierAccount` et
 `listCarrierConnectors` parlent désormais par `isCarrierConnectable()` et non
-par une comparaison à `'AVAILABLE'`. Seul Yalidine reste vérifié.
+par une comparaison à `'AVAILABLE'`.
+
+**Et Yalidine bascule avec les autres** — sa ligne était `AVAILABLE` depuis le
+premier jour, alors que l'en-tête de son propre adaptateur et le README disaient
+tous deux l'inverse : « il n'a pas pu être confronté à l'API de production faute
+d'un compte marchand ». C'était la seule ligne du catalogue qui promettait plus
+qu'elle ne tenait — et elle affichait sa matrice en capacités **acquises**.
+
+Elle prend donc `UNVERIFIED`, avec un motif à elle : `NEVER_CONFRONTED` — le
+connecteur suit la documentation **publique du transporteur**, il ne lui manque
+qu'un essai. C'est une nuance réelle par rapport à `THIRD_PARTY_SOURCES`, où il
+manque en plus la confirmation des noms de champs.
+
+Conséquence assumée : **plus aucun transporteur réel n'est `AVAILABLE`**. Seul
+`MOCK_CARRIER` y reste, et c'est correct — c'est notre propre code, il n'a
+aucune API distante à décevoir. L'état ne décrit plus qu'une chose : un
+connecteur qui a réellement tourné.
 
 ---
 
@@ -2879,8 +2896,8 @@ nouveaux adaptateurs enregistrés (dont deux instanciés plusieurs fois), une
 migration additive. Aucun service métier n'est modifié : c'était le pari de
 `CarrierAdapter`, et il tient.
 
-**Ce qui reste ouvert, et ne doit pas être oublié** — aucun de ces onze
-transporteurs n'est vérifié. Le premier compte marchand réel branché sur l'un
+**Ce qui reste ouvert, et ne doit pas être oublié** — aucun transporteur du
+catalogue n'est vérifié, Yalidine comprise. Le premier compte marchand réel branché sur l'un
 d'eux est ce qui fera passer sa ligne à `AVAILABLE`, et les tests unitaires des
 adaptateurs sont écrits pour que cette confrontation soit **lisible** : si un
 champ est refusé, c'est le test qui le fige qui le nommera.

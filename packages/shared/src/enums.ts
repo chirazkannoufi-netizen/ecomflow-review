@@ -298,7 +298,16 @@ export function isCarrierConnectable(status: string): boolean {
  * complete et non une traduction partielle.
  */
 export const CARRIER_SOURCE_NOTES = [
-  /** Adaptateur ecrit d'apres des sources tierces, jamais confronte a un compte reel. */
+  /**
+   * Adaptateur ecrit d'apres la documentation PUBLIQUE du transporteur, mais
+   * jamais confronte a un compte marchand reel. Il ne manque qu'un essai.
+   */
+  'NEVER_CONFRONTED',
+  /**
+   * Adaptateur ecrit d'apres des sources TIERCES — SDK communautaires,
+   * connecteurs d'integrateurs. Il manque un essai ET la confirmation des
+   * champs par la documentation du transporteur lui-meme.
+   */
   'THIRD_PARTY_SOURCES',
   /** Sources publiques trop minces pour coder : la documentation est a demander a la societe. */
   'DOCUMENTATION_REQUESTED',

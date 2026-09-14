@@ -628,7 +628,7 @@ ne l'est pas. Elle est volontairement explicite : un tableau de bord qui affiche
 |---|---|---|
 | **Google Sheets** | Implémentée | OAuth 2.0 (lecture seule par défaut), aperçu avant import, mapping vérifié, quota 429 géré par token bucket + repli exponentiel avec `Retry-After` et reprise au curseur. **Inactive tant que `GOOGLE_CLIENT_ID/SECRET` ne sont pas fournis** — l'interface le dit explicitement. |
 | **Transporteur de test** (`MOCK_CARRIER`) | Implémenté | Connecteur de développement, **nommé « Transporteur de test » dans l'interface**. Il ne prétend à aucun moment être un vrai transporteur. |
-| **Yalidine** | Adaptateur écrit, **non vérifié contre l'API réelle** | Le code de l'adaptateur existe et suit le contrat commun. Il n'a pas pu être confronté à l'API de production faute d'un compte marchand. À valider avant toute mise en service. |
+| **Yalidine** | Adaptateur écrit, **non vérifié contre l'API réelle** | Le code de l'adaptateur existe, suit le contrat commun et la documentation publique de Yalidine. Il n'a pas pu être confronté à l'API de production faute d'un compte marchand — et **le catalogue le dit désormais aussi** : sa ligne est `UNVERIFIED` depuis D-070, après avoir affiché « disponible » sans qu'aucun essai ne l'ait justifié. |
 | **Guepex, Yalitec, We Can** | Adaptateurs écrits, **non vérifiés** | Revendeurs du réseau Yalidine : même API, mêmes champs, même authentification. Une seule implémentation les sert tous, instanciée une fois par société avec son domaine — que le marchand saisit, les revendeurs ne le publiant pas (D-070). |
 | **Ecotrack, DHD, UPS (Conexlog), SpeedMail** | Adaptateur écrit, **non vérifié** | Ecotrack est une plateforme partagée par plus de 80 sociétés : une implémentation, un jeton Bearer, un domaine par société. « UPS » désigne ici **Conexlog EURL**, licencié algérien de la marque — pas l'API mondiale de United Parcel Service. Points d'entrée tirés d'intégrations open-source concordantes, jamais d'une documentation officielle. |
 | **ZR Express (v2 · Procolis)** | Adaptateur écrit, **non vérifié** | L'idempotence passe par notre propre référence, placée dans le champ `Tracking` : un rejeu est refusé par « Double Tracking ». Ni annulation ni bordereau par l'API — la matrice de capacités le dit, et le produit n'affiche donc pas ces actions. |
@@ -651,6 +651,10 @@ valeurs (D-070) :
 
 L'API ne liste jamais un transporteur planifié comme s'il était utilisable, et
 n'affiche jamais une capacité non vérifiée comme si elle l'était.
+
+À ce jour, **aucun transporteur réel n'est `AVAILABLE`** : seul le connecteur de
+test l'est. C'est la description exacte de l'état du produit — les adaptateurs
+existent, aucun n'a encore tourné contre un compte marchand.
 
 ---
 

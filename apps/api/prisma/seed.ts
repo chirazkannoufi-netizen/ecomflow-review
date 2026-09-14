@@ -616,7 +616,9 @@ type CarrierCode = keyof typeof CARRIER_CAPABILITIES;
  * Le catalogue.
  *
  * TROIS ETATS, ET CE QU'ILS AUTORISENT (D-066, D-070)
- *   AVAILABLE  — adaptateur verifie contre un compte marchand reel.
+ *   AVAILABLE  — adaptateur verifie contre un compte marchand reel. Seul
+ *                `MOCK_CARRIER` y figure : c'est notre propre code, et il n'a
+ *                aucune API distante a decevoir.
  *   UNVERIFIED — adaptateur ecrit d'apres des sources tierces concordantes,
  *                jamais confronte. Selectionnable, capacites declarees.
  *   PLANNED    — aucun adaptateur, donc non selectionnable.
@@ -641,10 +643,22 @@ const CARRIERS = [
 
   // --- Famille Yalidine -----------------------------------------------------
   {
+    // AUCUN transporteur reel n'est verifie, Yalidine compris.
+    //
+    //   Son adaptateur a ete ecrit d'apres la documentation publique de
+    //   Yalidine, et son propre en-tete le dit depuis le premier jour : il n'a
+    //   jamais ete confronte a l'API de production, faute d'un compte marchand.
+    //   C'etait la seule ligne du catalogue qui promettait plus qu'elle ne
+    //   tenait — `AVAILABLE` affirmait une verification que personne n'avait
+    //   faite, et la matrice s'affichait en capacites ACQUISES.
+    //
+    //   Le troisieme etat existe exactement pour ce cas (D-070). Yalidine le
+    //   prend, et `AVAILABLE` ne decrit plus qu'une chose : un connecteur qui a
+    //   reellement tourne. Aucun n'y est encore, hors le transporteur de test.
     code: 'YALIDINE',
     name: 'Yalidine Express',
-    implementationStatus: 'AVAILABLE',
-    sourceNote: null,
+    implementationStatus: 'UNVERIFIED',
+    sourceNote: 'NEVER_CONFRONTED',
     isActive: true,
   },
   {

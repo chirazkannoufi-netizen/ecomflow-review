@@ -321,10 +321,16 @@ describe('comptes transporteur', () => {
       const catalogue = await shipments.listCarrierCatalogue();
       const byCode = new Map(catalogue.map((entry) => [entry.code, entry]));
 
-      // Verifie : rien a expliquer.
-      expect(byCode.get('YALIDINE')?.sourceNote).toBeNull();
-      // Un adaptateur existe, mais ecrit d'apres des tiers.
+      // Un adaptateur ecrit d'apres la documentation du transporteur, mais
+      // jamais essaye : il ne lui manque qu'une confrontation.
+      expect(byCode.get('YALIDINE')?.implementationStatus).toBe('UNVERIFIED');
+      expect(byCode.get('YALIDINE')?.sourceNote).toBe('NEVER_CONFRONTED');
+      // Un adaptateur ecrit d'apres des TIERS : il lui manque en plus la
+      // confirmation des champs par le transporteur lui-meme.
       expect(byCode.get('DHD')?.sourceNote).toBe('THIRD_PARTY_SOURCES');
+      // Verifie pour de bon : notre propre connecteur de test, qui n'a aucune
+      // API distante a decevoir.
+      expect(byCode.get('MOCK_CARRIER')?.sourceNote).toBeNull();
       // Deux raisons DIFFERENTES d'etre PLANNED, et deux gestes suivants
       // differents : demander une documentation n'est pas reprendre un
       // adressage.

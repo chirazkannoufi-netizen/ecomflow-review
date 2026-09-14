@@ -1552,6 +1552,7 @@
       "PLANNED": "Aucun connecteur n'existe encore pour cette plateforme : cette matrice reprend ce que sa documentation annonce, sans qu'aucune ligne ait été confrontée à son API. Rien n'y est vérifié."
     },
     "sourceNotes": {
+      "NEVER_CONFRONTED": "Le connecteur suit la documentation publique du transporteur, mais il n'a jamais été confronté à un compte marchand réel : rien de ce tableau n'a encore été constaté en production. Branchez-y votre compte pour le vérifier.",
       "THIRD_PARTY_SOURCES": "Connecteur écrit d'après des SDK communautaires et des connecteurs d'intégrateurs, jamais d'après la documentation du transporteur. Vous pouvez y brancher votre compte : c'est ainsi qu'il se vérifiera. D'ici là, ses capacités restent déclarées.",
       "DOCUMENTATION_REQUESTED": "Les sources publiques sont trop minces pour coder en confiance : elles se contredisent ou n'existent pas. La prochaine étape n'est pas technique — c'est d'obtenir la documentation réelle auprès de la société, comme NOEST l'a transmise.",
       "ADDRESSING_REWORK": "Cette génération identifie les territoires par UUID, là où notre référentiel — et la génération précédente — parle en noms de wilaya et de commune. C'est un chantier d'adressage à part, pas une variante du connecteur existant."
